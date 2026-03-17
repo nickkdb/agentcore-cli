@@ -586,7 +586,7 @@ export function DevScreen(props: DevScreenProps) {
             <TextInput
               prompt=""
               hideArrow
-              placeholder={isMcp ? 'tool_name {"arg": "value"}' : undefined}
+              placeholder={isMcp ? 'tool_name {"arg": "value"}' : protocol === 'A2A' ? 'Send a message...' : undefined}
               onSubmit={text => {
                 if (text.trim()) {
                   void handleInvoke(text);

@@ -60,8 +60,9 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
- * Invokes an A2A agent using JSON-RPC 2.0 message/send.
- * Yields text chunks extracted from the response artifacts.
+ * Invokes an A2A agent using JSON-RPC 2.0 message/stream (SSE) with
+ * fallback to message/send (non-streaming).
+ * Yields text chunks as they arrive from artifact-update and status-update events.
  */
 export async function* invokeA2AStreaming(options: InvokeStreamingOptions): AsyncGenerator<string, void, unknown> {
   const { port, message: msg, logger } = options;
@@ -74,21 +75,21 @@ export async function* invokeA2AStreaming(options: InvokeStreamingOptions): Asyn
       const body = {
         jsonrpc: '2.0',
         id: requestId++,
-        method: 'message/send',
+        method: 'message/stream',
         params: {
           message: {
             messageId: randomUUID(),
             role: 'user',
-            parts: [{ type: 'text', text: msg }],
+            parts: [{ kind: 'text', text: msg }],
           },
         },
       };
 
-      logger?.log?.('system', `A2A message/send: ${msg}`);
+      logger?.log?.('system', `A2A message/stream: ${msg}`);
 
       const res = await fetch(`http://localhost:${port}/`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
         body: JSON.stringify(body),
       });
 
@@ -101,43 +102,11 @@ export async function* invokeA2AStreaming(options: InvokeStreamingOptions): Asyn
 
       // Handle SSE streaming response
       if (contentType.includes('text/event-stream') && res.body) {
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        try {
-          while (true) {
-            const result = await reader.read();
-            if (result.done) break;
-
-            buffer += decoder.decode(result.value as Uint8Array, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop() ?? '';
-
-            for (const line of lines) {
-              if (!line.startsWith('data: ')) continue;
-              const data = line.slice(6).trim();
-              if (!data) continue;
-
-              logger?.logSSEEvent(line);
-
-              try {
-                const event = JSON.parse(data) as Record<string, unknown>;
-                const text = extractA2AText(event);
-                if (text) yield text;
-              } catch {
-                // Non-JSON SSE data, yield as-is
-                yield data;
-              }
-            }
-          }
-        } finally {
-          reader.releaseLock();
-        }
+        yield* parseA2ASSEStream(res.body, logger);
         return;
       }
 
-      // Handle non-streaming JSON-RPC response
+      // Handle non-streaming JSON-RPC response (fallback)
       const responseText = await res.text();
       logger?.logSSEEvent(responseText);
 
@@ -151,7 +120,7 @@ export async function* invokeA2AStreaming(options: InvokeStreamingOptions): Asyn
 
         const result = json.result as Record<string, unknown> | undefined;
         if (result) {
-          const text = extractA2AResultText(result);
+          const text = extractTaskText(result);
           if (text) {
             yield text;
           } else {
@@ -195,28 +164,108 @@ export async function* invokeA2AStreaming(options: InvokeStreamingOptions): Asyn
   throw finalError;
 }
 
-/** Extract text from an A2A SSE event (task status update or artifact) */
-function extractA2AText(event: Record<string, unknown>): string | null {
-  // Check for result with artifacts
-  const result = event.result as Record<string, unknown> | undefined;
-  if (result) {
-    return extractA2AResultText(result);
+/** Parse SSE stream from A2A message/stream response */
+async function* parseA2ASSEStream(
+  body: ReadableStream<Uint8Array>,
+  logger?: SSELogger
+): AsyncGenerator<string, void, unknown> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  try {
+    while (true) {
+      const result = await reader.read();
+      if (result.done) break;
+
+      buffer += decoder.decode(result.value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6).trim();
+        if (!data) continue;
+
+        logger?.logSSEEvent(line);
+
+        try {
+          const event = JSON.parse(data) as Record<string, unknown>;
+          const text = extractSSEEventText(event);
+          if (text) yield text;
+        } catch {
+          yield data;
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
   }
+}
+
+/**
+ * Extract displayable text from an A2A SSE event.
+ *
+ * Events come in two forms:
+ * - artifact-update: { kind: 'artifact-update', artifact: { parts: [{ kind: 'text', text: '...' }] } }
+ * - status-update:   { kind: 'status-update', status: { state: '...', message?: { parts: [...] } }, final: bool }
+ *
+ * Events can also be wrapped in a JSON-RPC result envelope.
+ */
+function extractSSEEventText(event: Record<string, unknown>): string | null {
+  // Unwrap JSON-RPC result envelope if present
+  const target = (event.result as Record<string, unknown>) ?? event;
+  const kind = target.kind as string | undefined;
+
+  if (kind === 'artifact-update') {
+    const artifact = target.artifact as { parts?: { kind?: string; text?: string }[] } | undefined;
+    return extractPartsText(artifact?.parts);
+  }
+
+  if (kind === 'status-update') {
+    const status = target.status as
+      | { state?: string; message?: { parts?: { kind?: string; text?: string }[] } }
+      | undefined;
+    // Extract text from status message if present
+    if (status?.message?.parts) {
+      return extractPartsText(status.message.parts);
+    }
+    return null;
+  }
+
+  // Fallback: try extracting from a full Task result (non-streaming envelope)
+  return extractTaskText(target);
+}
+
+/** Extract text from a full Task result (has artifacts array and/or status) */
+function extractTaskText(result: Record<string, unknown>): string | null {
+  // Try artifacts first
+  const artifacts = result.artifacts as { parts?: { kind?: string; type?: string; text?: string }[] }[] | undefined;
+  if (artifacts) {
+    const texts: string[] = [];
+    for (const artifact of artifacts) {
+      const text = extractPartsText(artifact.parts);
+      if (text) texts.push(text);
+    }
+    if (texts.length > 0) return texts.join('\n');
+  }
+
+  // Try status message
+  const status = result.status as { message?: { parts?: { kind?: string; text?: string }[] } } | undefined;
+  if (status?.message?.parts) {
+    return extractPartsText(status.message.parts);
+  }
+
   return null;
 }
 
-/** Extract text from A2A result artifacts */
-function extractA2AResultText(result: Record<string, unknown>): string | null {
-  const artifacts = result.artifacts as { parts?: { type?: string; text?: string }[] }[] | undefined;
-  if (!artifacts) return null;
-
+/** Extract text from a parts array (supports both kind:'text' and type:'text' formats) */
+function extractPartsText(parts: { kind?: string; type?: string; text?: string }[] | undefined): string | null {
+  if (!parts) return null;
   const texts: string[] = [];
-  for (const artifact of artifacts) {
-    if (!artifact.parts) continue;
-    for (const part of artifact.parts) {
-      if (part.type === 'text' && part.text) {
-        texts.push(part.text);
-      }
+  for (const part of parts) {
+    if ((part.kind === 'text' || part.type === 'text') && part.text) {
+      texts.push(part.text);
     }
   }
   return texts.length > 0 ? texts.join('') : null;

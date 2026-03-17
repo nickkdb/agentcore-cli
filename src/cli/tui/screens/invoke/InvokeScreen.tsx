@@ -412,6 +412,7 @@ export function InvokeScreen({
             <TextInput
               prompt=""
               hideArrow
+              placeholder={agentProtocol === 'A2A' ? 'Send a message...' : undefined}
               onSubmit={text => {
                 if (text.trim()) {
                   setMode('chat');
