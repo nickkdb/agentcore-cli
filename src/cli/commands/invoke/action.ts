@@ -1,6 +1,6 @@
 import { ConfigIO } from '../../../lib';
 import type { AgentCoreProjectSpec, AwsDeploymentTargets, DeployedState } from '../../../schema';
-import { invokeAgentRuntime, invokeAgentRuntimeStreaming } from '../../aws';
+import { invokeAgentRuntime, invokeAgentRuntimeStreaming, mcpCallTool, mcpListTools } from '../../aws';
 import { InvokeLogger } from '../../logging';
 import type { InvokeOptions, InvokeResult } from './types';
 
@@ -79,6 +79,70 @@ export async function handleInvoke(context: InvokeContext, options: InvokeOption
 
   if (!agentState) {
     return { success: false, error: `Agent '${agentSpec.name}' is not deployed to target '${selectedTargetName}'` };
+  }
+
+  // MCP protocol handling
+  if (agentSpec.protocol === 'MCP') {
+    const mcpOpts = {
+      region: targetConfig.region,
+      runtimeArn: agentState.runtimeArn,
+      userId: options.userId,
+    };
+
+    // list-tools: list available MCP tools
+    if (options.prompt === 'list-tools') {
+      const result = await mcpListTools(mcpOpts);
+      const toolLines = result.tools.map(t => {
+        const params = t.inputSchema?.properties
+          ? Object.entries(t.inputSchema.properties as Record<string, { type?: string }>)
+              .map(([name, schema]) => `${name}: ${schema.type ?? 'any'}`)
+              .join(', ')
+          : '';
+        return `  ${t.name}(${params})${t.description ? ` - ${t.description}` : ''}`;
+      });
+      const response = `Available tools (${result.tools.length}):\n${toolLines.join('\n')}`;
+      return {
+        success: true,
+        agentName: agentSpec.name,
+        targetName: selectedTargetName,
+        response,
+      };
+    }
+
+    // call-tool: call an MCP tool by name
+    if (options.prompt === 'call-tool') {
+      if (!options.tool) {
+        return {
+          success: false,
+          error: 'MCP call-tool requires --tool <name>. Use "list-tools" to see available tools.',
+        };
+      }
+      let args: Record<string, unknown> = {};
+      if (options.input) {
+        try {
+          args = JSON.parse(options.input) as Record<string, unknown>;
+        } catch {
+          return { success: false, error: `Invalid JSON for --input: ${options.input}` };
+        }
+      }
+      // Initialize session first to get mcpSessionId
+      const initResult = await mcpListTools(mcpOpts);
+      const response = await mcpCallTool({ ...mcpOpts, mcpSessionId: initResult.mcpSessionId }, options.tool, args);
+      return {
+        success: true,
+        agentName: agentSpec.name,
+        targetName: selectedTargetName,
+        response,
+      };
+    }
+
+    if (!options.prompt) {
+      return {
+        success: false,
+        error:
+          'MCP agents require a command. Usage:\n  agentcore invoke list-tools\n  agentcore invoke call-tool --tool <name> --input \'{"arg": "value"}\'',
+      };
+    }
   }
 
   if (!options.prompt) {

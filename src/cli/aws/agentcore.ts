@@ -234,6 +234,192 @@ export async function invokeAgentRuntime(options: InvokeAgentRuntimeOptions): Pr
   };
 }
 
+// ---------------------------------------------------------------------------
+// MCP: JSON-RPC over InvokeAgentRuntime
+// ---------------------------------------------------------------------------
+
+export interface McpInvokeOptions {
+  region: string;
+  runtimeArn: string;
+  userId?: string;
+  mcpSessionId?: string;
+  logger?: SSELogger;
+}
+
+export interface McpToolDef {
+  name: string;
+  description?: string;
+  inputSchema?: Record<string, unknown>;
+}
+
+export interface McpListToolsResult {
+  tools: McpToolDef[];
+  mcpSessionId?: string;
+}
+
+let mcpRequestId = 1;
+
+/** Send a JSON-RPC payload through InvokeAgentRuntime and return the parsed response. */
+async function mcpRpcCall(
+  options: McpInvokeOptions,
+  body: Record<string, unknown>
+): Promise<{ result: Record<string, unknown>; mcpSessionId?: string }> {
+  const client = new BedrockAgentCoreClient({
+    region: options.region,
+    credentials: getCredentialProvider(),
+  });
+
+  options.logger?.logSSEEvent(`MCP request: ${JSON.stringify(body)}`);
+
+  const command = new InvokeAgentRuntimeCommand({
+    agentRuntimeArn: options.runtimeArn,
+    payload: new TextEncoder().encode(JSON.stringify(body)),
+    contentType: 'application/json',
+    accept: 'application/json',
+    mcpSessionId: options.mcpSessionId,
+    mcpProtocolVersion: '2025-03-26',
+    runtimeUserId: options.userId ?? DEFAULT_RUNTIME_USER_ID,
+  });
+
+  const response = await client.send(command);
+
+  if (!response.response) {
+    throw new Error('No response from AgentCore Runtime');
+  }
+
+  const bytes = await response.response.transformToByteArray();
+  const text = new TextDecoder().decode(bytes);
+
+  options.logger?.logSSEEvent(`MCP response: ${text}`);
+
+  const parsed = parseMcpJsonRpcResponse(text);
+
+  if (parsed.error) {
+    const rpcError = parsed.error as { message?: string; code?: number };
+    throw new Error(rpcError.message ?? `MCP error (code ${rpcError.code})`);
+  }
+
+  return {
+    result: (parsed.result as Record<string, unknown>) ?? {},
+    mcpSessionId: response.mcpSessionId,
+  };
+}
+
+/** Send a JSON-RPC notification (no id, no response expected). */
+async function mcpRpcNotify(options: McpInvokeOptions, body: Record<string, unknown>): Promise<void> {
+  const client = new BedrockAgentCoreClient({
+    region: options.region,
+    credentials: getCredentialProvider(),
+  });
+
+  const command = new InvokeAgentRuntimeCommand({
+    agentRuntimeArn: options.runtimeArn,
+    payload: new TextEncoder().encode(JSON.stringify(body)),
+    contentType: 'application/json',
+    accept: 'application/json',
+    mcpSessionId: options.mcpSessionId,
+    mcpProtocolVersion: '2025-03-26',
+    runtimeUserId: options.userId ?? DEFAULT_RUNTIME_USER_ID,
+  });
+
+  await client.send(command);
+}
+
+/**
+ * Initialize MCP session and list available tools via InvokeAgentRuntime.
+ */
+export async function mcpListTools(options: McpInvokeOptions): Promise<McpListToolsResult> {
+  // 1. Initialize
+  const initResult = await mcpRpcCall(options, {
+    jsonrpc: '2.0',
+    id: mcpRequestId++,
+    method: 'initialize',
+    params: {
+      protocolVersion: '2025-03-26',
+      capabilities: {},
+      clientInfo: { name: 'agentcore-cli', version: '1.0.0' },
+    },
+  });
+
+  const sessionId = initResult.mcpSessionId;
+  const optionsWithSession = { ...options, mcpSessionId: sessionId };
+
+  // 2. Send initialized notification
+  await mcpRpcNotify(optionsWithSession, {
+    jsonrpc: '2.0',
+    method: 'notifications/initialized',
+  });
+
+  // 3. List tools
+  const listResult = await mcpRpcCall(optionsWithSession, {
+    jsonrpc: '2.0',
+    id: mcpRequestId++,
+    method: 'tools/list',
+    params: {},
+  });
+
+  const tools = (listResult.result as { tools?: McpToolDef[] }).tools ?? [];
+
+  return {
+    tools: tools.map(t => ({ name: t.name, description: t.description, inputSchema: t.inputSchema })),
+    mcpSessionId: sessionId,
+  };
+}
+
+/**
+ * Call an MCP tool via InvokeAgentRuntime.
+ */
+export async function mcpCallTool(
+  options: McpInvokeOptions,
+  toolName: string,
+  args: Record<string, unknown>
+): Promise<string> {
+  const { result } = await mcpRpcCall(options, {
+    jsonrpc: '2.0',
+    id: mcpRequestId++,
+    method: 'tools/call',
+    params: { name: toolName, arguments: args },
+  });
+
+  const content = (result as { content?: { type?: string; text?: string }[] }).content;
+  if (content) {
+    const texts: string[] = [];
+    for (const item of content) {
+      if (item.text !== undefined) {
+        texts.push(item.text);
+      }
+    }
+    if (texts.length > 0) return texts.join('');
+  }
+
+  return JSON.stringify(result, null, 2);
+}
+
+/** Parse a JSON-RPC response, handling both plain JSON and SSE-wrapped formats */
+function parseMcpJsonRpcResponse(text: string): Record<string, unknown> {
+  const trimmed = text.trim();
+
+  try {
+    return JSON.parse(trimmed) as Record<string, unknown>;
+  } catch {
+    // Might be SSE format
+  }
+
+  const lines = trimmed.split('\n');
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i]!;
+    if (line.startsWith('data: ')) {
+      try {
+        return JSON.parse(line.slice(6)) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  return {};
+}
+
 /**
  * Stop a runtime session.
  */
