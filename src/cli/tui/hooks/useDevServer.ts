@@ -127,6 +127,10 @@ export function useDevServer(options: { workingDir: string; port: number; agentN
         agentName: config.agentName,
       });
 
+      // A2A servers always use port 9000 (serve_a2a default, not configurable via env)
+      const isA2A = config.protocol === 'A2A';
+      const fixedPort = isA2A ? 9000 : targetPort;
+
       // On restart, reuse the same port. On initial start, find an available port.
       // If restart times out waiting for port, fall back to finding a new one.
       const isRestart = restartTrigger > 0;
@@ -137,9 +141,22 @@ export function useDevServer(options: { workingDir: string; port: number; agentN
           addLog('warn', `Port ${actualPortRef.current} not released, finding new port`);
         }
       }
-      const port = isRestart && portFree ? actualPortRef.current : await findAvailablePort(targetPort);
-      if (!isRestart && port !== targetPort) {
-        addLog('warn', `Port ${targetPort} in use, using ${port}`);
+
+      let port: number;
+      if (isA2A) {
+        // A2A must use port 9000; check availability but don't auto-assign another
+        const available = await findAvailablePort(fixedPort);
+        if (available !== fixedPort) {
+          addLog('error', `Port ${fixedPort} is in use. A2A agents require port ${fixedPort}.`);
+          setStatus('error');
+          return;
+        }
+        port = fixedPort;
+      } else {
+        port = isRestart && portFree ? actualPortRef.current : await findAvailablePort(fixedPort);
+        if (!isRestart && port !== fixedPort) {
+          addLog('warn', `Port ${fixedPort} in use, using ${port}`);
+        }
       }
       actualPortRef.current = port;
       setActualPort(port);

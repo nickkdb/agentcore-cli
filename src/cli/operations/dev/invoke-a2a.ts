@@ -1,4 +1,5 @@
 import { ConnectionError, type InvokeStreamingOptions, type SSELogger, ServerError } from './invoke-types';
+import { randomUUID } from 'crypto';
 
 let requestId = 1;
 
@@ -76,6 +77,7 @@ export async function* invokeA2AStreaming(options: InvokeStreamingOptions): Asyn
         method: 'message/send',
         params: {
           message: {
+            messageId: randomUUID(),
             role: 'user',
             parts: [{ type: 'text', text: msg }],
           },
