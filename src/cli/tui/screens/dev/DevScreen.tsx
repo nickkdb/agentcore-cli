@@ -223,6 +223,8 @@ export function DevScreen(props: DevScreenProps) {
     }, 1000);
   }, [props, stop, isExiting]);
 
+  const isMcp = protocol === 'MCP';
+
   // Calculate available height for conversation display
   const terminalHeight = stdout?.rows ?? 24;
   const terminalWidth = stdout?.columns ?? 80;
@@ -398,7 +400,6 @@ export function DevScreen(props: DevScreenProps) {
   const visibleLines = lines.slice(effectiveOffset, effectiveOffset + displayHeight);
 
   // Dynamic help text
-  const isMcp = protocol === 'MCP';
   const backOrQuit = supportedAgents.length > 1 ? 'Esc back' : 'Esc quit';
   const helpText =
     mode === 'select-agent'
