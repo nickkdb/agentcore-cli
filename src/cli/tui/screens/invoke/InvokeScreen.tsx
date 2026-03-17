@@ -278,10 +278,11 @@ export function InvokeScreen({
           agentName: agent.name,
         })
       : undefined;
+  const agentProtocol = agent?.protocol ?? 'HTTP';
   const agentItems = config.agents.map((a, i) => ({
     id: String(i),
     title: a.name,
-    description: `Runtime: ${a.state.runtimeId}`,
+    description: `${a.protocol && a.protocol !== 'HTTP' ? `${a.protocol} · ` : ''}Runtime: ${a.state.runtimeId}`,
   }));
 
   // Dynamic help text
@@ -306,6 +307,12 @@ export function InvokeScreen({
         <Box>
           <Text>Agent: </Text>
           <Text color="cyan">{agent?.name}</Text>
+        </Box>
+      )}
+      {mode !== 'select-agent' && agentProtocol !== 'HTTP' && (
+        <Box>
+          <Text>Protocol: </Text>
+          <Text color="cyan">{agentProtocol}</Text>
         </Box>
       )}
       {mode !== 'select-agent' && agent?.modelProvider && (

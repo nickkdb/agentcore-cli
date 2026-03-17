@@ -1,6 +1,58 @@
-import { ConnectionError, ServerError, type InvokeStreamingOptions } from './invoke-types';
+import { ConnectionError, type InvokeStreamingOptions, type SSELogger, ServerError } from './invoke-types';
 
 let requestId = 1;
+
+export interface A2AAgentCard {
+  name?: string;
+  description?: string;
+  version?: string;
+  url?: string;
+  skills?: { id?: string; name?: string; description?: string; tags?: string[] }[];
+  capabilities?: { streaming?: boolean };
+  defaultInputModes?: string[];
+  defaultOutputModes?: string[];
+}
+
+/**
+ * Fetch the A2A agent card from /.well-known/agent.json.
+ * Returns null if not available (retries on connection errors).
+ */
+export async function fetchA2AAgentCard(port: number, logger?: SSELogger): Promise<A2AAgentCard | null> {
+  const maxRetries = 5;
+  const baseDelay = 500;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const res = await fetch(`http://localhost:${port}/.well-known/agent.json`, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+      });
+
+      if (!res.ok) {
+        logger?.log?.('warn', `Agent card not available (${res.status})`);
+        return null;
+      }
+
+      const card = (await res.json()) as A2AAgentCard;
+      logger?.log?.('system', `A2A agent card: ${card.name ?? 'unnamed'}`);
+      return card;
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      const isConnectionError = error.message.includes('fetch') || error.message.includes('ECONNREFUSED');
+
+      if (isConnectionError && attempt < maxRetries - 1) {
+        const delay = baseDelay * Math.pow(2, attempt);
+        await sleep(delay);
+        continue;
+      }
+
+      logger?.log?.('warn', `Failed to fetch agent card: ${error.message}`);
+      return null;
+    }
+  }
+
+  return null;
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));

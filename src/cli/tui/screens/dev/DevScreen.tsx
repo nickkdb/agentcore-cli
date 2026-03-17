@@ -197,6 +197,8 @@ export function DevScreen(props: DevScreenProps) {
     protocol,
     mcpTools,
     fetchMcpTools,
+    a2aAgentCard,
+    fetchAgentCard,
   } = useDevServer({
     workingDir,
     port: props.port ?? 8080,
@@ -216,6 +218,18 @@ export function DevScreen(props: DevScreenProps) {
       mcpFetchTriggeredRef.current = false;
     }
   }, [protocol, status, fetchMcpTools]);
+
+  // A2A: auto-fetch agent card when server becomes ready
+  const a2aFetchTriggeredRef = useRef(false);
+  useEffect(() => {
+    if (protocol === 'A2A' && status === 'running' && !a2aFetchTriggeredRef.current) {
+      a2aFetchTriggeredRef.current = true;
+      void fetchAgentCard();
+    }
+    if (status === 'starting') {
+      a2aFetchTriggeredRef.current = false;
+    }
+  }, [protocol, status, fetchAgentCard]);
 
   // Handle exit with brief "stopping" message
   const handleExit = useCallback(() => {
@@ -238,8 +252,10 @@ export function DevScreen(props: DevScreenProps) {
   const visibleToolCount = Math.min(mcpTools.length, MAX_VISIBLE_TOOLS);
   const mcpToolHeaderLines =
     isMcp && mcpTools.length > 0 ? visibleToolCount + 1 + (mcpTools.length > MAX_VISIBLE_TOOLS ? 1 : 0) + 1 : 0;
+  // A2A agent card takes ~3 lines (name, description, skills)
+  const a2aCardHeaderLines = protocol === 'A2A' && a2aAgentCard ? 3 : 0;
   // Reduce height when in input mode to make room for input field
-  const baseHeight = Math.max(5, terminalHeight - 12 - mcpToolHeaderLines);
+  const baseHeight = Math.max(5, terminalHeight - 12 - mcpToolHeaderLines - a2aCardHeaderLines);
   const displayHeight = mode === 'input' ? Math.max(3, baseHeight - 2) : baseHeight;
   const contentWidth = Math.max(40, terminalWidth - 4);
 
@@ -520,6 +536,15 @@ export function DevScreen(props: DevScreenProps) {
       )}
       {protocol === 'MCP' && status === 'running' && mcpTools.length === 0 && mcpToolsFetched && (
         <Text color="yellow">No tools available.</Text>
+      )}
+      {protocol === 'A2A' && status === 'running' && a2aAgentCard && (
+        <Box flexDirection="column" marginTop={1}>
+          <Text bold>{a2aAgentCard.name ?? 'A2A Agent'}</Text>
+          {a2aAgentCard.description && <Text dimColor> {a2aAgentCard.description}</Text>}
+          {a2aAgentCard.skills && a2aAgentCard.skills.length > 0 && (
+            <Text dimColor>{`  Skills: ${a2aAgentCard.skills.map(s => s.name ?? s.id).join(', ')}`}</Text>
+          )}
+        </Box>
       )}
     </Box>
   );

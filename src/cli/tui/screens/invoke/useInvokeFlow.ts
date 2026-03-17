@@ -4,6 +4,7 @@ import type {
   AwsDeploymentTarget,
   ModelProvider,
   NetworkMode,
+  ProtocolMode,
   AgentCoreProjectSpec as _AgentCoreProjectSpec,
 } from '../../../../schema';
 import { DEFAULT_RUNTIME_USER_ID, invokeAgentRuntimeStreaming } from '../../../aws';
@@ -13,7 +14,7 @@ import { generateSessionId } from '../../../operations/session';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 export interface InvokeConfig {
-  agents: { name: string; state: AgentCoreDeployedState; modelProvider?: ModelProvider; networkMode?: NetworkMode }[];
+  agents: { name: string; state: AgentCoreDeployedState; modelProvider?: ModelProvider; networkMode?: NetworkMode; protocol?: ProtocolMode }[];
   target: AwsDeploymentTarget;
   targetName: string;
   projectName: string;
@@ -88,6 +89,7 @@ export function useInvokeFlow(options: InvokeFlowOptions = {}): InvokeFlowState 
             state,
             modelProvider: agent.modelProvider,
             networkMode: agent.networkMode,
+            protocol: agent.protocol,
           });
         }
 

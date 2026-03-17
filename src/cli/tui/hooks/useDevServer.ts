@@ -2,6 +2,7 @@ import { findConfigRoot, readEnvFile } from '../../../lib';
 import type { AgentCoreProjectSpec, ProtocolMode } from '../../../schema';
 import { DevLogger } from '../../logging/dev-logger';
 import {
+  type A2AAgentCard,
   ConnectionError,
   type DevConfig,
   DevServer,
@@ -10,6 +11,7 @@ import {
   ServerError,
   callMcpTool,
   createDevServer,
+  fetchA2AAgentCard,
   findAvailablePort,
   getDevConfig,
   invokeA2AStreaming,
@@ -55,6 +57,9 @@ export function useDevServer(options: { workingDir: string; port: number; agentN
   // MCP session state
   const mcpSessionIdRef = useRef<string | undefined>(undefined);
   const [mcpTools, setMcpTools] = useState<McpTool[]>([]);
+
+  // A2A agent card state
+  const [a2aAgentCard, setA2aAgentCard] = useState<A2AAgentCard | null>(null);
 
   const serverRef = useRef<DevServer | null>(null);
   const loggerRef = useRef<DevLogger | null>(null);
@@ -202,6 +207,17 @@ export function useDevServer(options: { workingDir: string; port: number; agentN
     restartTrigger,
     envVars,
   ]);
+
+  // A2A: fetch agent card when server becomes ready
+  const fetchAgentCard = async () => {
+    try {
+      const card = await fetchA2AAgentCard(actualPort, loggerRef.current ?? undefined);
+      setA2aAgentCard(card);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      addLog('warn', `Failed to fetch agent card: ${errMsg}`);
+    }
+  };
 
   // MCP: auto-list tools when server becomes ready
   const fetchMcpTools = async () => {
@@ -381,6 +397,8 @@ export function useDevServer(options: { workingDir: string; port: number; agentN
     protocol,
     mcpTools,
     fetchMcpTools,
+    a2aAgentCard,
+    fetchAgentCard,
   };
 }
 
