@@ -29,4 +29,6 @@ export interface InvokeStreamingOptions {
   message: string;
   /** Optional logger for SSE event debugging */
   logger?: SSELogger;
+  /** Callback for A2A task status updates (e.g. 'working', 'input-required') */
+  onStatus?: (status: string) => void;
 }

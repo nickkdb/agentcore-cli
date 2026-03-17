@@ -65,7 +65,7 @@ function sleep(ms: number): Promise<void> {
  * Yields text chunks as they arrive from artifact-update and status-update events.
  */
 export async function* invokeA2AStreaming(options: InvokeStreamingOptions): AsyncGenerator<string, void, unknown> {
-  const { port, message: msg, logger } = options;
+  const { port, message: msg, logger, onStatus } = options;
   const maxRetries = 5;
   const baseDelay = 500;
   let lastError: Error | null = null;
@@ -102,7 +102,7 @@ export async function* invokeA2AStreaming(options: InvokeStreamingOptions): Asyn
 
       // Handle SSE streaming response
       if (contentType.includes('text/event-stream') && res.body) {
-        yield* parseA2ASSEStream(res.body, logger);
+        yield* parseA2ASSEStream(res.body, logger, onStatus);
         return;
       }
 
@@ -167,11 +167,13 @@ export async function* invokeA2AStreaming(options: InvokeStreamingOptions): Asyn
 /** Parse SSE stream from A2A message/stream response */
 async function* parseA2ASSEStream(
   body: ReadableStream<Uint8Array>,
-  logger?: SSELogger
+  logger?: SSELogger,
+  onStatus?: (status: string) => void
 ): AsyncGenerator<string, void, unknown> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  let streamedFromStatus = false;
 
   try {
     while (true) {
@@ -191,8 +193,12 @@ async function* parseA2ASSEStream(
 
         try {
           const event = JSON.parse(data) as Record<string, unknown>;
-          const text = extractSSEEventText(event);
-          if (text) yield text;
+          handleSSEEvent(event, onStatus);
+          const text = extractSSEEventText(event, streamedFromStatus);
+          if (text) {
+            if (isStatusUpdateEvent(event)) streamedFromStatus = true;
+            yield text;
+          }
         } catch {
           yield data;
         }
@@ -203,6 +209,23 @@ async function* parseA2ASSEStream(
   }
 }
 
+/** Dispatch status-update events to the onStatus callback */
+function handleSSEEvent(event: Record<string, unknown>, onStatus?: (status: string) => void): void {
+  if (!onStatus) return;
+  const target = (event.result as Record<string, unknown>) ?? event;
+  if (target.kind !== 'status-update') return;
+  const status = target.status as { state?: string } | undefined;
+  if (status?.state) {
+    onStatus(status.state);
+  }
+}
+
+/** Check if an event (possibly wrapped in JSON-RPC envelope) is a status-update */
+function isStatusUpdateEvent(event: Record<string, unknown>): boolean {
+  const target = (event.result as Record<string, unknown>) ?? event;
+  return target.kind === 'status-update';
+}
+
 /**
  * Extract displayable text from an A2A SSE event.
  *
@@ -211,24 +234,29 @@ async function* parseA2ASSEStream(
  * - status-update:   { kind: 'status-update', status: { state: '...', message?: { parts: [...] } }, final: bool }
  *
  * Events can also be wrapped in a JSON-RPC result envelope.
+ *
+ * When `streamedFromStatus` is true, artifact-update text is skipped because
+ * the same content was already streamed incrementally via status-update events.
  */
-function extractSSEEventText(event: Record<string, unknown>): string | null {
+function extractSSEEventText(event: Record<string, unknown>, streamedFromStatus = false): string | null {
   // Unwrap JSON-RPC result envelope if present
   const target = (event.result as Record<string, unknown>) ?? event;
   const kind = target.kind as string | undefined;
 
   if (kind === 'artifact-update') {
+    // Skip if we already streamed this content via status-update events
+    if (streamedFromStatus) return null;
     const artifact = target.artifact as { parts?: { kind?: string; text?: string }[] } | undefined;
     return extractPartsText(artifact?.parts);
   }
 
   if (kind === 'status-update') {
-    const status = target.status as { state?: string } | undefined;
-    const state = status?.state;
-    // Show transient status for non-terminal states (terminal states are
-    // redundant with artifact content that follows or precedes them)
-    if (state && state !== 'completed' && state !== 'canceled') {
-      return `[${state}]\n`;
+    // Extract streaming text from status-update message parts (working state)
+    const status = target.status as
+      | { state?: string; message?: { parts?: { kind?: string; type?: string; text?: string }[] } }
+      | undefined;
+    if (status?.message?.parts) {
+      return extractPartsText(status.message.parts);
     }
     return null;
   }

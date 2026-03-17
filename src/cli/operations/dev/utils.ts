@@ -1,4 +1,4 @@
-import { createServer } from 'net';
+import { createConnection, createServer } from 'net';
 
 /** Check if a port is available on a specific host */
 function checkPort(port: number, host: string): Promise<boolean> {
@@ -35,6 +35,26 @@ export async function waitForPort(port: number, timeoutMs = 3000): Promise<boole
   while (Date.now() - start < timeoutMs) {
     if (await isPortAvailable(port)) return true;
     await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  return false;
+}
+
+/** Wait until a server is accepting connections on the given port, with timeout. */
+export async function waitForServerReady(port: number, timeoutMs = 60000): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const listening = await new Promise<boolean>(resolve => {
+      const socket = createConnection({ port, host: '127.0.0.1' }, () => {
+        socket.destroy();
+        resolve(true);
+      });
+      socket.on('error', () => {
+        socket.destroy();
+        resolve(false);
+      });
+    });
+    if (listening) return true;
+    await new Promise(resolve => setTimeout(resolve, 500));
   }
   return false;
 }

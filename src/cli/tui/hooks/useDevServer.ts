@@ -58,8 +58,9 @@ export function useDevServer(options: { workingDir: string; port: number; agentN
   const mcpSessionIdRef = useRef<string | undefined>(undefined);
   const [mcpTools, setMcpTools] = useState<McpTool[]>([]);
 
-  // A2A agent card state
+  // A2A state
   const [a2aAgentCard, setA2aAgentCard] = useState<A2AAgentCard | null>(null);
+  const [a2aStatus, setA2aStatus] = useState<string | null>(null);
 
   const serverRef = useRef<DevServer | null>(null);
   const loggerRef = useRef<DevLogger | null>(null);
@@ -319,9 +320,17 @@ export function useDevServer(options: { workingDir: string; port: number; agentN
 
     try {
       // Select streaming function based on protocol
+      if (protocol === 'A2A') {
+        setA2aStatus(null);
+      }
       const streamFn =
         protocol === 'A2A'
-          ? invokeA2AStreaming({ port: actualPort, message, logger: loggerRef.current ?? undefined })
+          ? invokeA2AStreaming({
+              port: actualPort,
+              message,
+              logger: loggerRef.current ?? undefined,
+              onStatus: setA2aStatus,
+            })
           : invokeAgentStreaming({ port: actualPort, message, logger: loggerRef.current ?? undefined });
 
       for await (const chunk of streamFn) {
@@ -366,6 +375,7 @@ export function useDevServer(options: { workingDir: string; port: number; agentN
       setStreamingResponse(null);
     } finally {
       setIsStreaming(false);
+      setA2aStatus(null);
     }
   };
 
@@ -415,6 +425,7 @@ export function useDevServer(options: { workingDir: string; port: number; agentN
     mcpTools,
     fetchMcpTools,
     a2aAgentCard,
+    a2aStatus,
     fetchAgentCard,
   };
 }

@@ -10,7 +10,7 @@ describe('invokeA2AStreaming', () => {
     mockFetch.mockReset();
   });
 
-  it('sends message/send JSON-RPC and yields artifact text', async () => {
+  it('sends message/stream JSON-RPC and yields artifact text', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       headers: new Map([['content-type', 'application/json']]),
@@ -42,7 +42,9 @@ describe('invokeA2AStreaming', () => {
     const call = mockFetch.mock.calls[0]!;
     expect(call[0]).toBe('http://localhost:8080/');
     const body = JSON.parse(call[1]!.body);
-    expect(body.method).toBe('message/send');
+    expect(body.method).toBe('message/stream');
+    expect(body.params.message.messageId).toBeDefined();
+    expect(body.params.message.parts[0].kind).toBe('text');
     expect(body.params.message.parts[0].text).toBe('what is 2+2');
   });
 
@@ -100,6 +102,90 @@ describe('invokeA2AStreaming', () => {
 
     const gen = invokeA2AStreaming({ port: 8080, message: 'test' });
     await expect(gen.next()).rejects.toThrow(ServerError);
+  });
+
+  it('streams text from status-update events and skips duplicate artifact-update', async () => {
+    // Simulate SSE stream with status-update chunks followed by artifact-update
+    const sseLines = [
+      'data: {"kind":"status-update","status":{"state":"working","message":{"parts":[{"kind":"text","text":"Hello"}]}}}\n\n',
+      'data: {"kind":"status-update","status":{"state":"working","message":{"parts":[{"kind":"text","text":" world"}]}}}\n\n',
+      'data: {"kind":"artifact-update","artifact":{"parts":[{"kind":"text","text":"Hello world"}]}}\n\n',
+      'data: {"kind":"status-update","status":{"state":"completed"},"final":true}\n\n',
+    ];
+
+    const encoder = new TextEncoder();
+    let chunkIndex = 0;
+    const mockBody = {
+      getReader: () => ({
+        read: () => {
+          if (chunkIndex < sseLines.length) {
+            return Promise.resolve({ done: false as const, value: encoder.encode(sseLines[chunkIndex++]) });
+          }
+          return Promise.resolve({ done: true as const, value: undefined });
+        },
+        releaseLock: vi.fn(),
+      }),
+    };
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      headers: new Map([['content-type', 'text/event-stream']]),
+      body: mockBody,
+    });
+
+    const chunks: string[] = [];
+    const statuses: string[] = [];
+    for await (const chunk of invokeA2AStreaming({
+      port: 8080,
+      message: 'hello',
+      onStatus: s => statuses.push(s),
+    })) {
+      chunks.push(chunk);
+    }
+
+    // Should yield incremental status-update text, not the duplicate artifact-update
+    expect(chunks).toEqual(['Hello', ' world']);
+    expect(chunks.join('')).toBe('Hello world');
+    // Should have received status callbacks
+    expect(statuses).toContain('working');
+    expect(statuses).toContain('completed');
+  });
+
+  it('yields artifact-update text when no status-update text was streamed', async () => {
+    // SSE stream with only artifact-update (no streaming status-update text)
+    const sseLines = [
+      'data: {"kind":"status-update","status":{"state":"working"}}\n\n',
+      'data: {"kind":"artifact-update","artifact":{"parts":[{"kind":"text","text":"Result here"}]}}\n\n',
+      'data: {"kind":"status-update","status":{"state":"completed"},"final":true}\n\n',
+    ];
+
+    const encoder = new TextEncoder();
+    let chunkIndex = 0;
+    const mockBody = {
+      getReader: () => ({
+        read: () => {
+          if (chunkIndex < sseLines.length) {
+            return Promise.resolve({ done: false as const, value: encoder.encode(sseLines[chunkIndex++]) });
+          }
+          return Promise.resolve({ done: true as const, value: undefined });
+        },
+        releaseLock: vi.fn(),
+      }),
+    };
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      headers: new Map([['content-type', 'text/event-stream']]),
+      body: mockBody,
+    });
+
+    const chunks: string[] = [];
+    for await (const chunk of invokeA2AStreaming({ port: 8080, message: 'hello' })) {
+      chunks.push(chunk);
+    }
+
+    // Should yield artifact-update text since no status-update text was streamed
+    expect(chunks).toEqual(['Result here']);
   });
 
   it('yields fallback JSON when no artifacts found', async () => {

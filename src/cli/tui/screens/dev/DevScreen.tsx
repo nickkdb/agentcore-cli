@@ -198,6 +198,7 @@ export function DevScreen(props: DevScreenProps) {
     mcpTools,
     fetchMcpTools,
     a2aAgentCard,
+    a2aStatus,
     fetchAgentCard,
   } = useDevServer({
     workingDir,
@@ -560,8 +561,12 @@ export function DevScreen(props: DevScreenProps) {
                 {line.text || ' '}
               </Text>
             ))}
-            {/* Thinking indicator - shows while waiting for response to start */}
-            {isStreaming && !streamingResponse && <GradientText text="Thinking..." />}
+            {/* Thinking/status indicator - shows while waiting for response to start */}
+            {isStreaming && !streamingResponse && (
+              <GradientText
+                text={a2aStatus ? `${a2aStatus.charAt(0).toUpperCase()}${a2aStatus.slice(1)}...` : 'Thinking...'}
+              />
+            )}
           </Box>
         )}
 
