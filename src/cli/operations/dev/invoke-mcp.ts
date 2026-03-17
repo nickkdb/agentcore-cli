@@ -12,11 +12,17 @@ export interface McpTool {
   inputSchema?: Record<string, unknown>;
 }
 
+export interface McpToolsResult {
+  tools: McpTool[];
+  sessionId?: string;
+}
+
 /**
  * Initialize MCP session and list available tools.
  * Sends initialize + tools/list JSON-RPC requests to the MCP endpoint.
+ * Returns tools and the session ID needed for subsequent calls.
  */
-export async function listMcpTools(port: number, logger?: SSELogger): Promise<McpTool[]> {
+export async function listMcpTools(port: number, logger?: SSELogger): Promise<McpToolsResult> {
   const maxRetries = 5;
   const baseDelay = 500;
   let lastError: Error | null = null;
@@ -96,11 +102,14 @@ export async function listMcpTools(port: number, logger?: SSELogger): Promise<Mc
       const result = parsed.result as { tools?: McpTool[] } | undefined;
       const tools = result?.tools ?? [];
 
-      return tools.map(t => ({
-        name: t.name,
-        description: t.description,
-        inputSchema: t.inputSchema,
-      }));
+      return {
+        tools: tools.map(t => ({
+          name: t.name,
+          description: t.description,
+          inputSchema: t.inputSchema,
+        })),
+        sessionId: sessionId ?? undefined,
+      };
     } catch (err) {
       if (err instanceof ServerError) {
         logger?.log?.('error', `Server error (${err.statusCode}): ${err.message}`);

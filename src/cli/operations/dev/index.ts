@@ -14,4 +14,4 @@ export { ConnectionError, ServerError, invokeAgent, invokeAgentStreaming, invoke
 
 export { invokeA2AStreaming } from './invoke-a2a';
 
-export { listMcpTools, callMcpTool, type McpTool } from './invoke-mcp';
+export { listMcpTools, callMcpTool, type McpTool, type McpToolsResult } from './invoke-mcp';

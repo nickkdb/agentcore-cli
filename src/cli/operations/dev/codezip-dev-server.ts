@@ -19,12 +19,19 @@ function ensurePythonVenv(
 ): boolean {
   const venvPath = join(cwd, '.venv');
 
-  // For HTTP, check uvicorn binary; for MCP/A2A, check python binary
-  const checkBinary = protocol === 'HTTP' ? 'uvicorn' : 'python';
-  const binaryPath = getVenvExecutable(venvPath, checkBinary);
-
-  if (existsSync(binaryPath)) {
-    return true;
+  if (protocol === 'HTTP') {
+    // For HTTP, uvicorn binary is a reliable proxy for "deps installed"
+    const uvicornPath = getVenvExecutable(venvPath, 'uvicorn');
+    if (existsSync(uvicornPath)) {
+      return true;
+    }
+  } else {
+    // For MCP/A2A, check that venv exists AND uv.lock exists (deps synced)
+    const pythonPath = getVenvExecutable(venvPath, 'python');
+    const lockPath = join(cwd, 'uv.lock');
+    if (existsSync(pythonPath) && existsSync(lockPath)) {
+      return true;
+    }
   }
 
   onLog('system', 'Setting up Python environment...');

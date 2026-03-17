@@ -206,33 +206,13 @@ export function useDevServer(options: { workingDir: string; port: number; agentN
   // MCP: auto-list tools when server becomes ready
   const fetchMcpTools = async () => {
     try {
-      const tools = await listMcpTools(actualPort, loggerRef.current ?? undefined);
-      setMcpTools(tools);
-      mcpSessionIdRef.current = undefined; // Session created during listMcpTools
-
-      // Format tool list as a conversation message
-      if (tools.length === 0) {
-        setConversation([{ role: 'assistant', content: 'No tools available.' }]);
-      } else {
-        const toolLines = tools.map(t => {
-          const desc = t.description ? ` \u2014 ${t.description}` : '';
-          const params = t.inputSchema?.properties
-            ? Object.entries(t.inputSchema.properties as Record<string, { type?: string }>)
-                .map(([name, schema]) => `${name}: ${schema.type ?? 'any'}`)
-                .join(', ')
-            : '';
-          return `  ${t.name}(${params})${desc}`;
-        });
-        const msg =
-          'Available tools:\n' +
-          toolLines.join('\n') +
-          '\n\nType: tool_name {"arg": "value"} to call a tool. Type "list" to refresh.';
-        setConversation([{ role: 'assistant', content: msg }]);
-      }
+      const result = await listMcpTools(actualPort, loggerRef.current ?? undefined);
+      setMcpTools(result.tools);
+      mcpSessionIdRef.current = result.sessionId;
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       addLog('error', `Failed to list MCP tools: ${errMsg}`);
-      setConversation([{ role: 'assistant', content: `Failed to list tools: ${errMsg}`, isError: true }]);
+      setMcpTools([]);
     }
   };
 

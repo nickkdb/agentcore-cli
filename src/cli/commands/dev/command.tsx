@@ -84,7 +84,7 @@ async function invokeA2ADevServer(port: number, prompt: string): Promise<void> {
 async function handleMcpInvoke(port: number, invokeValue: string, toolName?: string, input?: string): Promise<void> {
   try {
     if (invokeValue === 'list-tools') {
-      const tools = await listMcpTools(port);
+      const { tools } = await listMcpTools(port);
       if (tools.length === 0) {
         console.log('No tools available.');
         return;
@@ -100,8 +100,10 @@ async function handleMcpInvoke(port: number, invokeValue: string, toolName?: str
         console.error('Usage: agentcore dev --invoke call-tool --tool <name> --input \'{"arg": "value"}\'');
         process.exit(1);
       }
+      // Initialize session first, then call tool with the session ID
+      const { sessionId } = await listMcpTools(port);
       const args = input ? (JSON.parse(input) as Record<string, unknown>) : {};
-      const result = await callMcpTool(port, toolName, args);
+      const result = await callMcpTool(port, toolName, args, sessionId);
       console.log(result);
     } else {
       console.error(`Error: Unknown MCP invoke command "${invokeValue}"`);

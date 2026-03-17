@@ -192,6 +192,7 @@ export function DevScreen(props: DevScreenProps) {
     hasVpc,
     modelProvider,
     protocol,
+    mcpTools,
     fetchMcpTools,
   } = useDevServer({
     workingDir,
@@ -201,16 +202,16 @@ export function DevScreen(props: DevScreenProps) {
   });
 
   // MCP: auto-list tools when server becomes ready
-  const mcpToolsFetchedRef = useRef(false);
+  const [mcpToolsFetched, setMcpToolsFetched] = useState(false);
   useEffect(() => {
-    if (protocol === 'MCP' && status === 'running' && !mcpToolsFetchedRef.current) {
-      mcpToolsFetchedRef.current = true;
+    if (protocol === 'MCP' && status === 'running' && !mcpToolsFetched) {
+      setMcpToolsFetched(true);
       void fetchMcpTools();
     }
     if (status === 'starting') {
-      mcpToolsFetchedRef.current = false;
+      setMcpToolsFetched(false);
     }
-  }, [protocol, status, fetchMcpTools]);
+  }, [protocol, status, fetchMcpTools, mcpToolsFetched]);
 
   // Handle exit with brief "stopping" message
   const handleExit = useCallback(() => {
@@ -226,8 +227,10 @@ export function DevScreen(props: DevScreenProps) {
   const terminalHeight = stdout?.rows ?? 24;
   const terminalWidth = stdout?.columns ?? 80;
   // Reserve lines for: header (4-5), help text (1), input area when active (2), margins
+  // MCP needs extra header space for the tool list
+  const mcpToolHeaderLines = isMcp ? Math.min(mcpTools.length + 1, 8) : 0;
   // Reduce height when in input mode to make room for input field
-  const baseHeight = Math.max(5, terminalHeight - 12);
+  const baseHeight = Math.max(5, terminalHeight - 12 - mcpToolHeaderLines);
   const displayHeight = mode === 'input' ? Math.max(3, baseHeight - 2) : baseHeight;
   const contentWidth = Math.max(40, terminalWidth - 4);
 
@@ -395,18 +398,24 @@ export function DevScreen(props: DevScreenProps) {
   const visibleLines = lines.slice(effectiveOffset, effectiveOffset + displayHeight);
 
   // Dynamic help text
+  const isMcp = protocol === 'MCP';
+  const backOrQuit = supportedAgents.length > 1 ? 'Esc back' : 'Esc quit';
   const helpText =
     mode === 'select-agent'
       ? '↑↓ select · Enter confirm · q quit'
       : mode === 'input'
-        ? 'Enter send · Esc cancel'
+        ? isMcp
+          ? 'tool_name {"arg": val} · Enter send · Esc cancel'
+          : 'Enter send · Esc cancel'
         : status === 'starting'
-          ? `${supportedAgents.length > 1 ? 'Esc back' : 'Esc quit'}`
+          ? backOrQuit
           : isStreaming
             ? '↑↓ scroll'
             : conversation.length > 0
-              ? `↑↓ scroll · Enter invoke · C clear · Ctrl+R restart · ${supportedAgents.length > 1 ? 'Esc back' : 'Esc quit'}`
-              : `Enter to send a message · Ctrl+R restart · ${supportedAgents.length > 1 ? 'Esc back' : 'Esc quit'}`;
+              ? `↑↓ scroll · Enter invoke · C clear · Ctrl+R restart · ${backOrQuit}`
+              : isMcp
+                ? `Enter to call a tool · Ctrl+R restart · ${backOrQuit}`
+                : `Enter to send a message · Ctrl+R restart · ${backOrQuit}`;
 
   // Agent selection screen
   if (mode === 'select-agent') {
@@ -486,6 +495,28 @@ export function DevScreen(props: DevScreenProps) {
           This agent uses VPC network mode. Local dev server runs outside your VPC. Network behavior may differ from
           deployed environment.
         </Text>
+      )}
+      {protocol === 'MCP' && status === 'running' && mcpTools.length > 0 && (
+        <Box flexDirection="column" marginTop={1}>
+          <Text bold>Tools:</Text>
+          {mcpTools.map(t => {
+            const params = t.inputSchema?.properties
+              ? Object.entries(t.inputSchema.properties as Record<string, { type?: string }>)
+                  .map(([name, schema]) => `${name}: ${schema.type ?? 'any'}`)
+                  .join(', ')
+              : '';
+            return (
+              <Box key={t.name}>
+                <Text color="cyan">  {t.name}</Text>
+                <Text dimColor>({params})</Text>
+                {t.description && <Text dimColor> {t.description}</Text>}
+              </Box>
+            );
+          })}
+        </Box>
+      )}
+      {protocol === 'MCP' && status === 'running' && mcpTools.length === 0 && mcpToolsFetched && (
+        <Text color="yellow">No tools available.</Text>
       )}
     </Box>
   );

@@ -37,12 +37,13 @@ describe('listMcpTools', () => {
         }),
     });
 
-    const tools = await listMcpTools(8080);
+    const result = await listMcpTools(8080);
 
-    expect(tools).toHaveLength(2);
-    expect(tools[0]!.name).toBe('add_numbers');
-    expect(tools[0]!.description).toBe('Add two numbers');
-    expect(tools[1]!.name).toBe('greet');
+    expect(result.tools).toHaveLength(2);
+    expect(result.tools[0]!.name).toBe('add_numbers');
+    expect(result.tools[0]!.description).toBe('Add two numbers');
+    expect(result.tools[1]!.name).toBe('greet');
+    expect(result.sessionId).toBe('test-session');
 
     // Verify initialize was called first
     expect(mockFetch).toHaveBeenCalledTimes(3);
@@ -68,8 +69,8 @@ describe('listMcpTools', () => {
       text: async () => JSON.stringify({ jsonrpc: '2.0', id: 2, result: { tools: [] } }),
     });
 
-    const tools = await listMcpTools(8080);
-    expect(tools).toEqual([]);
+    const result = await listMcpTools(8080);
+    expect(result.tools).toEqual([]);
     // 1 failed + 3 successful = 4 total calls
     expect(mockFetch).toHaveBeenCalledTimes(4);
   });
