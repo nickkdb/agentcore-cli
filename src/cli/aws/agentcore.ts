@@ -327,8 +327,31 @@ async function mcpRpcNotify(options: McpInvokeOptions, body: Record<string, unkn
 
 /**
  * Initialize MCP session and list available tools via InvokeAgentRuntime.
+ * Retries on cold-start initialization timeouts.
  */
 export async function mcpListTools(options: McpInvokeOptions): Promise<McpListToolsResult> {
+  const maxRetries = 3;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await mcpListToolsOnce(options);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const isColdStart = msg.includes('initialization time exceeded') || msg.includes('initialization');
+
+      if (isColdStart && attempt < maxRetries - 1) {
+        options.logger?.logSSEEvent(`MCP cold start (attempt ${attempt + 1}/${maxRetries}), retrying...`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  throw new Error('Failed to list MCP tools after retries');
+}
+
+async function mcpListToolsOnce(options: McpInvokeOptions): Promise<McpListToolsResult> {
   // 1. Initialize
   const initResult = await mcpRpcCall(options, {
     jsonrpc: '2.0',
@@ -368,31 +391,50 @@ export async function mcpListTools(options: McpInvokeOptions): Promise<McpListTo
 
 /**
  * Call an MCP tool via InvokeAgentRuntime.
+ * Retries on cold-start initialization timeouts.
  */
 export async function mcpCallTool(
   options: McpInvokeOptions,
   toolName: string,
   args: Record<string, unknown>
 ): Promise<string> {
-  const { result } = await mcpRpcCall(options, {
-    jsonrpc: '2.0',
-    id: mcpRequestId++,
-    method: 'tools/call',
-    params: { name: toolName, arguments: args },
-  });
+  const maxRetries = 3;
 
-  const content = (result as { content?: { type?: string; text?: string }[] }).content;
-  if (content) {
-    const texts: string[] = [];
-    for (const item of content) {
-      if (item.text !== undefined) {
-        texts.push(item.text);
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const { result } = await mcpRpcCall(options, {
+        jsonrpc: '2.0',
+        id: mcpRequestId++,
+        method: 'tools/call',
+        params: { name: toolName, arguments: args },
+      });
+
+      const content = (result as { content?: { type?: string; text?: string }[] }).content;
+      if (content) {
+        const texts: string[] = [];
+        for (const item of content) {
+          if (item.text !== undefined) {
+            texts.push(item.text);
+          }
+        }
+        if (texts.length > 0) return texts.join('');
       }
+
+      return JSON.stringify(result, null, 2);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const isColdStart = msg.includes('initialization time exceeded') || msg.includes('initialization');
+
+      if (isColdStart && attempt < maxRetries - 1) {
+        options.logger?.logSSEEvent(`MCP cold start (attempt ${attempt + 1}/${maxRetries}), retrying...`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        continue;
+      }
+      throw err;
     }
-    if (texts.length > 0) return texts.join('');
   }
 
-  return JSON.stringify(result, null, 2);
+  throw new Error('Failed to call MCP tool after retries');
 }
 
 /** Parse a JSON-RPC response, handling both plain JSON and SSE-wrapped formats */
