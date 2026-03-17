@@ -1,8 +1,8 @@
-import type { DevConfig } from '../config';
 import { CodeZipDevServer } from '../codezip-dev-server';
-import type { DevServerCallbacks, DevServerOptions, SpawnConfig } from '../dev-server';
+import type { DevConfig } from '../config';
+import type { DevServerCallbacks, DevServerOptions } from '../dev-server';
 import { EventEmitter } from 'events';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockSpawn = vi.fn();
 vi.mock('child_process', () => ({
@@ -112,7 +112,7 @@ describe('CodeZipDevServer spawn config', () => {
     const server = new CodeZipDevServer(config, defaultOptions);
     await server.start();
 
-    const spawnCall = mockSpawn.mock.calls[0];
+    const spawnCall = mockSpawn.mock.calls[0]!;
     const env = spawnCall[2].env;
     expect(env.PORT).toBe('8080');
     expect(env.LOCAL_DEV).toBe('1');

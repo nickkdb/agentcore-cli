@@ -110,6 +110,9 @@ function wrapColoredLines(lines: ColoredLine[], maxWidth: number): ColoredLine[]
   return wrapped;
 }
 
+/** Max tools to show in header before truncating */
+const MAX_VISIBLE_TOOLS = 5;
+
 /** Protocol-specific endpoint URL for display */
 function getEndpointUrl(port: number, protocol: string): string {
   switch (protocol) {
@@ -202,16 +205,17 @@ export function DevScreen(props: DevScreenProps) {
   });
 
   // MCP: auto-list tools when server becomes ready
+  const mcpFetchTriggeredRef = useRef(false);
   const [mcpToolsFetched, setMcpToolsFetched] = useState(false);
   useEffect(() => {
-    if (protocol === 'MCP' && status === 'running' && !mcpToolsFetched) {
-      setMcpToolsFetched(true);
-      void fetchMcpTools();
+    if (protocol === 'MCP' && status === 'running' && !mcpFetchTriggeredRef.current) {
+      mcpFetchTriggeredRef.current = true;
+      void fetchMcpTools().then(() => setMcpToolsFetched(true));
     }
     if (status === 'starting') {
-      setMcpToolsFetched(false);
+      mcpFetchTriggeredRef.current = false;
     }
-  }, [protocol, status, fetchMcpTools, mcpToolsFetched]);
+  }, [protocol, status, fetchMcpTools]);
 
   // Handle exit with brief "stopping" message
   const handleExit = useCallback(() => {
@@ -230,7 +234,10 @@ export function DevScreen(props: DevScreenProps) {
   const terminalWidth = stdout?.columns ?? 80;
   // Reserve lines for: header (4-5), help text (1), input area when active (2), margins
   // MCP needs extra header space for the tool list
-  const mcpToolHeaderLines = isMcp ? Math.min(mcpTools.length + 1, 8) : 0;
+  // +1 for "Tools (N):" header, +1 for "... and X more" if truncated
+  const visibleToolCount = Math.min(mcpTools.length, MAX_VISIBLE_TOOLS);
+  const mcpToolHeaderLines =
+    isMcp && mcpTools.length > 0 ? visibleToolCount + 1 + (mcpTools.length > MAX_VISIBLE_TOOLS ? 1 : 0) + 1 : 0;
   // Reduce height when in input mode to make room for input field
   const baseHeight = Math.max(5, terminalHeight - 12 - mcpToolHeaderLines);
   const displayHeight = mode === 'input' ? Math.max(3, baseHeight - 2) : baseHeight;
@@ -406,7 +413,7 @@ export function DevScreen(props: DevScreenProps) {
       ? '↑↓ select · Enter confirm · q quit'
       : mode === 'input'
         ? isMcp
-          ? 'tool_name {"arg": val} · Enter send · Esc cancel'
+          ? 'Enter send · Esc cancel · "list" to refresh tools'
           : 'Enter send · Esc cancel'
         : status === 'starting'
           ? backOrQuit
@@ -499,21 +506,16 @@ export function DevScreen(props: DevScreenProps) {
       )}
       {protocol === 'MCP' && status === 'running' && mcpTools.length > 0 && (
         <Box flexDirection="column" marginTop={1}>
-          <Text bold>Tools:</Text>
-          {mcpTools.map(t => {
-            const params = t.inputSchema?.properties
-              ? Object.entries(t.inputSchema.properties as Record<string, { type?: string }>)
-                  .map(([name, schema]) => `${name}: ${schema.type ?? 'any'}`)
-                  .join(', ')
-              : '';
-            return (
-              <Box key={t.name}>
-                <Text color="cyan">  {t.name}</Text>
-                <Text dimColor>({params})</Text>
-                {t.description && <Text dimColor> {t.description}</Text>}
-              </Box>
-            );
-          })}
+          <Text bold>Tools ({mcpTools.length}):</Text>
+          {mcpTools.slice(0, MAX_VISIBLE_TOOLS).map(t => (
+            <Text key={t.name}>
+              <Text color="cyan"> {t.name}</Text>
+              {t.description && <Text dimColor> — {t.description}</Text>}
+            </Text>
+          ))}
+          {mcpTools.length > MAX_VISIBLE_TOOLS && (
+            <Text dimColor>{`  ... and ${mcpTools.length - MAX_VISIBLE_TOOLS} more (type "list" to see all)`}</Text>
+          )}
         </Box>
       )}
       {protocol === 'MCP' && status === 'running' && mcpTools.length === 0 && mcpToolsFetched && (
@@ -559,6 +561,7 @@ export function DevScreen(props: DevScreenProps) {
             <TextInput
               prompt=""
               hideArrow
+              placeholder={isMcp ? 'tool_name {"arg": "value"}' : undefined}
               onSubmit={text => {
                 if (text.trim()) {
                   void handleInvoke(text);

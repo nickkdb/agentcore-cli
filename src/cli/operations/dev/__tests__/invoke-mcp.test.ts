@@ -1,6 +1,6 @@
-import { callMcpTool, listMcpTools } from '../invoke-mcp';
 import { ServerError } from '../invoke';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { callMcpTool, listMcpTools } from '../invoke-mcp';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
@@ -15,22 +15,26 @@ describe('listMcpTools', () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       headers: new Map([['mcp-session-id', 'test-session']]),
-      text: async () => JSON.stringify({ jsonrpc: '2.0', id: 1, result: { protocolVersion: '2025-03-26' } }),
+      text: () => JSON.stringify({ jsonrpc: '2.0', id: 1, result: { protocolVersion: '2025-03-26' } }),
     });
 
     // Mock initialized notification response
-    mockFetch.mockResolvedValueOnce({ ok: true, text: async () => '' });
+    mockFetch.mockResolvedValueOnce({ ok: true, text: () => '' });
 
     // Mock tools/list response
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      text: async () =>
+      text: () =>
         JSON.stringify({
           jsonrpc: '2.0',
           id: 2,
           result: {
             tools: [
-              { name: 'add_numbers', description: 'Add two numbers', inputSchema: { properties: { a: { type: 'integer' }, b: { type: 'integer' } } } },
+              {
+                name: 'add_numbers',
+                description: 'Add two numbers',
+                inputSchema: { properties: { a: { type: 'integer' }, b: { type: 'integer' } } },
+              },
               { name: 'greet', description: 'Say hello' },
             ],
           },
@@ -47,9 +51,9 @@ describe('listMcpTools', () => {
 
     // Verify initialize was called first
     expect(mockFetch).toHaveBeenCalledTimes(3);
-    const initCall = mockFetch.mock.calls[0];
+    const initCall = mockFetch.mock.calls[0]!;
     expect(initCall[0]).toBe('http://localhost:8080/mcp');
-    const initBody = JSON.parse(initCall[1].body);
+    const initBody = JSON.parse(initCall[1]!.body);
     expect(initBody.method).toBe('initialize');
   });
 
@@ -61,12 +65,12 @@ describe('listMcpTools', () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       headers: new Map(),
-      text: async () => JSON.stringify({ jsonrpc: '2.0', id: 1, result: {} }),
+      text: () => JSON.stringify({ jsonrpc: '2.0', id: 1, result: {} }),
     });
-    mockFetch.mockResolvedValueOnce({ ok: true, text: async () => '' });
+    mockFetch.mockResolvedValueOnce({ ok: true, text: () => '' });
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      text: async () => JSON.stringify({ jsonrpc: '2.0', id: 2, result: { tools: [] } }),
+      text: () => JSON.stringify({ jsonrpc: '2.0', id: 2, result: { tools: [] } }),
     });
 
     const result = await listMcpTools(8080);
@@ -79,7 +83,7 @@ describe('listMcpTools', () => {
     mockFetch.mockResolvedValueOnce({
       ok: false,
       status: 500,
-      text: async () => 'Internal Server Error',
+      text: () => 'Internal Server Error',
     });
 
     await expect(listMcpTools(8080)).rejects.toThrow(ServerError);
@@ -94,7 +98,7 @@ describe('callMcpTool', () => {
   it('sends tools/call and returns result text', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      text: async () =>
+      text: () =>
         JSON.stringify({
           jsonrpc: '2.0',
           id: 1,
@@ -107,8 +111,8 @@ describe('callMcpTool', () => {
     const result = await callMcpTool(8080, 'add_numbers', { a: 1, b: 2 });
     expect(result).toBe('42');
 
-    const call = mockFetch.mock.calls[0];
-    const body = JSON.parse(call[1].body);
+    const call = mockFetch.mock.calls[0]!;
+    const body = JSON.parse(call[1]!.body);
     expect(body.method).toBe('tools/call');
     expect(body.params.name).toBe('add_numbers');
     expect(body.params.arguments).toEqual({ a: 1, b: 2 });
@@ -117,19 +121,19 @@ describe('callMcpTool', () => {
   it('includes session ID in header when provided', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      text: async () => JSON.stringify({ jsonrpc: '2.0', id: 1, result: { content: [{ text: 'ok' }] } }),
+      text: () => JSON.stringify({ jsonrpc: '2.0', id: 1, result: { content: [{ text: 'ok' }] } }),
     });
 
     await callMcpTool(8080, 'test', {}, 'my-session');
 
-    const call = mockFetch.mock.calls[0];
-    expect(call[1].headers['mcp-session-id']).toBe('my-session');
+    const call = mockFetch.mock.calls[0]!;
+    expect(call[1]!.headers['mcp-session-id']).toBe('my-session');
   });
 
   it('throws on JSON-RPC error', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      text: async () =>
+      text: () =>
         JSON.stringify({
           jsonrpc: '2.0',
           id: 1,

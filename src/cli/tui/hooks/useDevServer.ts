@@ -220,7 +220,25 @@ export function useDevServer(options: { workingDir: string; port: number; agentN
     // MCP: parse tool calls from chat input
     if (protocol === 'MCP') {
       if (message.trim().toLowerCase() === 'list') {
+        setConversation(prev => [...prev, { role: 'user', content: message }]);
         await fetchMcpTools();
+        // Show full tool list in conversation
+        const toolLines = mcpTools.map(t => {
+          const params = t.inputSchema?.properties
+            ? Object.entries(t.inputSchema.properties as Record<string, { type?: string }>)
+                .map(([name, schema]) => `${name}: ${schema.type ?? 'any'}`)
+                .join(', ')
+            : '';
+          return `  ${t.name}(${params})${t.description ? ` — ${t.description}` : ''}`;
+        });
+        setConversation(prev => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: `Available tools (${mcpTools.length}):\n${toolLines.join('\n')}`,
+            isHint: true,
+          },
+        ]);
         return;
       }
 

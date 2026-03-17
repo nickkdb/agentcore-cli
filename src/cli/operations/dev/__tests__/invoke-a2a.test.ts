@@ -1,6 +1,6 @@
-import { invokeA2AStreaming } from '../invoke-a2a';
 import { ServerError } from '../invoke';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { invokeA2AStreaming } from '../invoke-a2a';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
@@ -15,7 +15,7 @@ describe('invokeA2AStreaming', () => {
       ok: true,
       headers: new Map([['content-type', 'application/json']]),
       body: null,
-      text: async () =>
+      text: () =>
         JSON.stringify({
           jsonrpc: '2.0',
           id: 1,
@@ -24,9 +24,7 @@ describe('invokeA2AStreaming', () => {
             status: { state: 'completed' },
             artifacts: [
               {
-                parts: [
-                  { type: 'text', text: 'The answer is 4.' },
-                ],
+                parts: [{ type: 'text', text: 'The answer is 4.' }],
               },
             ],
           },
@@ -41,9 +39,9 @@ describe('invokeA2AStreaming', () => {
     expect(chunks.join('')).toBe('The answer is 4.');
 
     // Verify the request format
-    const call = mockFetch.mock.calls[0];
+    const call = mockFetch.mock.calls[0]!;
     expect(call[0]).toBe('http://localhost:8080/');
-    const body = JSON.parse(call[1].body);
+    const body = JSON.parse(call[1]!.body);
     expect(body.method).toBe('message/send');
     expect(body.params.message.parts[0].text).toBe('what is 2+2');
   });
@@ -57,7 +55,7 @@ describe('invokeA2AStreaming', () => {
       ok: true,
       headers: new Map([['content-type', 'application/json']]),
       body: null,
-      text: async () =>
+      text: () =>
         JSON.stringify({
           jsonrpc: '2.0',
           id: 2,
@@ -80,7 +78,7 @@ describe('invokeA2AStreaming', () => {
     mockFetch.mockResolvedValueOnce({
       ok: false,
       status: 500,
-      text: async () => 'Internal Server Error',
+      text: () => 'Internal Server Error',
     });
 
     const gen = invokeA2AStreaming({ port: 8080, message: 'test' });
@@ -92,7 +90,7 @@ describe('invokeA2AStreaming', () => {
       ok: true,
       headers: new Map([['content-type', 'application/json']]),
       body: null,
-      text: async () =>
+      text: () =>
         JSON.stringify({
           jsonrpc: '2.0',
           id: 1,
@@ -109,7 +107,7 @@ describe('invokeA2AStreaming', () => {
       ok: true,
       headers: new Map([['content-type', 'application/json']]),
       body: null,
-      text: async () =>
+      text: () =>
         JSON.stringify({
           jsonrpc: '2.0',
           id: 1,
