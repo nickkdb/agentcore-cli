@@ -74,6 +74,14 @@ export async function handleInvoke(context: InvokeContext, options: InvokeOption
     );
   }
 
+  // Guard against unsupported protocols for deployed invoke
+  if (agentSpec.protocol && agentSpec.protocol !== 'HTTP') {
+    return {
+      success: false,
+      error: `Invoke for deployed ${agentSpec.protocol} agents is not yet supported. Use "agentcore dev" for local testing.`,
+    };
+  }
+
   // Get the deployed state for this specific agent
   const agentState = targetState?.resources?.agents?.[agentSpec.name];
 

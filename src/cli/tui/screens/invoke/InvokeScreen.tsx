@@ -116,15 +116,21 @@ export function InvokeScreen({
   const { stdout } = useStdout();
   const justCancelledRef = useRef(false);
 
+  // Determine if the selected agent uses an unsupported protocol for deployed invoke
+  const selectedAgentProtocol = config?.agents[selectedAgent]?.protocol ?? 'HTTP';
+  const isUnsupportedProtocol = selectedAgentProtocol !== 'HTTP';
+
   // Handle initial prompt - skip agent selection if only one agent
   useEffect(() => {
     if (config && phase === 'ready') {
       if (config.agents.length === 1 && mode === 'select-agent') {
+        const agentProto = config.agents[0]?.protocol ?? 'HTTP';
+        const unsupported = agentProto !== 'HTTP';
         // Defer setState to avoid cascading renders within effect
         queueMicrotask(() => {
-          setMode('input');
+          setMode(unsupported ? 'chat' : 'input');
         });
-        if (initialPrompt && messages.length === 0) {
+        if (!unsupported && initialPrompt && messages.length === 0) {
           void invoke(initialPrompt);
         }
       }
@@ -230,8 +236,8 @@ export function InvokeScreen({
 
         justCancelledRef.current = false;
 
-        // Enter or 'i' to start typing (only when not invoking)
-        if ((key.return || input === 'i') && phase === 'ready') {
+        // Enter or 'i' to start typing (only when not invoking and protocol is supported)
+        if ((key.return || input === 'i') && phase === 'ready' && !isUnsupportedProtocol) {
           setMode('input');
           return;
         }
@@ -279,6 +285,7 @@ export function InvokeScreen({
         })
       : undefined;
   const agentProtocol = agent?.protocol ?? 'HTTP';
+
   const agentItems = config.agents.map((a, i) => ({
     id: String(i),
     title: a.name,
@@ -397,22 +404,31 @@ export function InvokeScreen({
           </Text>
         )}
 
+        {/* Unsupported protocol message */}
+        {isUnsupportedProtocol && messages.length === 0 && (
+          <Box flexDirection="column">
+            <Text color="yellow">Invoke for deployed {agentProtocol} agents is not yet supported.</Text>
+            <Text>
+              Use <Text color="cyan">agentcore dev</Text> for local testing.
+            </Text>
+          </Box>
+        )}
+
         {/* Input area */}
-        {mode === 'chat' && phase === 'ready' && messages.length > 0 && (
+        {!isUnsupportedProtocol && mode === 'chat' && phase === 'ready' && messages.length > 0 && (
           <Box>
             <Text dimColor>&gt; </Text>
           </Box>
         )}
-        {mode === 'chat' && phase === 'ready' && messages.length === 0 && (
+        {!isUnsupportedProtocol && mode === 'chat' && phase === 'ready' && messages.length === 0 && (
           <Text dimColor>Press Enter to send a message</Text>
         )}
-        {mode === 'input' && phase === 'ready' && (
+        {!isUnsupportedProtocol && mode === 'input' && phase === 'ready' && (
           <Box>
             <Text color="blue">&gt; </Text>
             <TextInput
               prompt=""
               hideArrow
-              placeholder={agentProtocol === 'A2A' ? 'Send a message...' : undefined}
               onSubmit={text => {
                 if (text.trim()) {
                   setMode('chat');
