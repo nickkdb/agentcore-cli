@@ -223,8 +223,13 @@ function extractSSEEventText(event: Record<string, unknown>): string | null {
   }
 
   if (kind === 'status-update') {
-    // Don't extract text from status-update — it duplicates artifact content.
-    // Status updates are lifecycle signals (working, completed, etc.)
+    const status = target.status as { state?: string } | undefined;
+    const state = status?.state;
+    // Show transient status for non-terminal states (terminal states are
+    // redundant with artifact content that follows or precedes them)
+    if (state && state !== 'completed' && state !== 'canceled') {
+      return `[${state}]\n`;
+    }
     return null;
   }
 
