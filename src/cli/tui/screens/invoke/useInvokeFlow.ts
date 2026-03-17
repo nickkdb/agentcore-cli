@@ -80,24 +80,28 @@ export function useInvokeFlow(options: InvokeFlowOptions = {}): InvokeFlowState 
         }
 
         const agents: InvokeConfig['agents'] = [];
+        let hasNonHttpOnly = false;
         for (const agent of project.agents) {
+          const state = targetState?.resources?.agents?.[agent.name];
+          if (!state) continue;
           // Guard: non-HTTP protocols not yet supported for deployed invoke
           if (agent.protocol && agent.protocol !== 'HTTP') {
+            hasNonHttpOnly = true;
             continue;
           }
-          const state = targetState?.resources?.agents?.[agent.name];
-          if (state) {
-            agents.push({
-              name: agent.name,
-              state,
-              modelProvider: agent.modelProvider,
-              networkMode: agent.networkMode,
-            });
-          }
+          agents.push({
+            name: agent.name,
+            state,
+            modelProvider: agent.modelProvider,
+            networkMode: agent.networkMode,
+          });
         }
 
         if (agents.length === 0) {
-          setError('No deployed agents found. Run `agentcore deploy` first.');
+          const msg = hasNonHttpOnly
+            ? 'Invoke for deployed MCP/A2A agents is not yet supported. Use `agentcore dev` for local testing.'
+            : 'No deployed agents found. Run `agentcore deploy` first.';
+          setError(msg);
           setPhase('error');
           return;
         }
