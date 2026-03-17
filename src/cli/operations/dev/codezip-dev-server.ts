@@ -26,11 +26,14 @@ function ensurePythonVenv(
       return true;
     }
   } else {
-    // For MCP/A2A, check that venv exists AND uv.lock exists (deps synced)
-    const pythonPath = getVenvExecutable(venvPath, 'python');
-    const lockPath = join(cwd, 'uv.lock');
-    if (existsSync(pythonPath) && existsSync(lockPath)) {
-      return true;
+    // For MCP/A2A, always run uv sync to ensure deps match pyproject.toml.
+    // uv sync is fast (~100ms) when everything is already installed.
+    if (existsSync(venvPath)) {
+      const syncResult = spawnSync('uv', ['sync'], { cwd, stdio: 'pipe' });
+      if (syncResult.status === 0) {
+        return true;
+      }
+      onLog('warn', `uv sync failed: ${syncResult.stderr?.toString() || 'unknown error'}`);
     }
   }
 
