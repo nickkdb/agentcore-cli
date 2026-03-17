@@ -404,7 +404,15 @@ export function InvokeScreen({
             <Text dimColor>&gt; </Text>
           </Box>
         )}
-        {mode === 'chat' && phase === 'ready' && messages.length === 0 && (
+        {mode === 'chat' && phase === 'ready' && messages.length === 0 && agentProtocol === 'MCP' && (
+          <Box flexDirection="column">
+            <Text color="cyan">
+              MCP agent. Send a natural language prompt and the runtime will select the right tool.
+            </Text>
+            <Text dimColor>Press Enter to send a message</Text>
+          </Box>
+        )}
+        {mode === 'chat' && phase === 'ready' && messages.length === 0 && agentProtocol !== 'MCP' && (
           <Text dimColor>Press Enter to send a message</Text>
         )}
         {mode === 'input' && phase === 'ready' && (
@@ -413,7 +421,9 @@ export function InvokeScreen({
             <TextInput
               prompt=""
               hideArrow
-              placeholder={agentProtocol === 'A2A' ? 'Send a message...' : undefined}
+              placeholder={
+                agentProtocol === 'MCP' ? 'Send a prompt...' : agentProtocol === 'A2A' ? 'Send a message...' : undefined
+              }
               onSubmit={text => {
                 if (text.trim()) {
                   setMode('chat');
