@@ -1,4 +1,4 @@
-import { ConnectionError, ServerError, type InvokeStreamingOptions } from './invoke';
+import { ConnectionError, ServerError, type InvokeStreamingOptions } from './invoke-types';
 
 let requestId = 1;
 

@@ -1,30 +1,13 @@
 import { invokeA2AStreaming } from './invoke-a2a';
+import {
+  ConnectionError,
+  ServerError,
+  type InvokeStreamingOptions,
+  type SSELogger,
+} from './invoke-types';
 
-/** Error thrown when the dev server returns a non-OK HTTP response. */
-export class ServerError extends Error {
-  constructor(
-    public readonly statusCode: number,
-    body: string
-  ) {
-    super(body || `Server returned ${statusCode}`);
-    this.name = 'ServerError';
-  }
-}
-
-/** Error thrown when the connection to the dev server fails. */
-export class ConnectionError extends Error {
-  constructor(cause: Error) {
-    super(cause.message);
-    this.name = 'ConnectionError';
-  }
-}
-
-/** Logger interface for SSE events and error logging */
-export interface SSELogger {
-  logSSEEvent(rawLine: string): void;
-  /** Optional method to log errors and debug info */
-  log?(level: 'error' | 'warn' | 'system', message: string): void;
-}
+// Re-export shared types so existing consumers don't break
+export { ConnectionError, ServerError, type InvokeStreamingOptions, type SSELogger } from './invoke-types';
 
 /**
  * Parse a single SSE data line and extract the content.
@@ -93,13 +76,6 @@ function extractResult(text: string): string {
   } catch {
     return text;
   }
-}
-
-export interface InvokeStreamingOptions {
-  port: number;
-  message: string;
-  /** Optional logger for SSE event debugging */
-  logger?: SSELogger;
 }
 
 /**
