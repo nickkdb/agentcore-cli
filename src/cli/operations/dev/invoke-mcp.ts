@@ -1,4 +1,4 @@
-import { ConnectionError, ServerError, type SSELogger } from './invoke-types';
+import { ConnectionError, type SSELogger, ServerError } from './invoke-types';
 
 let requestId = 1;
 

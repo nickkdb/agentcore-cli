@@ -1,4 +1,5 @@
 import { findConfigRoot, getWorkingDirectory, readEnvFile } from '../../../lib';
+import type { ProtocolMode } from '../../../schema';
 import { getErrorMessage } from '../../errors';
 import { ExecLogger } from '../../logging';
 import {
@@ -19,7 +20,6 @@ import { FatalError } from '../../tui/components';
 import { LayoutProvider } from '../../tui/context';
 import { COMMAND_DESCRIPTIONS } from '../../tui/copy';
 import { requireProject } from '../../tui/guards';
-import type { ProtocolMode } from '../../../schema';
 import type { Command } from '@commander-js/extra-typings';
 import { Text, render } from 'ink';
 import React from 'react';

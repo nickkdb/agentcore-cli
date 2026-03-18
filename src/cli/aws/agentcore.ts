@@ -259,11 +259,14 @@ export interface McpListToolsResult {
 
 let mcpRequestId = 1;
 
+interface McpRpcResult {
+  result: Record<string, unknown>;
+  mcpSessionId?: string;
+  error?: { message?: string; code?: number };
+}
+
 /** Send a JSON-RPC payload through InvokeAgentRuntime and return the parsed response. */
-async function mcpRpcCall(
-  options: McpInvokeOptions,
-  body: Record<string, unknown>
-): Promise<{ result: Record<string, unknown>; mcpSessionId?: string }> {
+async function mcpRpcCall(options: McpInvokeOptions, body: Record<string, unknown>): Promise<McpRpcResult> {
   const client = new BedrockAgentCoreClient({
     region: options.region,
     credentials: getCredentialProvider(),
@@ -275,7 +278,7 @@ async function mcpRpcCall(
     agentRuntimeArn: options.runtimeArn,
     payload: new TextEncoder().encode(JSON.stringify(body)),
     contentType: 'application/json',
-    accept: 'application/json',
+    accept: 'application/json, text/event-stream',
     mcpSessionId: options.mcpSessionId,
     mcpProtocolVersion: '2025-03-26',
     runtimeUserId: options.userId ?? DEFAULT_RUNTIME_USER_ID,
@@ -294,15 +297,20 @@ async function mcpRpcCall(
 
   const parsed = parseMcpJsonRpcResponse(text);
 
-  if (parsed.error) {
-    const rpcError = parsed.error as { message?: string; code?: number };
-    throw new Error(rpcError.message ?? `MCP error (code ${rpcError.code})`);
-  }
-
   return {
     result: (parsed.result as Record<string, unknown>) ?? {},
     mcpSessionId: response.mcpSessionId,
+    error: parsed.error as McpRpcResult['error'],
   };
+}
+
+/** Call mcpRpcCall and throw on JSON-RPC errors. Use mcpRpcCall directly when errors should be tolerated. */
+async function mcpRpcCallStrict(options: McpInvokeOptions, body: Record<string, unknown>): Promise<McpRpcResult> {
+  const result = await mcpRpcCall(options, body);
+  if (result.error) {
+    throw new Error(result.error.message ?? `MCP error (code ${result.error.code})`);
+  }
+  return result;
 }
 
 /** Send a JSON-RPC notification (no id, no response expected). */
@@ -316,7 +324,7 @@ async function mcpRpcNotify(options: McpInvokeOptions, body: Record<string, unkn
     agentRuntimeArn: options.runtimeArn,
     payload: new TextEncoder().encode(JSON.stringify(body)),
     contentType: 'application/json',
-    accept: 'application/json',
+    accept: 'application/json, text/event-stream',
     mcpSessionId: options.mcpSessionId,
     mcpProtocolVersion: '2025-03-26',
     runtimeUserId: options.userId ?? DEFAULT_RUNTIME_USER_ID,
@@ -352,7 +360,7 @@ export async function mcpListTools(options: McpInvokeOptions): Promise<McpListTo
 }
 
 async function mcpListToolsOnce(options: McpInvokeOptions): Promise<McpListToolsResult> {
-  // 1. Initialize
+  // 1. Initialize — tolerate JSON-RPC errors (stateless servers may reject initialize but still return a session ID)
   const initResult = await mcpRpcCall(options, {
     jsonrpc: '2.0',
     id: mcpRequestId++,
@@ -364,6 +372,12 @@ async function mcpListToolsOnce(options: McpInvokeOptions): Promise<McpListTools
     },
   });
 
+  if (initResult.error) {
+    options.logger?.logSSEEvent(
+      `MCP initialize returned error (expected for stateless servers): ${initResult.error.message}`
+    );
+  }
+
   const sessionId = initResult.mcpSessionId;
   const optionsWithSession = { ...options, mcpSessionId: sessionId };
 
@@ -374,7 +388,7 @@ async function mcpListToolsOnce(options: McpInvokeOptions): Promise<McpListTools
   });
 
   // 3. List tools
-  const listResult = await mcpRpcCall(optionsWithSession, {
+  const listResult = await mcpRpcCallStrict(optionsWithSession, {
     jsonrpc: '2.0',
     id: mcpRequestId++,
     method: 'tools/list',
@@ -402,7 +416,7 @@ export async function mcpCallTool(
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      const { result } = await mcpRpcCall(options, {
+      const { result } = await mcpRpcCallStrict(options, {
         jsonrpc: '2.0',
         id: mcpRequestId++,
         method: 'tools/call',

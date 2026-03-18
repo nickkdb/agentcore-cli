@@ -128,9 +128,10 @@ export function useDevServer(options: { workingDir: string; port: number; agentN
         agentName: config.agentName,
       });
 
-      // A2A servers always use port 9000 (serve_a2a default, not configurable via env)
+      // A2A servers always use port 9000, MCP servers use port 8000 (framework defaults, not configurable via env)
       const isA2A = config.protocol === 'A2A';
-      const fixedPort = isA2A ? 9000 : targetPort;
+      const isMcp = config.protocol === 'MCP';
+      const fixedPort = isA2A ? 9000 : isMcp ? 8000 : targetPort;
 
       // On restart, reuse the same port. On initial start, find an available port.
       // If restart times out waiting for port, fall back to finding a new one.
@@ -144,11 +145,11 @@ export function useDevServer(options: { workingDir: string; port: number; agentN
       }
 
       let port: number;
-      if (isA2A) {
-        // A2A must use port 9000; check availability but don't auto-assign another
+      if (isA2A || isMcp) {
+        // A2A/MCP must use their fixed ports; check availability but don't auto-assign another
         const available = await findAvailablePort(fixedPort);
         if (available !== fixedPort) {
-          addLog('error', `Port ${fixedPort} is in use. A2A agents require port ${fixedPort}.`);
+          addLog('error', `Port ${fixedPort} is in use. ${config.protocol} agents require port ${fixedPort}.`);
           setStatus('error');
           return;
         }
