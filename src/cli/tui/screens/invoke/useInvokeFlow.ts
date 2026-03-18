@@ -10,6 +10,7 @@ import type {
 import {
   DEFAULT_RUNTIME_USER_ID,
   type McpToolDef,
+  invokeA2ARuntime,
   invokeAgentRuntimeStreaming,
   mcpCallTool,
   mcpListTools,
@@ -274,6 +275,7 @@ export function useInvokeFlow(options: InvokeFlowOptions = {}): InvokeFlowState 
       }
 
       // HTTP / A2A: streaming invoke
+      const isA2A = agent.protocol === 'A2A';
       setMessages(prev => [...prev, { role: 'user', content: prompt }, { role: 'assistant', content: '' }]);
       setPhase('invoking');
       streamingContentRef.current = '';
@@ -281,14 +283,19 @@ export function useInvokeFlow(options: InvokeFlowOptions = {}): InvokeFlowState 
       logger.logPrompt(prompt, sessionId ?? undefined, userId);
 
       try {
-        const result = await invokeAgentRuntimeStreaming({
-          region: config.target.region,
-          runtimeArn: agent.state.runtimeArn,
-          payload: prompt,
-          sessionId: sessionId ?? undefined,
-          userId,
-          logger,
-        });
+        const result = isA2A
+          ? await invokeA2ARuntime(
+              { region: config.target.region, runtimeArn: agent.state.runtimeArn, userId, logger },
+              prompt
+            )
+          : await invokeAgentRuntimeStreaming({
+              region: config.target.region,
+              runtimeArn: agent.state.runtimeArn,
+              payload: prompt,
+              sessionId: sessionId ?? undefined,
+              userId,
+              logger,
+            });
 
         if (result.sessionId) {
           setSessionId(result.sessionId);

@@ -451,6 +451,128 @@ export async function mcpCallTool(
   throw new Error('Failed to call MCP tool after retries');
 }
 
+// ---------------------------------------------------------------------------
+// A2A: JSON-RPC message/send over InvokeAgentRuntime
+// ---------------------------------------------------------------------------
+
+export interface A2AInvokeOptions {
+  region: string;
+  runtimeArn: string;
+  userId?: string;
+  logger?: SSELogger;
+}
+
+let a2aRequestId = 1;
+
+/**
+ * Invoke a deployed A2A agent via InvokeAgentRuntime with JSON-RPC message/send.
+ * Streams text parts from the response artifacts.
+ */
+export async function invokeA2ARuntime(options: A2AInvokeOptions, message: string): Promise<StreamingInvokeResult> {
+  const client = new BedrockAgentCoreClient({
+    region: options.region,
+    credentials: getCredentialProvider(),
+  });
+
+  const body = {
+    jsonrpc: '2.0',
+    id: a2aRequestId++,
+    method: 'message/send',
+    params: {
+      message: {
+        role: 'user',
+        parts: [{ type: 'text', text: message }],
+        messageId: `msg-${Date.now()}`,
+      },
+    },
+  };
+
+  options.logger?.logSSEEvent(`A2A request: ${JSON.stringify(body)}`);
+
+  const command = new InvokeAgentRuntimeCommand({
+    agentRuntimeArn: options.runtimeArn,
+    payload: new TextEncoder().encode(JSON.stringify(body)),
+    contentType: 'application/json',
+    accept: 'application/json, text/event-stream',
+    runtimeUserId: options.userId ?? DEFAULT_RUNTIME_USER_ID,
+  });
+
+  const response = await client.send(command);
+
+  if (!response.response) {
+    throw new Error('No response from AgentCore Runtime');
+  }
+
+  const bytes = await response.response.transformToByteArray();
+  const text = new TextDecoder().decode(bytes);
+
+  options.logger?.logSSEEvent(`A2A response: ${text}`);
+
+  async function* streamGenerator(): AsyncGenerator<string, void, unknown> {
+    // Parse JSON-RPC response and extract text from artifacts
+    const parsed = parseA2AResponse(text);
+    if (parsed) {
+      yield await Promise.resolve(parsed);
+    }
+  }
+
+  return {
+    stream: streamGenerator(),
+    sessionId: undefined,
+  };
+}
+
+/** Extract text content from A2A JSON-RPC response */
+function parseA2AResponse(text: string): string | null {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (!parsed || typeof parsed !== 'object') return text;
+
+    const obj = parsed as Record<string, unknown>;
+
+    // Check for JSON-RPC error
+    if (obj.error && typeof obj.error === 'object') {
+      const err = obj.error as { message?: string };
+      return `Error: ${err.message ?? JSON.stringify(obj.error)}`;
+    }
+
+    // Extract text from result.artifacts[].parts[].text
+    const result = obj.result as Record<string, unknown> | undefined;
+    if (!result) return text;
+
+    const artifacts = result.artifacts as { parts?: { type?: string; text?: string }[] }[] | undefined;
+    if (artifacts) {
+      const texts: string[] = [];
+      for (const artifact of artifacts) {
+        if (artifact.parts) {
+          for (const part of artifact.parts) {
+            if (part.text !== undefined) {
+              texts.push(part.text);
+            }
+          }
+        }
+      }
+      if (texts.length > 0) return texts.join('');
+    }
+
+    // Fallback: check history for the last assistant message
+    const history = result.history as { role?: string; parts?: { text?: string }[] }[] | undefined;
+    if (history) {
+      for (let i = history.length - 1; i >= 0; i--) {
+        const msg = history[i];
+        if (msg?.role === 'agent' && msg.parts) {
+          const agentTexts = msg.parts.filter(p => p.text !== undefined).map(p => p.text!);
+          if (agentTexts.length > 0) return agentTexts.join('');
+        }
+      }
+    }
+
+    return JSON.stringify(result, null, 2);
+  } catch {
+    return text;
+  }
+}
+
 /** Parse a JSON-RPC response, handling both plain JSON and SSE-wrapped formats */
 function parseMcpJsonRpcResponse(text: string): Record<string, unknown> {
   const trimmed = text.trim();

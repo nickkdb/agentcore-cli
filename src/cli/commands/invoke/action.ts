@@ -1,6 +1,12 @@
 import { ConfigIO } from '../../../lib';
 import type { AgentCoreProjectSpec, AwsDeploymentTargets, DeployedState } from '../../../schema';
-import { invokeAgentRuntime, invokeAgentRuntimeStreaming, mcpCallTool, mcpListTools } from '../../aws';
+import {
+  invokeA2ARuntime,
+  invokeAgentRuntime,
+  invokeAgentRuntimeStreaming,
+  mcpCallTool,
+  mcpListTools,
+} from '../../aws';
 import { InvokeLogger } from '../../logging';
 import type { InvokeOptions, InvokeResult } from './types';
 
@@ -147,6 +153,30 @@ export async function handleInvoke(context: InvokeContext, options: InvokeOption
 
   if (!options.prompt) {
     return { success: false, error: 'No prompt provided. Usage: agentcore invoke "your prompt"' };
+  }
+
+  // A2A protocol handling — send JSON-RPC message/send via InvokeAgentRuntime
+  if (agentSpec.protocol === 'A2A') {
+    const a2aResult = await invokeA2ARuntime(
+      { region: targetConfig.region, runtimeArn: agentState.runtimeArn, userId: options.userId },
+      options.prompt
+    );
+    let response = '';
+    for await (const chunk of a2aResult.stream) {
+      response += chunk;
+      if (options.stream) {
+        process.stdout.write(chunk);
+      }
+    }
+    if (options.stream) {
+      process.stdout.write('\n');
+    }
+    return {
+      success: true,
+      agentName: agentSpec.name,
+      targetName: selectedTargetName,
+      response,
+    };
   }
 
   // Get provider info if available
