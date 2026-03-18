@@ -20,7 +20,13 @@ import { generateSessionId } from '../../../operations/session';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 export interface InvokeConfig {
-  agents: { name: string; state: AgentCoreDeployedState; modelProvider?: ModelProvider; networkMode?: NetworkMode; protocol?: ProtocolMode }[];
+  agents: {
+    name: string;
+    state: AgentCoreDeployedState;
+    modelProvider?: ModelProvider;
+    networkMode?: NetworkMode;
+    protocol?: ProtocolMode;
+  }[];
   target: AwsDeploymentTarget;
   targetName: string;
   projectName: string;
