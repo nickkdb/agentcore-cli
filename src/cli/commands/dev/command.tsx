@@ -158,6 +158,10 @@ export const registerDev = (program: Command) => {
 
           const protocol = targetAgent?.protocol ?? 'HTTP';
 
+          // Override port for protocols with fixed framework ports
+          if (protocol === 'A2A') invokePort = 9000;
+          else if (protocol === 'MCP') invokePort = 8000;
+
           // Show model info if available (not applicable to MCP)
           if (protocol !== 'MCP' && targetAgent?.modelProvider) {
             console.log(`Provider: ${targetAgent.modelProvider}`);
@@ -231,11 +235,17 @@ export const registerDev = (program: Command) => {
           // Create logger for log file path
           const logger = new ExecLogger({ command: 'dev' });
 
-          // Calculate port based on agent index
-          const basePort = getAgentPort(project, config.agentName, port);
-          const actualPort = await findAvailablePort(basePort);
-          if (actualPort !== basePort) {
-            console.log(`Port ${basePort} in use, using ${actualPort}`);
+          // Calculate port: A2A/MCP use fixed framework ports, HTTP uses configurable port
+          const isA2A = config.protocol === 'A2A';
+          const isMcp = config.protocol === 'MCP';
+          const fixedPort = isA2A ? 9000 : isMcp ? 8000 : getAgentPort(project, config.agentName, port);
+          const actualPort = await findAvailablePort(fixedPort);
+          if ((isA2A || isMcp) && actualPort !== fixedPort) {
+            console.error(`Error: Port ${fixedPort} is in use. ${config.protocol} agents require port ${fixedPort}.`);
+            process.exit(1);
+          }
+          if (actualPort !== fixedPort) {
+            console.log(`Port ${fixedPort} in use, using ${actualPort}`);
           }
 
           // Get provider info from agent config
