@@ -3,6 +3,7 @@ import {
   BedrockAgentCoreControlClient,
   DeleteApiKeyCredentialProviderCommand,
 } from '@aws-sdk/client-bedrock-agentcore-control';
+import { CloudFormationClient, DeleteStackCommand, DescribeStacksCommand } from '@aws-sdk/client-cloudformation';
 import { execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
@@ -96,12 +97,61 @@ export function createE2ESuite(cfg: E2EConfig) {
 
     afterAll(async () => {
       if (projectPath && hasAws) {
-        await runCLI(['remove', 'all', '--json'], projectPath, false);
-        const result = await runCLI(['deploy', '--yes', '--json'], projectPath, false);
+        const region = process.env.AWS_REGION ?? 'us-east-1';
+        const stackName = `AgentCore-${agentName}-default`;
 
-        if (result.exitCode !== 0) {
-          console.log('Teardown stdout:', result.stdout);
-          console.log('Teardown stderr:', result.stderr);
+        // Check if the stack is in a failed state that requires direct deletion
+        let needsDirectDelete = false;
+        try {
+          const cfnClient = new CloudFormationClient({ region });
+          const { Stacks } = await cfnClient.send(new DescribeStacksCommand({ StackName: stackName }));
+          const status = Stacks?.[0]?.StackStatus;
+          needsDirectDelete = status === 'ROLLBACK_COMPLETE' || status === 'ROLLBACK_FAILED';
+        } catch {
+          // Stack doesn't exist or can't be described — proceed with normal teardown
+        }
+
+        if (needsDirectDelete) {
+          // Stack is in a terminal failed state — delete it directly via CloudFormation
+          try {
+            const cfnClient = new CloudFormationClient({ region });
+            await cfnClient.send(new DeleteStackCommand({ StackName: stackName }));
+            // Wait for deletion (poll every 10s, up to 5 minutes)
+            for (let i = 0; i < 30; i++) {
+              await new Promise(resolve => setTimeout(resolve, 10000));
+              try {
+                const { Stacks } = await cfnClient.send(new DescribeStacksCommand({ StackName: stackName }));
+                const status = Stacks?.[0]?.StackStatus;
+                if (status === 'DELETE_COMPLETE') break;
+                if (status === 'DELETE_FAILED') {
+                  console.log(`Stack ${stackName} delete failed`);
+                  break;
+                }
+              } catch {
+                // Stack no longer exists — deletion complete
+                break;
+              }
+            }
+          } catch {
+            console.log(`Failed to delete stack ${stackName} directly`);
+          }
+        } else {
+          // Normal teardown: remove resources and deploy empty stack
+          await runCLI(['remove', 'all', '--json'], projectPath, false);
+          const result = await runCLI(['deploy', '--yes', '--json'], projectPath, false);
+
+          if (result.exitCode !== 0) {
+            console.log('Teardown stdout:', result.stdout);
+            console.log('Teardown stderr:', result.stderr);
+
+            // If the deploy of empty stack also fails, delete the stack directly
+            try {
+              const cfnClient = new CloudFormationClient({ region });
+              await cfnClient.send(new DeleteStackCommand({ StackName: stackName }));
+            } catch {
+              console.log(`Fallback stack deletion also failed for ${stackName}`);
+            }
+          }
         }
 
         // Delete the API key credential provider from the account.
@@ -109,7 +159,6 @@ export function createE2ESuite(cfg: E2EConfig) {
         // cleaned up by stack teardown, so we must delete them explicitly.
         if (cfg.modelProvider !== 'Bedrock' && agentName) {
           const providerName = `${agentName}${cfg.modelProvider}`;
-          const region = process.env.AWS_REGION ?? 'us-east-1';
           try {
             const client = new BedrockAgentCoreControlClient({ region });
             await client.send(new DeleteApiKeyCredentialProviderCommand({ name: providerName }));

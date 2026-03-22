@@ -11,6 +11,47 @@ import {
 } from '@aws-cdk/toolkit-lib';
 import * as path from 'node:path';
 
+/**
+ * Increase the fast-xml-parser entity expansion limit from 1000 to 100000.
+ *
+ * The AWS SDK uses fast-xml-parser to deserialize CloudFormation XML responses.
+ * Container build stacks create enough CloudFormation resources that the
+ * DescribeStackEvents response can exceed the default 1000 entity expansion
+ * limit, causing deploy to fail with "Entity expansion limit exceeded".
+ *
+ * The fast-xml-parser CJS bundle marks its exports as non-configurable
+ * (webpack getter), so we cannot replace XMLParser on the module. Instead
+ * we patch XMLParser.prototype.parse to raise the limit before every parse.
+ */
+function patchXmlParser(fxp: { XMLParser: { prototype: { parse: (...args: unknown[]) => unknown } } }) {
+  const origParse = fxp.XMLParser.prototype.parse;
+  if ((origParse as { __patched?: boolean }).__patched) return;
+  const patched = function (
+    this: { options?: { processEntities?: { maxTotalExpansions?: number } } },
+    xmlData: unknown,
+    ...args: unknown[]
+  ) {
+    if (this.options?.processEntities) {
+      this.options.processEntities.maxTotalExpansions = 100000;
+    }
+    return origParse.call(this, xmlData, ...args);
+  };
+  (patched as { __patched?: boolean }).__patched = true;
+  fxp.XMLParser.prototype.parse = patched;
+}
+
+// Patch the node_modules copy used by @aws-cdk/toolkit-lib (externalized by esbuild).
+// The module name is split to prevent esbuild from resolving/bundling it at build time.
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports, security/detect-non-literal-require
+  const fxp = require(['fast-xml', 'parser'].join('-')) as {
+    XMLParser: { prototype: { parse: (...args: unknown[]) => unknown } };
+  };
+  patchXmlParser(fxp);
+} catch {
+  // fast-xml-parser not available — skip patching
+}
+
 // Type for the assembly returned by synth().produce() - has an async dispose method
 interface DisposableAssembly {
   cloudAssembly: { directory: string; stacks: { stackName: string }[] };
