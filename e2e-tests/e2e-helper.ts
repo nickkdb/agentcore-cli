@@ -9,6 +9,7 @@ import {
 import {
   BedrockAgentCoreControlClient,
   DeleteApiKeyCredentialProviderCommand,
+  ListApiKeyCredentialProvidersCommand,
 } from '@aws-sdk/client-bedrock-agentcore-control';
 import { execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -38,6 +39,9 @@ export function createE2ESuite(cfg: E2EConfig) {
 
     beforeAll(async () => {
       if (!canRun) return;
+
+      // Purge leaked credential providers from prior CI runs to avoid quota limits
+      await cleanupStaleCredentialProviders();
 
       testDir = join(tmpdir(), `agentcore-e2e-${randomUUID()}`);
       await mkdir(testDir, { recursive: true });
@@ -292,20 +296,53 @@ export function installCdkTarball(projectPath: string): void {
 }
 
 export async function teardownE2EProject(projectPath: string, agentName: string, modelProvider: string): Promise<void> {
-  await spawnAndCollect('agentcore', ['remove', 'all', '--json'], projectPath);
-  const result = await spawnAndCollect('agentcore', ['deploy', '--yes', '--json'], projectPath);
-  if (result.exitCode !== 0) {
-    console.log('Teardown stdout:', result.stdout);
-    console.log('Teardown stderr:', result.stderr);
-  }
+  // Delete the API key credential provider FIRST — CFN teardown may fail,
+  // and leaked providers accumulate until the account hits its quota limit.
   if (modelProvider !== 'Bedrock' && agentName) {
     const providerName = `${agentName}${modelProvider}`;
     const region = process.env.AWS_REGION ?? 'us-east-1';
     try {
       const client = new BedrockAgentCoreControlClient({ region });
       await client.send(new DeleteApiKeyCredentialProviderCommand({ name: providerName }));
-    } catch {
-      // Best-effort cleanup
+      console.log(`Deleted credential provider: ${providerName}`);
+    } catch (err) {
+      console.warn(`Failed to delete credential provider ${providerName}:`, err);
     }
+  }
+
+  await spawnAndCollect('agentcore', ['remove', 'all', '--json'], projectPath);
+  const result = await spawnAndCollect('agentcore', ['deploy', '--yes', '--json'], projectPath);
+  if (result.exitCode !== 0) {
+    console.log('Teardown stdout:', result.stdout);
+    console.log('Teardown stderr:', result.stderr);
+  }
+}
+
+/**
+ * Delete stale E2e* API key credential providers left behind by previous
+ * CI runs whose teardown failed. Call this before tests to prevent quota
+ * exhaustion in the shared test account.
+ */
+export async function cleanupStaleCredentialProviders(): Promise<void> {
+  const region = process.env.AWS_REGION ?? 'us-east-1';
+  try {
+    const client = new BedrockAgentCoreControlClient({ region });
+    const response = await client.send(new ListApiKeyCredentialProvidersCommand({}));
+    const providers = response.credentialProviders ?? [];
+    const stale = providers.filter(p => p.name?.startsWith('E2e'));
+
+    if (stale.length === 0) return;
+
+    console.log(`Cleaning up ${stale.length} stale E2e* credential provider(s)...`);
+    for (const provider of stale) {
+      try {
+        await client.send(new DeleteApiKeyCredentialProviderCommand({ name: provider.name! }));
+        console.log(`  Deleted: ${provider.name}`);
+      } catch (err) {
+        console.warn(`  Failed to delete ${provider.name}:`, err);
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to list credential providers for cleanup:', err);
   }
 }

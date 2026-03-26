@@ -98,6 +98,18 @@ jobs:
       - run: npm run build
       - name: Install CLI globally
         run: npm install -g "$(npm pack | tail -1)"
+      - name: Clean up stale credential providers
+        run: |
+          # Delete leaked E2e* API key credential providers from previous CI runs
+          # to prevent account quota exhaustion
+          for name in $(aws bedrock-agentcore-control list-api-key-credential-providers \
+            --region ${{ inputs.aws_region || 'us-east-1' }} \
+            --query 'credentialProviders[?starts_with(name, `E2e`)].name' \
+            --output text); do
+              echo "Deleting stale provider: $name"
+              aws bedrock-agentcore-control delete-api-key-credential-provider \
+                --name "$name" --region ${{ inputs.aws_region || 'us-east-1' }} || true
+          done
       - name: Run E2E tests (${{ matrix.cdk-source }})
         env:
           AWS_ACCOUNT_ID: ${{ steps.aws.outputs.account_id }}
