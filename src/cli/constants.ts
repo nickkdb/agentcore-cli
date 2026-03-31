@@ -58,3 +58,13 @@ export const SCHEMA_VERSION = 1;
  * Default runtime endpoint name used in log group paths and console URLs.
  */
 export const DEFAULT_ENDPOINT_NAME = 'DEFAULT';
+
+/**
+ * CloudWatch log group for OpenTelemetry spans (shared across all agents).
+ */
+export const SPANS_LOG_GROUP = 'aws/spans';
+
+/**
+ * Maximum character length for input/output message previews in trace list.
+ */
+export const TRACE_LIST_PREVIEW_LENGTH = 24;

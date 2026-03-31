@@ -7,14 +7,27 @@ import type { TracesGetOptions, TracesListOptions } from './types';
 import type { Command } from '@commander-js/extra-typings';
 import { Box, Text, render } from 'ink';
 
-function formatTimestamp(ts: string): string {
-  const num = Number(ts);
-  if (isNaN(num)) return ts;
-  // Epoch ms → human-readable
-  return new Date(num)
-    .toISOString()
-    .replace('T', ' ')
-    .replace(/\.\d+Z$/, 'Z');
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${(ms / 60_000).toFixed(1)}m`;
+}
+
+function formatAge(nanoTimestamp: number): string {
+  if (nanoTimestamp === 0) return '-';
+  const seconds = Math.floor((Date.now() - nanoTimestamp / 1_000_000) / 1000);
+  if (seconds < 0) return 'now';
+  if (seconds < 60) return `${seconds}s ago`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
+}
+
+function getDurationColor(ms: number): string {
+  if (ms < 100) return 'green';
+  if (ms < 1000) return 'yellow';
+  if (ms < 5000) return 'yellowBright';
+  return 'red';
 }
 
 export const registerTraces = (program: Command) => {
@@ -53,30 +66,95 @@ export const registerTraces = (program: Command) => {
             <Text> </Text>
             {result.traces && result.traces.length > 0 ? (
               <>
+                {/* Header */}
                 <Box>
+                  <Box width={4}>
+                    <Text bold dimColor>
+                      #
+                    </Text>
+                  </Box>
                   <Box width={34}>
                     <Text bold>Trace ID</Text>
                   </Box>
-                  <Box width={22}>
-                    <Text bold>Timestamp</Text>
+                  <Box width={9}>
+                    <Text bold>Duration</Text>
                   </Box>
-                  <Box width={38}>
-                    <Text bold>Session ID</Text>
+                  <Box width={12}>
+                    <Text bold>Status</Text>
+                  </Box>
+                  <Box width={25}>
+                    <Text bold>Input</Text>
+                  </Box>
+                  <Box width={25}>
+                    <Text bold>Output</Text>
+                  </Box>
+                  <Box width={8}>
+                    <Text bold dimColor>
+                      Age
+                    </Text>
                   </Box>
                 </Box>
+                {/* Separator */}
+                <Box>
+                  <Text dimColor>{'─'.repeat(117)}</Text>
+                </Box>
+                {/* Rows */}
                 {result.traces.map((trace, i) => (
-                  <Box key={i}>
-                    <Box width={34}>
-                      <Text color="cyan">{trace.traceId}</Text>
+                  <Box key={i} flexDirection="column">
+                    <Box>
+                      <Box width={4}>
+                        <Text color="cyan">{String(i + 1).padStart(2)}</Text>
+                      </Box>
+                      <Box width={34}>
+                        <Text color="blueBright">{trace.traceId}</Text>
+                      </Box>
+                      <Box width={9}>
+                        <Text color={getDurationColor(trace.durationMs)}>{formatDuration(trace.durationMs)}</Text>
+                      </Box>
+                      <Box width={12}>
+                        <Text dimColor>{trace.spanCount} spans</Text>
+                      </Box>
+                      <Box width={25}>
+                        <Text color="cyan">{trace.input ?? '-'}</Text>
+                      </Box>
+                      <Box width={25}>
+                        <Text color="green">{trace.output ?? '-'}</Text>
+                      </Box>
+                      <Box width={8}>
+                        <Text dimColor>{formatAge(trace.latestEndTimeNano)}</Text>
+                      </Box>
                     </Box>
-                    <Box width={22}>
-                      <Text>{formatTimestamp(trace.timestamp)}</Text>
-                    </Box>
-                    <Box width={38}>
-                      <Text color="magenta">{trace.sessionId ?? '-'}</Text>
+                    {/* Second line: latest marker + status icon */}
+                    <Box>
+                      <Box width={4}>
+                        <Text> </Text>
+                      </Box>
+                      <Box width={34}>{i === 0 ? <Text dimColor>(latest)</Text> : <Text> </Text>}</Box>
+                      <Box width={9}>
+                        <Text> </Text>
+                      </Box>
+                      <Box width={12}>
+                        {trace.errorCount > 0 ? (
+                          <Text color="red">
+                            {'❌'} {trace.errorCount} err
+                          </Text>
+                        ) : (
+                          <Text color="green">{'✓'} OK</Text>
+                        )}
+                      </Box>
+                      <Box width={50}>
+                        <Text> </Text>
+                      </Box>
+                      <Box width={8}>
+                        <Text> </Text>
+                      </Box>
                     </Box>
                   </Box>
                 ))}
+                <Text> </Text>
+                <Text color="green">
+                  {'✓'} Found {result.traces.length} traces
+                </Text>
               </>
             ) : (
               <Text color="yellow">No traces found in the specified time range.</Text>

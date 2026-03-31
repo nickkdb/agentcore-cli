@@ -9,7 +9,16 @@ export interface TracesListResult {
   agentName?: string;
   targetName?: string;
   consoleUrl?: string;
-  traces?: { traceId: string; timestamp: string; sessionId?: string }[];
+  traces?: {
+    traceId: string;
+    sessionId?: string;
+    spanCount: number;
+    errorCount: number;
+    durationMs: number;
+    latestEndTimeNano: number;
+    input?: string;
+    output?: string;
+  }[];
   error?: string;
 }
 
