@@ -17,7 +17,8 @@ export interface ResourceStatusEntry {
     | 'evaluator'
     | 'online-eval'
     | 'policy-engine'
-    | 'policy';
+    | 'policy'
+    | 'config-bundle';
   name: string;
   deploymentState: ResourceDeploymentState;
   identifier?: string;
@@ -200,6 +201,14 @@ export function computeResourceStatuses(
     getDeployedKey: item => `${item.engineName}/${item.name}`,
   });
 
+  const configBundles = diffResourceSet({
+    resourceType: 'config-bundle',
+    localItems: project.configBundles ?? [],
+    deployedRecord: resources?.configBundles ?? {},
+    getIdentifier: deployed => deployed.bundleArn,
+    getLocalDetail: item => item.description,
+  });
+
   return [
     ...agents,
     ...credentials,
@@ -209,6 +218,7 @@ export function computeResourceStatuses(
     ...onlineEvalConfigs,
     ...policyEngines,
     ...policies,
+    ...configBundles,
   ];
 }
 

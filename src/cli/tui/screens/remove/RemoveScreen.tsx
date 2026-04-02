@@ -12,6 +12,7 @@ const REMOVE_RESOURCES = [
   { id: 'policy', title: 'Policy', description: 'Remove a policy from a policy engine' },
   { id: 'gateway', title: 'Gateway', description: 'Remove a gateway' },
   { id: 'gateway-target', title: 'Gateway Target', description: 'Remove a gateway target' },
+  { id: 'config-bundle', title: 'Configuration Bundle', description: 'Remove a configuration bundle' },
   { id: 'all', title: 'All', description: 'Reset entire agentcore project' },
 ] as const;
 
@@ -38,6 +39,8 @@ interface RemoveScreenProps {
   policyEngineCount: number;
   /** Number of policies available for removal */
   policyCount: number;
+  /** Number of configuration bundles available for removal */
+  configBundleCount: number;
 }
 
 export function RemoveScreen({
@@ -52,6 +55,7 @@ export function RemoveScreen({
   onlineEvalCount,
   policyEngineCount,
   policyCount,
+  configBundleCount,
 }: RemoveScreenProps) {
   const items: SelectableItem[] = useMemo(() => {
     return REMOVE_RESOURCES.map(r => {
@@ -113,6 +117,12 @@ export function RemoveScreen({
             description = 'No policies to remove';
           }
           break;
+        case 'config-bundle':
+          if (configBundleCount === 0) {
+            disabled = true;
+            description = 'No configuration bundles to remove';
+          }
+          break;
         case 'all':
           // 'all' is always available
           break;
@@ -130,6 +140,7 @@ export function RemoveScreen({
     onlineEvalCount,
     policyEngineCount,
     policyCount,
+    configBundleCount,
   ]);
 
   const isDisabled = (item: SelectableItem) => item.disabled ?? false;

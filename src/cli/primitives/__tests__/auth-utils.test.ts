@@ -93,6 +93,7 @@ describe('createManagedOAuthCredential', () => {
     onlineEvalConfigs: [],
     agentCoreGateways: [],
     policyEngines: [],
+    configBundles: [],
   };
 
   const jwtConfig: JwtConfigOptions = {

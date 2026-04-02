@@ -20,6 +20,7 @@ const ICONS = {
   'online-eval': '↻',
   'policy-engine': '▣',
   policy: '▢',
+  'config-bundle': '⬡',
 } as const;
 
 interface ResourceGraphProps {
@@ -121,6 +122,7 @@ export function ResourceGraph({ project, mcp, agentName, resourceStatuses }: Res
   const mcpRuntimeTools = mcp?.mcpRuntimeTools ?? [];
   const unassignedTargets = mcp?.unassignedTargets ?? [];
   const policyEngines = project.policyEngines ?? [];
+  const configBundles = project.configBundles ?? [];
 
   // Build lookup map and collect pending-removal resources in a single pass
   const { statusMap, pendingRemovals } = useMemo(() => {
@@ -280,6 +282,27 @@ export function ResourceGraph({ project, mcp, agentName, resourceStatuses }: Res
         </Box>
       )}
 
+      {/* Configuration Bundles */}
+      {configBundles.length > 0 && (
+        <Box flexDirection="column">
+          <SectionHeader>Configuration Bundles</SectionHeader>
+          {configBundles.map(bundle => {
+            const rsEntry = statusMap.get(`config-bundle:${bundle.name}`);
+            return (
+              <ResourceRow
+                key={bundle.name}
+                icon={ICONS['config-bundle']}
+                color="white"
+                name={bundle.name}
+                detail={rsEntry?.detail ?? bundle.description}
+                deploymentState={rsEntry?.deploymentState}
+                identifier={rsEntry?.identifier}
+              />
+            );
+          })}
+        </Box>
+      )}
+
       {/* Removed locally — still deployed in AWS, will be torn down on next deploy */}
       {pendingRemovals.length > 0 && (
         <Box flexDirection="column">
@@ -410,7 +433,8 @@ export function ResourceGraph({ project, mcp, agentName, resourceStatuses }: Res
           <Text color="cyan">{ICONS.evaluator}</Text> evaluator{'  '}
           <Text color="magenta">{ICONS['online-eval']}</Text> online-eval{'  '}
           <Text color="magenta">{ICONS.gateway}</Text> gateway{'  '}
-          <Text color="red">{ICONS['policy-engine']}</Text> policy engine
+          <Text color="red">{ICONS['policy-engine']}</Text> policy engine{'  '}
+          <Text color="white">{ICONS['config-bundle']}</Text> config bundle
         </Text>
         {resourceStatuses && resourceStatuses.length > 0 && (
           <Box flexDirection="column" marginTop={1}>
