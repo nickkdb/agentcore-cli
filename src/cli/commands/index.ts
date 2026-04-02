@@ -1,6 +1,7 @@
 // Command registrations
 export { registerAdd } from './add';
 export { registerDeploy } from './deploy';
+export { registerEdit } from './edit';
 export { registerDev } from './dev';
 export { registerCreate } from './create';
 export { registerEval } from './eval';

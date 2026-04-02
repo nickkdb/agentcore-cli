@@ -2,7 +2,8 @@ import type { AgentCoreProjectSpec, ConfigBundleDeployedState } from '../../../s
 import {
   createConfigurationBundle,
   deleteConfigurationBundle,
-  getConfigurationBundle,
+  getConfigurationBundleVersion,
+  listConfigurationBundleVersions,
   listConfigurationBundles,
   updateConfigurationBundle,
 } from '../../aws/agentcore-config-bundles';
@@ -63,30 +64,58 @@ export async function setupConfigBundles(options: SetupConfigBundlesOptions): Pr
 
       if (existingBundle) {
         try {
-          const result = await updateConfigurationBundle({
+          // Fetch the exact version we know about — avoids branch-not-found errors
+          const current = await getConfigurationBundleVersion({
             region,
             bundleId: existingBundle.bundleId,
-            description: bundleSpec.description,
-            components: bundleSpec.components as ComponentConfigurationMap,
-            parentVersionIds: [existingBundle.versionId],
-            branchName: bundleSpec.branchName ?? 'main',
-            commitMessage: bundleSpec.commitMessage ?? `Update ${bundleSpec.name}`,
+            versionId: existingBundle.versionId,
           });
+          const componentsChanged = !deepEqual(current.components, bundleSpec.components);
+          const descriptionChanged = (bundleSpec.description ?? undefined) !== (current.description ?? undefined);
 
-          configBundles[bundleSpec.name] = {
-            bundleId: result.bundleId,
-            bundleArn: result.bundleArn,
-            versionId: result.versionId,
-          };
+          if (!componentsChanged && !descriptionChanged) {
+            // Nothing changed — skip the update, preserve existing state
+            configBundles[bundleSpec.name] = {
+              bundleId: existingBundle.bundleId,
+              bundleArn: existingBundle.bundleArn,
+              versionId: existingBundle.versionId,
+            };
+            results.push({
+              bundleName: bundleSpec.name,
+              status: 'skipped',
+              bundleId: existingBundle.bundleId,
+              bundleArn: existingBundle.bundleArn,
+              versionId: existingBundle.versionId,
+            });
+            updated = true;
+          } else {
+            // Use the branch from the spec, or fall back to whatever branch the API has
+            const effectiveBranch = bundleSpec.branchName ?? current.lineageMetadata?.branchName ?? 'mainline';
+            const result = await updateConfigurationBundle({
+              region,
+              bundleId: existingBundle.bundleId,
+              description: bundleSpec.description,
+              components: bundleSpec.components as ComponentConfigurationMap,
+              parentVersionIds: [current.versionId],
+              branchName: effectiveBranch,
+              commitMessage: bundleSpec.commitMessage ?? `Update ${bundleSpec.name}`,
+            });
 
-          results.push({
-            bundleName: bundleSpec.name,
-            status: 'updated',
-            bundleId: result.bundleId,
-            bundleArn: result.bundleArn,
-            versionId: result.versionId,
-          });
-          updated = true;
+            configBundles[bundleSpec.name] = {
+              bundleId: result.bundleId,
+              bundleArn: result.bundleArn,
+              versionId: result.versionId,
+            };
+
+            results.push({
+              bundleName: bundleSpec.name,
+              status: 'updated',
+              bundleId: result.bundleId,
+              bundleArn: result.bundleArn,
+              versionId: result.versionId,
+            });
+            updated = true;
+          }
         } catch (updateErr) {
           // If bundle or branch not found, fall through to find-by-name or create
           const msg = updateErr instanceof Error ? updateErr.message : String(updateErr);
@@ -99,39 +128,69 @@ export async function setupConfigBundles(options: SetupConfigBundlesOptions): Pr
         const existingByName = await findBundleByName(region, bundleSpec.name);
 
         if (existingByName) {
-          // Fetch current version to use as parent
-          const current = await getConfigurationBundle({ region, bundleId: existingByName.bundleId });
-          const result = await updateConfigurationBundle({
+          // Fetch versions and pick the newest — avoids branch-not-found errors from getConfigurationBundle
+          const versions = await listConfigurationBundleVersions({
             region,
             bundleId: existingByName.bundleId,
-            description: bundleSpec.description,
-            components: bundleSpec.components as ComponentConfigurationMap,
-            parentVersionIds: [current.versionId],
-            branchName: bundleSpec.branchName ?? 'main',
-            commitMessage: bundleSpec.commitMessage ?? `Update ${bundleSpec.name}`,
           });
-
-          configBundles[bundleSpec.name] = {
-            bundleId: result.bundleId,
-            bundleArn: result.bundleArn,
-            versionId: result.versionId,
-          };
-
-          results.push({
-            bundleName: bundleSpec.name,
-            status: 'updated',
-            bundleId: result.bundleId,
-            bundleArn: result.bundleArn,
-            versionId: result.versionId,
+          const sorted = [...versions.versions].sort((a, b) => Number(b.versionCreatedAt) - Number(a.versionCreatedAt));
+          const latestVersionId = sorted[0]?.versionId;
+          if (!latestVersionId) throw new Error(`No versions found for bundle ${bundleSpec.name}`);
+          const current = await getConfigurationBundleVersion({
+            region,
+            bundleId: existingByName.bundleId,
+            versionId: latestVersionId,
           });
+          const componentsChanged = !deepEqual(current.components, bundleSpec.components);
+          const descriptionChanged = (bundleSpec.description ?? undefined) !== (current.description ?? undefined);
+
+          if (!componentsChanged && !descriptionChanged) {
+            configBundles[bundleSpec.name] = {
+              bundleId: existingByName.bundleId,
+              bundleArn: current.bundleArn,
+              versionId: current.versionId,
+            };
+            results.push({
+              bundleName: bundleSpec.name,
+              status: 'skipped',
+              bundleId: existingByName.bundleId,
+              bundleArn: current.bundleArn,
+              versionId: current.versionId,
+            });
+          } else {
+            const effectiveBranch = bundleSpec.branchName ?? current.lineageMetadata?.branchName ?? 'mainline';
+            const result = await updateConfigurationBundle({
+              region,
+              bundleId: existingByName.bundleId,
+              description: bundleSpec.description,
+              components: bundleSpec.components as ComponentConfigurationMap,
+              parentVersionIds: [current.versionId],
+              branchName: effectiveBranch,
+              commitMessage: bundleSpec.commitMessage ?? `Update ${bundleSpec.name}`,
+            });
+
+            configBundles[bundleSpec.name] = {
+              bundleId: result.bundleId,
+              bundleArn: result.bundleArn,
+              versionId: result.versionId,
+            };
+
+            results.push({
+              bundleName: bundleSpec.name,
+              status: 'updated',
+              bundleId: result.bundleId,
+              bundleArn: result.bundleArn,
+              versionId: result.versionId,
+            });
+          }
         } else {
-          // Create new
+          // Create new — omit branchName if not in spec so the API uses its default
           const result = await createConfigurationBundle({
             region,
             bundleName: bundleSpec.name,
             description: bundleSpec.description,
             components: bundleSpec.components as ComponentConfigurationMap,
-            branchName: bundleSpec.branchName ?? 'main',
+            branchName: bundleSpec.branchName,
             commitMessage: bundleSpec.commitMessage ?? `Create ${bundleSpec.name}`,
           });
 
@@ -203,4 +262,23 @@ async function findBundleByName(region: string, bundleName: string): Promise<{ b
   } catch {
     return undefined;
   }
+}
+
+/** Key-order-independent deep-equal for JSON-serializable objects. */
+function deepEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (a === null || b === null || typeof a !== typeof b) return false;
+  if (typeof a !== 'object') return false;
+
+  if (Array.isArray(a)) {
+    if (!Array.isArray(b) || a.length !== b.length) return false;
+    return a.every((item, i) => deepEqual(item, b[i]));
+  }
+
+  const aObj = a as Record<string, unknown>;
+  const bObj = b as Record<string, unknown>;
+  const aKeys = Object.keys(aObj);
+  const bKeys = Object.keys(bObj);
+  if (aKeys.length !== bKeys.length) return false;
+  return aKeys.every(key => key in bObj && deepEqual(aObj[key], bObj[key]));
 }

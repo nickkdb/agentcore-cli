@@ -5,6 +5,7 @@ import { CLI_ONLY_EXAMPLES } from './copy';
 import { MissingProjectMessage, WrongDirectoryMessage, getProjectRootMismatch, projectExists } from './guards';
 import { AddFlow } from './screens/add/AddFlow';
 import { CliOnlyScreen } from './screens/cli-only';
+import { EditConfigBundleFlow } from './screens/config-bundle/EditConfigBundleFlow';
 import { CreateScreen } from './screens/create';
 import { DeployScreen } from './screens/deploy/DeployScreen';
 import { DevScreen } from './screens/dev/DevScreen';
@@ -34,6 +35,7 @@ type Route =
   | { name: 'invoke' }
   | { name: 'create' }
   | { name: 'add' }
+  | { name: 'edit' }
   | { name: 'status' }
   | { name: 'remove' }
   | { name: 'run' }
@@ -100,6 +102,8 @@ function AppContent() {
         return;
       }
       setRoute({ name: 'add' });
+    } else if (id === 'edit') {
+      setRoute({ name: 'edit' });
     } else if (id === 'remove') {
       setRoute({ name: 'remove' });
     } else if (id === 'run') {
@@ -171,6 +175,18 @@ function AppContent() {
       <AddFlow
         isInteractive={true}
         onExit={() => setRoute({ name: 'help' })}
+        onDev={() => setRoute({ name: 'dev' })}
+        onDeploy={() => setRoute({ name: 'deploy' })}
+      />
+    );
+  }
+
+  if (route.name === 'edit') {
+    return (
+      <EditConfigBundleFlow
+        isInteractive={true}
+        onExit={() => setRoute({ name: 'help' })}
+        onBack={() => setRoute({ name: 'help' })}
         onDev={() => setRoute({ name: 'dev' })}
         onDeploy={() => setRoute({ name: 'deploy' })}
       />

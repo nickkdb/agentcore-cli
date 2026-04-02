@@ -15,6 +15,7 @@ export {
   onlineEvalConfigPrimitive,
   gatewayPrimitive,
   gatewayTargetPrimitive,
+  configBundlePrimitive,
   getPrimitive,
 } from './registry';
 export { SOURCE_CODE_NOTE } from './constants';
