@@ -19,7 +19,7 @@ function getDefaultConfig(): AddConfigBundleConfig {
     inputMethod: 'inline',
     components: {},
     componentsRaw: '',
-    branchName: '',
+    branchName: 'main',
     commitMessage: '',
   };
 }

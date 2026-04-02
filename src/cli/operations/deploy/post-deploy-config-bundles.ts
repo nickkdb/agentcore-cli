@@ -2,6 +2,7 @@ import type { AgentCoreProjectSpec, ConfigBundleDeployedState } from '../../../s
 import {
   createConfigurationBundle,
   deleteConfigurationBundle,
+  getConfigurationBundle,
   listConfigurationBundles,
   updateConfigurationBundle,
 } from '../../aws/agentcore-config-bundles';
@@ -56,45 +57,58 @@ export async function setupConfigBundles(options: SetupConfigBundlesOptions): Pr
   // Create or update bundles from the spec
   for (const bundleSpec of projectSpec.configBundles) {
     try {
+      // Try to update if we have an existing bundle ID
       const existingBundle = existingBundles?.[bundleSpec.name];
+      let updated = false;
 
       if (existingBundle) {
-        // Update existing bundle (creates a new version)
-        const result = await updateConfigurationBundle({
-          region,
-          bundleId: existingBundle.bundleId,
-          description: bundleSpec.description,
-          components: bundleSpec.components as ComponentConfigurationMap,
-          branchName: bundleSpec.branchName,
-          commitMessage: bundleSpec.commitMessage,
-        });
+        try {
+          const result = await updateConfigurationBundle({
+            region,
+            bundleId: existingBundle.bundleId,
+            description: bundleSpec.description,
+            components: bundleSpec.components as ComponentConfigurationMap,
+            parentVersionIds: [existingBundle.versionId],
+            branchName: bundleSpec.branchName ?? 'main',
+            commitMessage: bundleSpec.commitMessage ?? `Update ${bundleSpec.name}`,
+          });
 
-        configBundles[bundleSpec.name] = {
-          bundleId: result.bundleId,
-          bundleArn: result.bundleArn,
-          versionId: result.versionId,
-        };
+          configBundles[bundleSpec.name] = {
+            bundleId: result.bundleId,
+            bundleArn: result.bundleArn,
+            versionId: result.versionId,
+          };
 
-        results.push({
-          bundleName: bundleSpec.name,
-          status: 'updated',
-          bundleId: result.bundleId,
-          bundleArn: result.bundleArn,
-          versionId: result.versionId,
-        });
-      } else {
+          results.push({
+            bundleName: bundleSpec.name,
+            status: 'updated',
+            bundleId: result.bundleId,
+            bundleArn: result.bundleArn,
+            versionId: result.versionId,
+          });
+          updated = true;
+        } catch (updateErr) {
+          // If bundle or branch not found, fall through to find-by-name or create
+          const msg = updateErr instanceof Error ? updateErr.message : String(updateErr);
+          if (!msg.includes('404') && !msg.includes('not found')) throw updateErr;
+        }
+      }
+
+      if (!updated) {
         // Try to find by name via list (handles re-creation after state loss)
         const existingByName = await findBundleByName(region, bundleSpec.name);
 
         if (existingByName) {
-          // Update the existing one and track it
+          // Fetch current version to use as parent
+          const current = await getConfigurationBundle({ region, bundleId: existingByName.bundleId });
           const result = await updateConfigurationBundle({
             region,
             bundleId: existingByName.bundleId,
             description: bundleSpec.description,
             components: bundleSpec.components as ComponentConfigurationMap,
-            branchName: bundleSpec.branchName,
-            commitMessage: bundleSpec.commitMessage,
+            parentVersionIds: [current.versionId],
+            branchName: bundleSpec.branchName ?? 'main',
+            commitMessage: bundleSpec.commitMessage ?? `Update ${bundleSpec.name}`,
           });
 
           configBundles[bundleSpec.name] = {
@@ -117,8 +131,8 @@ export async function setupConfigBundles(options: SetupConfigBundlesOptions): Pr
             bundleName: bundleSpec.name,
             description: bundleSpec.description,
             components: bundleSpec.components as ComponentConfigurationMap,
-            branchName: bundleSpec.branchName,
-            commitMessage: bundleSpec.commitMessage,
+            branchName: bundleSpec.branchName ?? 'main',
+            commitMessage: bundleSpec.commitMessage ?? `Create ${bundleSpec.name}`,
           });
 
           configBundles[bundleSpec.name] = {

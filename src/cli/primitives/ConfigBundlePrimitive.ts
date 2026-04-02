@@ -220,7 +220,7 @@ export class ConfigBundlePrimitive extends BasePrimitive<AddConfigBundleOptions,
       name: options.name,
       ...(options.description && { description: options.description }),
       components: options.components,
-      ...(options.branchName && { branchName: options.branchName }),
+      branchName: options.branchName || 'main',
       ...(options.commitMessage && { commitMessage: options.commitMessage }),
     };
 

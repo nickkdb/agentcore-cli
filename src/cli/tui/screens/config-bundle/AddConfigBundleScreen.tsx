@@ -161,7 +161,8 @@ export function AddConfigBundleScreen({ onComplete, onExit, existingBundleNames 
         {isBranchNameStep && (
           <TextInput
             key="branchName"
-            prompt="Branch name (optional, press Enter to skip)"
+            prompt="Branch name (press Enter for default)"
+            placeholder="main"
             initialValue=""
             allowEmpty
             onSubmit={wizard.setBranchName}
@@ -172,7 +173,8 @@ export function AddConfigBundleScreen({ onComplete, onExit, existingBundleNames 
         {isCommitMessageStep && (
           <TextInput
             key="commitMessage"
-            prompt="Commit message (optional, press Enter to skip)"
+            prompt="Commit message (press Enter for default)"
+            placeholder={`Create ${wizard.config.name}`}
             initialValue=""
             allowEmpty
             onSubmit={wizard.setCommitMessage}
@@ -186,8 +188,8 @@ export function AddConfigBundleScreen({ onComplete, onExit, existingBundleNames 
               { label: 'Name', value: wizard.config.name },
               ...(wizard.config.description ? [{ label: 'Description', value: wizard.config.description }] : []),
               { label: 'Components', value: componentsPreview },
-              ...(wizard.config.branchName ? [{ label: 'Branch', value: wizard.config.branchName }] : []),
-              ...(wizard.config.commitMessage ? [{ label: 'Message', value: wizard.config.commitMessage }] : []),
+              { label: 'Branch', value: wizard.config.branchName || 'main' },
+              { label: 'Message', value: wizard.config.commitMessage || `Create ${wizard.config.name}` },
             ]}
           />
         )}

@@ -274,7 +274,7 @@ export async function getConfigurationBundle(
 export async function updateConfigurationBundle(
   options: UpdateConfigurationBundleOptions
 ): Promise<UpdateConfigurationBundleResult> {
-  const body: Record<string, unknown> = {};
+  const body: Record<string, unknown> = { clientToken: randomUUID() };
   if (options.bundleName !== undefined) body.bundleName = options.bundleName;
   if (options.description !== undefined) body.description = options.description;
   if (options.components !== undefined) body.components = options.components;

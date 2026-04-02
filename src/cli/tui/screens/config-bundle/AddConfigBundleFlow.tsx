@@ -41,8 +41,8 @@ export function AddConfigBundleFlow({
         name: config.name,
         description: config.description || undefined,
         components: config.components,
-        branchName: config.branchName || undefined,
-        commitMessage: config.commitMessage || undefined,
+        branchName: config.branchName || 'main',
+        commitMessage: config.commitMessage || `Create ${config.name}`,
       }).then(result => {
         if (result.ok) {
           setFlow({ name: 'create-success', bundleName: result.bundleName });
