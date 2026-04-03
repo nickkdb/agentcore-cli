@@ -6,6 +6,7 @@ import type { RemovableMemory } from '../../primitives/MemoryPrimitive';
 import type { RemovablePolicyResource } from '../../primitives/PolicyPrimitive';
 import {
   agentPrimitive,
+  configBundlePrimitive,
   credentialPrimitive,
   evaluatorPrimitive,
   gatewayPrimitive,
@@ -147,6 +148,11 @@ export function useRemovablePolicies() {
   return { policies, ...rest };
 }
 
+export function useRemovableConfigBundles() {
+  const { items: configBundles, ...rest } = useRemovableResources(() => configBundlePrimitive.getRemovable());
+  return { configBundles, ...rest };
+}
+
 // ============================================================================
 // Preview Hook
 // ============================================================================
@@ -218,6 +224,10 @@ export function useRemovalPreview() {
     (compositeKey: string) => loadPreview(k => policyPrimitive.previewRemove(k), compositeKey),
     [loadPreview]
   );
+  const loadConfigBundlePreview = useCallback(
+    (name: string) => loadPreview(n => configBundlePrimitive.previewRemove(n), name),
+    [loadPreview]
+  );
 
   const reset = useCallback(() => {
     setState({ isLoading: false, preview: null, error: null });
@@ -234,6 +244,7 @@ export function useRemovalPreview() {
     loadOnlineEvalPreview,
     loadPolicyEnginePreview,
     loadPolicyPreview,
+    loadConfigBundlePreview,
     reset,
   };
 }
@@ -318,5 +329,13 @@ export function useRemovePolicy() {
     (compositeKey: string) => policyPrimitive.remove(compositeKey),
     'policy',
     k => k
+  );
+}
+
+export function useRemoveConfigBundle() {
+  return useRemoveResource(
+    (name: string) => configBundlePrimitive.remove(name),
+    'config-bundle',
+    name => name
   );
 }

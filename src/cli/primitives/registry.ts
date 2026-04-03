@@ -1,5 +1,6 @@
 import { AgentPrimitive } from './AgentPrimitive';
 import type { BasePrimitive } from './BasePrimitive';
+import { ConfigBundlePrimitive } from './ConfigBundlePrimitive';
 import { CredentialPrimitive } from './CredentialPrimitive';
 import { EvaluatorPrimitive } from './EvaluatorPrimitive';
 import { GatewayPrimitive } from './GatewayPrimitive';
@@ -22,6 +23,7 @@ export const gatewayPrimitive = new GatewayPrimitive();
 export const gatewayTargetPrimitive = new GatewayTargetPrimitive();
 export const policyEnginePrimitive = new PolicyEnginePrimitive();
 export const policyPrimitive = new PolicyPrimitive();
+export const configBundlePrimitive = new ConfigBundlePrimitive();
 
 /**
  * All primitives in display order.
@@ -36,6 +38,7 @@ export const ALL_PRIMITIVES: BasePrimitive<unknown, RemovableResource>[] = [
   gatewayTargetPrimitive,
   policyEnginePrimitive,
   policyPrimitive,
+  configBundlePrimitive,
 ];
 
 /**

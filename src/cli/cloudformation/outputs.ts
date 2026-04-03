@@ -404,6 +404,12 @@ export function buildDeployedState(opts: BuildDeployedStateOptions): DeployedSta
     targetState.resources!.onlineEvalConfigs = onlineEvalConfigs;
   }
 
+  // Carry forward config bundles from existing state (managed post-deploy, not via CFN outputs)
+  const existingConfigBundles = existingState?.targets?.[targetName]?.resources?.configBundles;
+  if (existingConfigBundles && Object.keys(existingConfigBundles).length > 0) {
+    targetState.resources!.configBundles = existingConfigBundles;
+  }
+
   return {
     targets: {
       ...existingState?.targets,

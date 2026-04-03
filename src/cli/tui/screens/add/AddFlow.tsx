@@ -7,6 +7,7 @@ import { AddAgentFlow } from '../agent/AddAgentFlow';
 import type { AddAgentConfig } from '../agent/types';
 import { FRAMEWORK_OPTIONS } from '../agent/types';
 import { useAddAgent } from '../agent/useAddAgent';
+import { AddConfigBundleFlow } from '../config-bundle';
 import { AddEvaluatorFlow } from '../evaluator';
 import { AddIdentityFlow } from '../identity';
 import { AddGatewayFlow, AddGatewayTargetFlow } from '../mcp';
@@ -30,6 +31,7 @@ type FlowState =
   | { name: 'evaluator-wizard' }
   | { name: 'online-eval-wizard' }
   | { name: 'policy-wizard' }
+  | { name: 'config-bundle-wizard' }
   | {
       name: 'agent-create-success';
       agentName: string;
@@ -200,6 +202,9 @@ export function AddFlow(props: AddFlowProps) {
         break;
       case 'policy':
         setFlow({ name: 'policy-wizard' });
+        break;
+      case 'config-bundle':
+        setFlow({ name: 'config-bundle-wizard' });
         break;
     }
   }, []);
@@ -425,6 +430,19 @@ export function AddFlow(props: AddFlowProps) {
   if (flow.name === 'policy-wizard') {
     return (
       <AddPolicyFlow
+        isInteractive={props.isInteractive}
+        onExit={props.onExit}
+        onBack={() => setFlow({ name: 'select' })}
+        onDev={props.onDev}
+        onDeploy={props.onDeploy}
+      />
+    );
+  }
+
+  // Configuration bundle wizard
+  if (flow.name === 'config-bundle-wizard') {
+    return (
+      <AddConfigBundleFlow
         isInteractive={props.isInteractive}
         onExit={props.onExit}
         onBack={() => setFlow({ name: 'select' })}

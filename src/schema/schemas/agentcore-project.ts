@@ -9,6 +9,7 @@
 import { isReservedProjectName } from '../constants';
 import { AgentEnvSpecSchema } from './agent-env';
 import { AgentCoreGatewaySchema, AgentCoreGatewayTargetSchema, AgentCoreMcpRuntimeToolSchema } from './mcp';
+import { ConfigBundleSchema } from './primitives/config-bundle';
 import { EvaluationLevelSchema, EvaluatorConfigSchema, EvaluatorNameSchema } from './primitives/evaluator';
 import {
   DEFAULT_EPISODIC_REFLECTION_NAMESPACES,
@@ -35,6 +36,9 @@ export type { OnlineEvalConfig } from './primitives/online-eval-config';
 export { OnlineEvalConfigSchema, OnlineEvalConfigNameSchema } from './primitives/online-eval-config';
 export type { EvaluationLevel, EvaluatorConfig, LlmAsAJudgeConfig, RatingScale } from './primitives/evaluator';
 export { BedrockModelIdSchema, isValidBedrockModelId, EvaluatorNameSchema } from './primitives/evaluator';
+export { ConfigBundleSchema };
+export type { ComponentConfiguration, ComponentConfigurationMap, ConfigBundle } from './primitives/config-bundle';
+export { ConfigBundleNameSchema, ComponentConfigurationMapSchema } from './primitives/config-bundle';
 export { PolicyEngineSchema };
 export type { Policy, PolicyEngine, ValidationMode } from './primitives/policy';
 export { PolicyEngineNameSchema, PolicyNameSchema, PolicySchema, ValidationModeSchema } from './primitives/policy';
@@ -271,6 +275,16 @@ export const AgentCoreProjectSpecSchema = z
         uniqueBy(
           engine => engine.name,
           name => `Duplicate policy engine name: ${name}`
+        )
+      ),
+
+    configBundles: z
+      .array(ConfigBundleSchema)
+      .default([])
+      .superRefine(
+        uniqueBy(
+          bundle => bundle.name,
+          name => `Duplicate config bundle name: ${name}`
         )
       ),
   })

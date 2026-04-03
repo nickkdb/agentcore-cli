@@ -8,6 +8,7 @@ import { CliOnlyScreen } from './screens/cli-only';
 import { CreateScreen } from './screens/create';
 import { DeployScreen } from './screens/deploy/DeployScreen';
 import { DevScreen } from './screens/dev/DevScreen';
+import { EditFlow } from './screens/edit';
 import { EvalHubScreen, EvalScreen } from './screens/eval';
 import { FetchAccessScreen } from './screens/fetch-access';
 import { HelpScreen, HomeScreen } from './screens/home';
@@ -34,6 +35,7 @@ type Route =
   | { name: 'invoke' }
   | { name: 'create' }
   | { name: 'add' }
+  | { name: 'edit' }
   | { name: 'status' }
   | { name: 'remove' }
   | { name: 'run' }
@@ -100,6 +102,8 @@ function AppContent() {
         return;
       }
       setRoute({ name: 'add' });
+    } else if (id === 'edit') {
+      setRoute({ name: 'edit' });
     } else if (id === 'remove') {
       setRoute({ name: 'remove' });
     } else if (id === 'run') {
@@ -171,6 +175,18 @@ function AppContent() {
       <AddFlow
         isInteractive={true}
         onExit={() => setRoute({ name: 'help' })}
+        onDev={() => setRoute({ name: 'dev' })}
+        onDeploy={() => setRoute({ name: 'deploy' })}
+      />
+    );
+  }
+
+  if (route.name === 'edit') {
+    return (
+      <EditFlow
+        isInteractive={true}
+        onExit={() => setRoute({ name: 'help' })}
+        onBack={() => setRoute({ name: 'help' })}
         onDev={() => setRoute({ name: 'dev' })}
         onDeploy={() => setRoute({ name: 'deploy' })}
       />

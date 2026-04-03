@@ -2,6 +2,7 @@ import type { RemovableGatewayTarget, RemovalPreview } from '../../../operations
 import { ErrorPrompt, Panel, Screen } from '../../components';
 import {
   useRemovableAgents,
+  useRemovableConfigBundles,
   useRemovableEvaluators,
   useRemovableGatewayTargets,
   useRemovableGateways,
@@ -12,6 +13,7 @@ import {
   useRemovablePolicyEngines,
   useRemovalPreview,
   useRemoveAgent,
+  useRemoveConfigBundle,
   useRemoveEvaluator,
   useRemoveGateway,
   useRemoveGatewayTarget,
@@ -23,6 +25,7 @@ import {
 } from '../../hooks/useRemove';
 import { RemoveAgentScreen } from './RemoveAgentScreen';
 import { RemoveAllScreen } from './RemoveAllScreen';
+import { RemoveConfigBundleScreen } from './RemoveConfigBundleScreen';
 import { RemoveConfirmScreen } from './RemoveConfirmScreen';
 import { RemoveEvaluatorScreen } from './RemoveEvaluatorScreen';
 import { RemoveGatewayScreen } from './RemoveGatewayScreen';
@@ -50,6 +53,7 @@ type FlowState =
   | { name: 'select-online-eval' }
   | { name: 'select-policy-engine' }
   | { name: 'select-policy' }
+  | { name: 'select-config-bundle' }
   | { name: 'confirm-agent'; agentName: string; preview: RemovalPreview }
   | { name: 'confirm-gateway'; gatewayName: string; preview: RemovalPreview }
   | { name: 'confirm-gateway-target'; tool: RemovableGatewayTarget; preview: RemovalPreview }
@@ -59,6 +63,7 @@ type FlowState =
   | { name: 'confirm-online-eval'; configName: string; preview: RemovalPreview }
   | { name: 'confirm-policy-engine'; engineName: string; preview: RemovalPreview }
   | { name: 'confirm-policy'; compositeKey: string; policyName: string; preview: RemovalPreview }
+  | { name: 'confirm-config-bundle'; bundleName: string; preview: RemovalPreview }
   | { name: 'loading'; message: string }
   | { name: 'agent-success'; agentName: string; logFilePath?: string }
   | { name: 'gateway-success'; gatewayName: string; logFilePath?: string }
@@ -69,6 +74,7 @@ type FlowState =
   | { name: 'online-eval-success'; configName: string; logFilePath?: string }
   | { name: 'policy-engine-success'; engineName: string; logFilePath?: string }
   | { name: 'policy-success'; policyName: string; logFilePath?: string }
+  | { name: 'config-bundle-success'; bundleName: string; logFilePath?: string }
   | { name: 'remove-all' }
   | { name: 'error'; message: string };
 
@@ -90,7 +96,8 @@ interface RemoveFlowProps {
     | 'evaluator'
     | 'online-eval'
     | 'policy-engine'
-    | 'policy';
+    | 'policy'
+    | 'config-bundle';
   /** Initial resource name to auto-select (for CLI --name flag) */
   initialResourceName?: string;
 }
@@ -124,6 +131,8 @@ export function RemoveFlow({
         return { name: 'select-policy-engine' };
       case 'policy':
         return { name: 'select-policy' };
+      case 'config-bundle':
+        return { name: 'select-config-bundle' };
       default:
         return { name: 'select' };
     }
@@ -148,6 +157,11 @@ export function RemoveFlow({
     refresh: refreshPolicyEngines,
   } = useRemovablePolicyEngines();
   const { policies, isLoading: isLoadingPolicies, refresh: refreshPolicies } = useRemovablePolicies();
+  const {
+    configBundles,
+    isLoading: isLoadingConfigBundles,
+    refresh: refreshConfigBundles,
+  } = useRemovableConfigBundles();
 
   // Check if any data is still loading
   const isLoading =
@@ -159,7 +173,8 @@ export function RemoveFlow({
     isLoadingEvaluators ||
     isLoadingOnlineEvals ||
     isLoadingPolicyEngines ||
-    isLoadingPolicies;
+    isLoadingPolicies ||
+    isLoadingConfigBundles;
 
   // Preview hook
   const {
@@ -172,6 +187,7 @@ export function RemoveFlow({
     loadOnlineEvalPreview,
     loadPolicyEnginePreview,
     loadPolicyPreview,
+    loadConfigBundlePreview,
     reset: resetPreview,
   } = useRemovalPreview();
 
@@ -185,6 +201,7 @@ export function RemoveFlow({
   const { remove: removeOnlineEvalOp, reset: resetRemoveOnlineEval } = useRemoveOnlineEvalConfig();
   const { remove: removePolicyEngineOp, reset: resetRemovePolicyEngine } = useRemovePolicyEngine();
   const { remove: removePolicyOp, reset: resetRemovePolicy } = useRemovePolicy();
+  const { remove: removeConfigBundleOp, reset: resetRemoveConfigBundle } = useRemoveConfigBundle();
 
   // Track pending result state
   const pendingResultRef = useRef<FlowState | null>(null);
@@ -215,6 +232,7 @@ export function RemoveFlow({
         'online-eval-success',
         'policy-engine-success',
         'policy-success',
+        'config-bundle-success',
       ];
       if (successStates.includes(flow.name)) {
         onExit();
@@ -253,6 +271,9 @@ export function RemoveFlow({
         break;
       case 'policy':
         setFlow({ name: 'select-policy' });
+        break;
+      case 'config-bundle':
+        setFlow({ name: 'select-config-bundle' });
         break;
       case 'all':
         setFlow({ name: 'remove-all' });
@@ -464,6 +485,28 @@ export function RemoveFlow({
     [loadPolicyPreview, force, removePolicyOp]
   );
 
+  const handleSelectConfigBundle = useCallback(
+    async (bundleName: string) => {
+      const result = await loadConfigBundlePreview(bundleName);
+      if (result.ok) {
+        if (force) {
+          setFlow({ name: 'loading', message: `Removing configuration bundle ${bundleName}...` });
+          const removeResult = await removeConfigBundleOp(bundleName, result.preview);
+          if (removeResult.success) {
+            setFlow({ name: 'config-bundle-success', bundleName });
+          } else {
+            setFlow({ name: 'error', message: removeResult.error });
+          }
+        } else {
+          setFlow({ name: 'confirm-config-bundle', bundleName, preview: result.preview });
+        }
+      } else {
+        setFlow({ name: 'error', message: result.error });
+      }
+    },
+    [loadConfigBundlePreview, force, removeConfigBundleOp]
+  );
+
   // Auto-select resource when initialResourceName is provided and data is loaded
   useEffect(() => {
     if (!initialResourceName || isLoading || hasTriggeredInitialSelection.current) {
@@ -500,6 +543,9 @@ export function RemoveFlow({
         case 'policy':
           void handleSelectPolicy(initialResourceName);
           break;
+        case 'config-bundle':
+          void handleSelectConfigBundle(initialResourceName);
+          break;
       }
     }, 0);
   }, [
@@ -514,6 +560,7 @@ export function RemoveFlow({
     handleSelectOnlineEval,
     handleSelectPolicyEngine,
     handleSelectPolicy,
+    handleSelectConfigBundle,
   ]);
 
   // Confirm handlers - pass preview for logging
@@ -661,6 +708,22 @@ export function RemoveFlow({
     [removePolicyOp]
   );
 
+  const handleConfirmConfigBundle = useCallback(
+    async (bundleName: string, preview: RemovalPreview) => {
+      pendingResultRef.current = null;
+      setResultReady(false);
+      setFlow({ name: 'loading', message: `Removing configuration bundle ${bundleName}...` });
+      const result = await removeConfigBundleOp(bundleName, preview);
+      if (result.success) {
+        pendingResultRef.current = { name: 'config-bundle-success', bundleName, logFilePath: result.logFilePath };
+      } else {
+        pendingResultRef.current = { name: 'error', message: result.error };
+      }
+      setResultReady(true);
+    },
+    [removeConfigBundleOp]
+  );
+
   const resetAll = useCallback(() => {
     resetPreview();
     resetRemoveAgent();
@@ -672,6 +735,7 @@ export function RemoveFlow({
     resetRemoveOnlineEval();
     resetRemovePolicyEngine();
     resetRemovePolicy();
+    resetRemoveConfigBundle();
   }, [
     resetPreview,
     resetRemoveAgent,
@@ -683,6 +747,7 @@ export function RemoveFlow({
     resetRemoveOnlineEval,
     resetRemovePolicyEngine,
     resetRemovePolicy,
+    resetRemoveConfigBundle,
   ]);
 
   const refreshAll = useCallback(async () => {
@@ -696,6 +761,7 @@ export function RemoveFlow({
       refreshOnlineEvals(),
       refreshPolicyEngines(),
       refreshPolicies(),
+      refreshConfigBundles(),
     ]);
   }, [
     refreshAgents,
@@ -707,6 +773,7 @@ export function RemoveFlow({
     refreshOnlineEvals,
     refreshPolicyEngines,
     refreshPolicies,
+    refreshConfigBundles,
   ]);
 
   // Select screen - wait for data to load to avoid arrow position issues
@@ -727,6 +794,7 @@ export function RemoveFlow({
         onlineEvalCount={onlineEvalConfigs.length}
         policyEngineCount={policyEngines.length}
         policyCount={policies.length}
+        configBundleCount={configBundles.length}
       />
     );
   }
@@ -861,6 +929,19 @@ export function RemoveFlow({
     );
   }
 
+  if (flow.name === 'select-config-bundle') {
+    if (initialResourceName && isLoading) {
+      return null;
+    }
+    return (
+      <RemoveConfigBundleScreen
+        configBundles={configBundles}
+        onSelect={(name: string) => void handleSelectConfigBundle(name)}
+        onExit={() => setFlow({ name: 'select' })}
+      />
+    );
+  }
+
   // Confirmation screens
   if (flow.name === 'confirm-agent') {
     return (
@@ -957,6 +1038,17 @@ export function RemoveFlow({
         preview={flow.preview}
         onConfirm={() => void handleConfirmPolicy(flow.compositeKey, flow.policyName, flow.preview)}
         onCancel={() => setFlow({ name: 'select-policy' })}
+      />
+    );
+  }
+
+  if (flow.name === 'confirm-config-bundle') {
+    return (
+      <RemoveConfirmScreen
+        title={`Remove Configuration Bundle: ${flow.bundleName}`}
+        preview={flow.preview}
+        onConfirm={() => void handleConfirmConfigBundle(flow.bundleName, flow.preview)}
+        onCancel={() => setFlow({ name: 'select-config-bundle' })}
       />
     );
   }
@@ -1096,6 +1188,22 @@ export function RemoveFlow({
         isInteractive={isInteractive}
         message={`Removed policy: ${flow.policyName}`}
         detail="Policy removed from agentcore.json. Deploy with `agentcore deploy` to apply changes."
+        logFilePath={flow.logFilePath}
+        onRemoveAnother={() => {
+          resetAll();
+          void refreshAll().then(() => setFlow({ name: 'select' }));
+        }}
+        onExit={onExit}
+      />
+    );
+  }
+
+  if (flow.name === 'config-bundle-success') {
+    return (
+      <RemoveSuccessScreen
+        isInteractive={isInteractive}
+        message={`Removed configuration bundle: ${flow.bundleName}`}
+        detail="Configuration bundle removed from agentcore.json. Deploy with `agentcore deploy` to apply changes."
         logFilePath={flow.logFilePath}
         onRemoveAnother={() => {
           resetAll();

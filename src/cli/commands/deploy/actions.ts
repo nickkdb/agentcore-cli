@@ -31,6 +31,7 @@ import {
   validateProject,
 } from '../../operations/deploy';
 import { formatTargetStatus, getGatewayTargetStatuses } from '../../operations/deploy/gateway-status';
+import { setupConfigBundles } from '../../operations/deploy/post-deploy-config-bundles';
 import type { DeployResult } from './types';
 
 export interface ValidatedDeployOptions {
@@ -442,6 +443,33 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
     }
 
     endStep('success');
+
+    // Post-deploy: Create/update configuration bundles
+    const configBundleSpecs = context.projectSpec.configBundles ?? [];
+    if (configBundleSpecs.length > 0) {
+      const existingConfigBundles = deployedState.targets?.[target.name]?.resources?.configBundles;
+      const configBundleResult = await setupConfigBundles({
+        region: target.region,
+        projectSpec: context.projectSpec,
+        existingBundles: existingConfigBundles,
+      });
+
+      // Merge config bundle state into deployed state
+      if (Object.keys(configBundleResult.configBundles).length > 0) {
+        const updatedState = await configIO.readDeployedState().catch(() => deployedState);
+        const targetResources = updatedState.targets[target.name]?.resources;
+        if (targetResources) {
+          targetResources.configBundles = configBundleResult.configBundles;
+          await configIO.writeDeployedState(updatedState);
+        }
+      }
+
+      if (configBundleResult.hasErrors) {
+        const errors = configBundleResult.results.filter(r => r.status === 'error');
+        const errorMessages = errors.map(err => `"${err.bundleName}": ${err.error}`).join('; ');
+        throw new Error(`Config bundle setup failed: ${errorMessages}`);
+      }
+    }
 
     // Post-deploy: Enable CloudWatch Transaction Search (non-blocking, silent)
     const nextSteps = agentNames.length > 0 ? [...AGENT_NEXT_STEPS] : [...MEMORY_ONLY_NEXT_STEPS];

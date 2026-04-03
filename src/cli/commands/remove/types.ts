@@ -7,7 +7,8 @@ export type ResourceType =
   | 'evaluator'
   | 'online-eval'
   | 'policy-engine'
-  | 'policy';
+  | 'policy'
+  | 'config-bundle';
 
 export interface RemoveOptions {
   resourceType: ResourceType;

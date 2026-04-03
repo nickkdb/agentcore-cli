@@ -15,6 +15,7 @@ import { getErrorMessage, isChangesetInProgressError, isExpiredTokenError } from
 import { ExecLogger } from '../../../logging';
 import { performStackTeardown, setupTransactionSearch } from '../../../operations/deploy';
 import { getGatewayTargetStatuses } from '../../../operations/deploy/gateway-status';
+import { setupConfigBundles } from '../../../operations/deploy/post-deploy-config-bundles';
 import {
   type StackDiffSummary,
   type Step,
@@ -302,6 +303,39 @@ export function useDeployFlow(options: DeployFlowOptions = {}): DeployFlowState 
       policies,
     });
     await configIO.writeDeployedState(deployedState);
+
+    // Post-deploy: Create/update configuration bundles
+    const configBundleSpecs = ctx.projectSpec.configBundles ?? [];
+    if (configBundleSpecs.length > 0) {
+      try {
+        const existingConfigBundles = deployedState.targets?.[target.name]?.resources?.configBundles;
+        const configBundleResult = await setupConfigBundles({
+          region: target.region,
+          projectSpec: ctx.projectSpec,
+          existingBundles: existingConfigBundles,
+        });
+
+        // Merge config bundle state into deployed state
+        if (Object.keys(configBundleResult.configBundles).length > 0) {
+          const updatedState = await configIO.readDeployedState().catch(() => deployedState);
+          const targetResources = updatedState.targets[target.name]?.resources;
+          if (targetResources) {
+            targetResources.configBundles = configBundleResult.configBundles;
+            await configIO.writeDeployedState(updatedState);
+          }
+        }
+
+        if (configBundleResult.hasErrors) {
+          const errors = configBundleResult.results.filter(r => r.status === 'error');
+          for (const err of errors) {
+            logger.log(`Config bundle "${err.bundleName}" setup error: ${err.error}`, 'warn');
+          }
+        }
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.log(`Config bundle setup failed: ${message}`, 'warn');
+      }
+    }
 
     // Query gateway target sync statuses (non-blocking)
     const allStatuses: { name: string; status: string }[] = [];

@@ -169,6 +169,18 @@ export const OnlineEvalDeployedStateSchema = z.object({
 export type OnlineEvalDeployedState = z.infer<typeof OnlineEvalDeployedStateSchema>;
 
 // ============================================================================
+// Configuration Bundle Deployed State
+// ============================================================================
+
+export const ConfigBundleDeployedStateSchema = z.object({
+  bundleId: z.string().min(1),
+  bundleArn: z.string().min(1),
+  versionId: z.string().min(1),
+});
+
+export type ConfigBundleDeployedState = z.infer<typeof ConfigBundleDeployedStateSchema>;
+
+// ============================================================================
 // Deployed Resource State
 // ============================================================================
 
@@ -180,6 +192,7 @@ export const DeployedResourceStateSchema = z.object({
   credentials: z.record(z.string(), CredentialDeployedStateSchema).optional(),
   evaluators: z.record(z.string(), EvaluatorDeployedStateSchema).optional(),
   onlineEvalConfigs: z.record(z.string(), OnlineEvalDeployedStateSchema).optional(),
+  configBundles: z.record(z.string(), ConfigBundleDeployedStateSchema).optional(),
   policyEngines: z.record(z.string(), PolicyEngineDeployedStateSchema).optional(),
   policies: z.record(z.string(), PolicyDeployedStateSchema).optional(),
   stackName: z.string().optional(),

@@ -16,7 +16,8 @@ export interface RemoveLoggerOptions {
     | 'evaluator'
     | 'online-eval'
     | 'policy-engine'
-    | 'policy';
+    | 'policy'
+    | 'config-bundle';
   /** Name of the resource being removed */
   resourceName: string;
 }
