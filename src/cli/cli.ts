@@ -1,8 +1,8 @@
 import { registerAdd } from './commands/add';
+import { registerConfigBundle } from './commands/config-bundle';
 import { registerCreate } from './commands/create';
 import { registerDeploy } from './commands/deploy';
 import { registerDev } from './commands/dev';
-import { registerEdit } from './commands/edit';
 import { registerEval } from './commands/eval';
 import { registerFetch } from './commands/fetch';
 import { registerHelp } from './commands/help';
@@ -19,7 +19,7 @@ import { registerTraces } from './commands/traces';
 import { registerUpdate } from './commands/update';
 import { registerValidate } from './commands/validate';
 import { PACKAGE_VERSION } from './constants';
-import { ALL_PRIMITIVES, configBundlePrimitive } from './primitives';
+import { ALL_PRIMITIVES } from './primitives';
 import { App } from './tui/App';
 import { LayoutProvider } from './tui/context';
 import { COMMAND_DESCRIPTIONS } from './tui/copy';
@@ -152,15 +152,12 @@ export function registerCommands(program: Command) {
   registerTraces(program);
   registerUpdate(program);
   registerValidate(program);
-  const editCmd = registerEdit(program);
+  registerConfigBundle(program);
 
   // Register primitive subcommands (add agent, remove agent, add memory, etc.)
   for (const primitive of ALL_PRIMITIVES) {
     primitive.registerCommands(addCmd, removeCmd);
   }
-
-  // Register edit subcommands
-  configBundlePrimitive.registerEditCommand(editCmd);
 }
 
 export const main = async (argv: string[]) => {

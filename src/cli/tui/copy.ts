@@ -49,6 +49,7 @@ export const COMMAND_DESCRIPTIONS = {
   import: 'Import resources from a Bedrock AgentCore Starter Toolkit project.',
   update: 'Check for and install CLI updates',
   validate: 'Validate agentcore/ config files.',
+  'config-bundle': 'Manage configuration bundle versions and diffs.',
 } as const;
 
 /**

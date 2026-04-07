@@ -5,10 +5,10 @@ import { CLI_ONLY_EXAMPLES } from './copy';
 import { MissingProjectMessage, WrongDirectoryMessage, getProjectRootMismatch, projectExists } from './guards';
 import { AddFlow } from './screens/add/AddFlow';
 import { CliOnlyScreen } from './screens/cli-only';
+import { ConfigBundleFlow } from './screens/config-bundle-hub';
 import { CreateScreen } from './screens/create';
 import { DeployScreen } from './screens/deploy/DeployScreen';
 import { DevScreen } from './screens/dev/DevScreen';
-import { EditFlow } from './screens/edit';
 import { EvalHubScreen, EvalScreen } from './screens/eval';
 import { FetchAccessScreen } from './screens/fetch-access';
 import { HelpScreen, HomeScreen } from './screens/home';
@@ -35,7 +35,6 @@ type Route =
   | { name: 'invoke' }
   | { name: 'create' }
   | { name: 'add' }
-  | { name: 'edit' }
   | { name: 'status' }
   | { name: 'remove' }
   | { name: 'run' }
@@ -47,6 +46,7 @@ type Route =
   | { name: 'validate' }
   | { name: 'package' }
   | { name: 'update' }
+  | { name: 'config-bundle' }
   | { name: 'cli-only'; commandId: string };
 
 // Commands that don't require being at the project root
@@ -102,8 +102,6 @@ function AppContent() {
         return;
       }
       setRoute({ name: 'add' });
-    } else if (id === 'edit') {
-      setRoute({ name: 'edit' });
     } else if (id === 'remove') {
       setRoute({ name: 'remove' });
     } else if (id === 'run') {
@@ -118,6 +116,8 @@ function AppContent() {
       setRoute({ name: 'package' });
     } else if (id === 'update') {
       setRoute({ name: 'update' });
+    } else if (id === 'config-bundle') {
+      setRoute({ name: 'config-bundle' });
     }
   };
 
@@ -175,18 +175,6 @@ function AppContent() {
       <AddFlow
         isInteractive={true}
         onExit={() => setRoute({ name: 'help' })}
-        onDev={() => setRoute({ name: 'dev' })}
-        onDeploy={() => setRoute({ name: 'deploy' })}
-      />
-    );
-  }
-
-  if (route.name === 'edit') {
-    return (
-      <EditFlow
-        isInteractive={true}
-        onExit={() => setRoute({ name: 'help' })}
-        onBack={() => setRoute({ name: 'help' })}
         onDev={() => setRoute({ name: 'dev' })}
         onDeploy={() => setRoute({ name: 'deploy' })}
       />
@@ -271,6 +259,10 @@ function AppContent() {
 
   if (route.name === 'update') {
     return <UpdateScreen isInteractive={true} onExit={() => setRoute({ name: 'help' })} />;
+  }
+
+  if (route.name === 'config-bundle') {
+    return <ConfigBundleFlow onExit={() => setRoute({ name: 'help' })} />;
   }
 
   if (route.name === 'cli-only') {

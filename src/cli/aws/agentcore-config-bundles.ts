@@ -142,11 +142,18 @@ export interface GetConfigurationBundleVersionResult {
 
 // ── List Versions ───────────────────────────────────────────────────────────
 
+export interface ListConfigurationBundleVersionsFilter {
+  branchName?: string;
+  latestPerBranch?: boolean;
+  createdBy?: string[];
+}
+
 export interface ListConfigurationBundleVersionsOptions {
   region: string;
   bundleId: string;
   maxResults?: number;
   nextToken?: string;
+  filter?: ListConfigurationBundleVersionsFilter;
 }
 
 export interface ConfigurationBundleVersionSummary {
@@ -350,10 +357,13 @@ export async function listConfigurationBundleVersions(
   if (options.nextToken) params.set('nextToken', options.nextToken);
   const query = params.toString();
 
+  const body = options.filter ? JSON.stringify({ filter: options.filter }) : undefined;
+
   const data = await signedRequest({
     region: options.region,
     method: 'POST',
     path: `/configuration-bundles/${options.bundleId}/versions${query ? `?${query}` : ''}`,
+    body,
   });
 
   const result = data as ListConfigurationBundleVersionsResult;
