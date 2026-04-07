@@ -41,3 +41,21 @@ export {
   type StopRuntimeSessionOptions,
   type StopRuntimeSessionResult,
 } from './agentcore';
+export {
+  startRecommendation,
+  getRecommendation,
+  listRecommendations,
+  deleteRecommendation,
+  type StartRecommendationOptions,
+  type StartRecommendationResult,
+  type GetRecommendationOptions,
+  type GetRecommendationResult,
+  type ListRecommendationsOptions,
+  type ListRecommendationsResult,
+  type DeleteRecommendationOptions,
+  type DeleteRecommendationResult,
+  type RecommendationSummary,
+  type RecommendationType,
+  type RecommendationConfig,
+  type RecommendationResult,
+} from './agentcore-recommendation';

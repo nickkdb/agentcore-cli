@@ -11,6 +11,7 @@ import { registerInvoke } from './commands/invoke';
 import { registerLogs } from './commands/logs';
 import { registerPackage } from './commands/package';
 import { registerPause } from './commands/pause';
+import { registerRecommendations } from './commands/recommendations';
 import { registerRemove } from './commands/remove';
 import { registerResume } from './commands/resume';
 import { registerRun } from './commands/run';
@@ -145,6 +146,7 @@ export function registerCommands(program: Command) {
   registerLogs(program);
   registerPackage(program);
   registerPause(program);
+  registerRecommendations(program);
   const removeCmd = registerRemove(program);
   registerResume(program);
   registerRun(program);

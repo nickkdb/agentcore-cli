@@ -15,6 +15,7 @@ import { HelpScreen, HomeScreen } from './screens/home';
 import { InvokeScreen } from './screens/invoke';
 import { OnlineEvalDashboard } from './screens/online-eval';
 import { PackageScreen } from './screens/package';
+import { RecommendationFlow, RecommendationHistoryScreen, RecommendationsHubScreen } from './screens/recommendation';
 import { RemoveFlow } from './screens/remove';
 import { RunEvalFlow, RunScreen } from './screens/run-eval';
 import { StatusScreen } from './screens/status/StatusScreen';
@@ -39,6 +40,9 @@ type Route =
   | { name: 'remove' }
   | { name: 'run' }
   | { name: 'run-eval'; from?: 'run' | 'evals' }
+  | { name: 'recommendations-hub' }
+  | { name: 'recommend'; from?: 'recommendations-hub' }
+  | { name: 'recommendation-history' }
   | { name: 'evals' }
   | { name: 'eval-runs' }
   | { name: 'online-evals' }
@@ -110,6 +114,8 @@ function AppContent() {
       setRoute({ name: 'evals' });
     } else if (id === 'fetch') {
       setRoute({ name: 'fetch-access' });
+    } else if (id === 'recommendations') {
+      setRoute({ name: 'recommendations-hub' });
     } else if (id === 'validate') {
       setRoute({ name: 'validate' });
     } else if (id === 'package') {
@@ -235,6 +241,28 @@ function AppContent() {
         onViewRuns={() => setRoute({ name: 'eval-runs' })}
       />
     );
+  }
+
+  if (route.name === 'recommendations-hub') {
+    return (
+      <RecommendationsHubScreen
+        onSelect={view => {
+          if (view === 'run-recommendation') setRoute({ name: 'recommend', from: 'recommendations-hub' });
+          if (view === 'recommendation-history') setRoute({ name: 'recommendation-history' });
+          if (view === 'list-recommendations') setRoute({ name: 'help' }); // TODO: wire to list recommendations TUI
+        }}
+        onExit={() => setRoute({ name: 'help' })}
+      />
+    );
+  }
+
+  if (route.name === 'recommend') {
+    const backRoute = route.from ?? 'recommendations-hub';
+    return <RecommendationFlow onExit={() => setRoute({ name: backRoute } as Route)} />;
+  }
+
+  if (route.name === 'recommendation-history') {
+    return <RecommendationHistoryScreen onExit={() => setRoute({ name: 'recommendations-hub' })} />;
   }
 
   if (route.name === 'eval-runs') {

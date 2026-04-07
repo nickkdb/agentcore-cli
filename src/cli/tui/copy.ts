@@ -45,6 +45,8 @@ export const COMMAND_DESCRIPTIONS = {
   fetch: 'Fetch access info for deployed resources.',
   pause: 'Pause an online eval config. Supports --arn for configs outside the project.',
   resume: 'Resume a paused online eval config. Supports --arn for configs outside the project.',
+  recommend: 'Run optimization recommendations for system prompts and tool descriptions.',
+  recommendations: 'Manage optimization recommendations (history).',
   run: 'Run on-demand evaluation. Supports --agent-arn for agents outside the project.',
   import: 'Import resources from a Bedrock AgentCore Starter Toolkit project.',
   update: 'Check for and install CLI updates',
