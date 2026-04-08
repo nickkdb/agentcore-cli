@@ -145,7 +145,7 @@ export interface GetConfigurationBundleVersionResult {
 export interface ListConfigurationBundleVersionsFilter {
   branchName?: string;
   latestPerBranch?: boolean;
-  createdBy?: string[];
+  createdByName?: string;
 }
 
 export interface ListConfigurationBundleVersionsOptions {

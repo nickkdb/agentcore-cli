@@ -112,6 +112,19 @@ export async function runBatchEvaluationCommand(
     logger?.log(`Log group: ${runtimeLogGroup}`);
     logger?.endStep('success');
 
+    // 2b. Resolve evaluator names to deployed IDs
+    const targetResources = Object.values(deployedState.targets).find(t => t.resources?.runtimes?.[agent])?.resources;
+    const resolvedEvaluators = evaluators.map(name => {
+      if (name.startsWith('Builtin.')) return name;
+      const deployed = targetResources?.evaluators?.[name];
+      if (deployed?.evaluatorId) {
+        logger?.log(`Resolved evaluator "${name}" → ${deployed.evaluatorId}`);
+        return deployed.evaluatorId;
+      }
+      logger?.log(`Evaluator "${name}" not found in deployed state, passing as-is`, 'warn');
+      return name;
+    });
+
     // 3. Start the batch evaluation
     logger?.startStep('Start batch evaluation');
     const evalName = options.name ?? `${projectSpec.name}_${agent}_${Date.now()}`;
@@ -122,7 +135,7 @@ export async function runBatchEvaluationCommand(
       region,
       name: evalName,
       evaluationConfig: {
-        evaluators: evaluators.map(id => ({ evaluatorId: id })),
+        evaluators: resolvedEvaluators.map(id => ({ evaluatorId: id })),
       },
       sessionSource: {
         cloudWatchSource: {

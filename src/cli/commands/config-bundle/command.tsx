@@ -47,7 +47,7 @@ async function handleVersions(options: {
   bundle: string;
   branch?: string;
   latestPerBranch?: boolean;
-  createdBy?: string[];
+  createdBy?: string;
   region?: string;
   json?: boolean;
 }) {
@@ -57,7 +57,7 @@ async function handleVersions(options: {
   const filter: ListConfigurationBundleVersionsFilter = {};
   if (options.branch) filter.branchName = options.branch;
   if (options.latestPerBranch) filter.latestPerBranch = true;
-  if (options.createdBy?.length) filter.createdBy = options.createdBy;
+  if (options.createdBy) filter.createdByName = options.createdBy;
   const hasFilter = Object.keys(filter).length > 0;
 
   // Paginate to collect all versions
@@ -116,7 +116,7 @@ export const registerConfigBundle = (program: Command) => {
     .requiredOption('--bundle <name>', 'Bundle name')
     .option('--branch <name>', 'Filter by branch name')
     .option('--latest-per-branch', 'Show only the latest version per branch')
-    .option('--created-by <filters...>', 'Filter by creator (e.g. "user", "recommendation")')
+    .option('--created-by <name>', 'Filter by creator name (e.g. "user", "recommendation")')
     .option('--region <region>', 'AWS region override')
     .option('--json', 'Output as JSON')
     .action(
@@ -124,7 +124,7 @@ export const registerConfigBundle = (program: Command) => {
         bundle: string;
         branch?: string;
         latestPerBranch?: boolean;
-        createdBy?: string[];
+        createdBy?: string;
         region?: string;
         json?: boolean;
       }) => {
