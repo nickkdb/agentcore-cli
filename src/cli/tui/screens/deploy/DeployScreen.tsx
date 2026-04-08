@@ -76,6 +76,7 @@ export function DeployScreen({
     diffSummaries,
     numStacksWithChanges,
     deployNotes,
+    postDeployWarnings,
     isDiffLoading,
     requestDiff,
     hasError,
@@ -359,6 +360,20 @@ export function DeployScreen({
       {allSuccess && diffMode && (
         <Box flexDirection="column" marginTop={1}>
           <Text color="green">Diff complete</Text>
+        </Box>
+      )}
+
+      {allSuccess && postDeployWarnings.length > 0 && (
+        <Box flexDirection="column" marginTop={1}>
+          <Text color="yellow" bold>
+            Post-deploy warnings:
+          </Text>
+          {postDeployWarnings.map((w, i) => (
+            <Text key={i} color="yellow">
+              {'  '}
+              {w}
+            </Text>
+          ))}
         </Box>
       )}
 

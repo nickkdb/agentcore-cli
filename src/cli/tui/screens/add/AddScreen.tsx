@@ -11,6 +11,7 @@ const ADD_RESOURCES = [
   { id: 'gateway-target', title: 'Gateway Target', description: 'Extend agent capabilities' },
   { id: 'policy', title: 'Policy', description: 'Cedar policies for gateway tools' },
   { id: 'config-bundle', title: 'Configuration Bundle', description: 'Versioned component configurations' },
+  { id: 'ab-test', title: 'AB Test', description: 'Compare agent configurations with traffic splitting' },
 ] as const;
 
 const ADD_RESOURCE_ITEMS: SelectableItem[] = ADD_RESOURCES.map(r => ({

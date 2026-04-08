@@ -1,3 +1,4 @@
+export { ABTestPrimitive } from './ABTestPrimitive';
 export { BasePrimitive } from './BasePrimitive';
 export { MemoryPrimitive } from './MemoryPrimitive';
 export { CredentialPrimitive } from './CredentialPrimitive';
@@ -16,6 +17,7 @@ export {
   gatewayPrimitive,
   gatewayTargetPrimitive,
   configBundlePrimitive,
+  abTestPrimitive,
   getPrimitive,
 } from './registry';
 export { SOURCE_CODE_NOTE } from './constants';

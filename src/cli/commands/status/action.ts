@@ -19,7 +19,8 @@ export interface ResourceStatusEntry {
     | 'online-eval'
     | 'policy-engine'
     | 'policy'
-    | 'config-bundle';
+    | 'config-bundle'
+    | 'ab-test';
   name: string;
   deploymentState: ResourceDeploymentState;
   identifier?: string;
@@ -211,6 +212,14 @@ export function computeResourceStatuses(
     getLocalDetail: item => item.description,
   });
 
+  const abTests = diffResourceSet({
+    resourceType: 'ab-test',
+    localItems: project.abTests ?? [],
+    deployedRecord: resources?.abTests ?? {},
+    getIdentifier: deployed => deployed.abTestArn,
+    getLocalDetail: item => item.description,
+  });
+
   return [
     ...agents,
     ...credentials,
@@ -221,6 +230,7 @@ export function computeResourceStatuses(
     ...policyEngines,
     ...policies,
     ...configBundles,
+    ...abTests,
   ];
 }
 

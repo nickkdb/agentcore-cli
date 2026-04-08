@@ -31,6 +31,7 @@ import {
   validateProject,
 } from '../../operations/deploy';
 import { formatTargetStatus, getGatewayTargetStatuses } from '../../operations/deploy/gateway-status';
+import { setupABTests } from '../../operations/deploy/post-deploy-ab-tests';
 import { setupConfigBundles } from '../../operations/deploy/post-deploy-config-bundles';
 import type { DeployResult } from './types';
 
@@ -468,6 +469,35 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
         const errors = configBundleResult.results.filter(r => r.status === 'error');
         const errorMessages = errors.map(err => `"${err.bundleName}": ${err.error}`).join('; ');
         throw new Error(`Config bundle setup failed: ${errorMessages}`);
+      }
+    }
+
+    // Post-deploy: Create/update AB tests
+    const abTestSpecs = context.projectSpec.abTests ?? [];
+    if (abTestSpecs.length > 0) {
+      const existingABTests = deployedState.targets?.[target.name]?.resources?.abTests;
+      const deployedResources = deployedState.targets?.[target.name]?.resources;
+      const abTestResult = await setupABTests({
+        region: target.region,
+        projectSpec: context.projectSpec,
+        existingABTests,
+        deployedResources,
+      });
+
+      // Merge AB test state into deployed state
+      if (Object.keys(abTestResult.abTests).length > 0) {
+        const updatedState = await configIO.readDeployedState().catch(() => deployedState);
+        const targetResources = updatedState.targets[target.name]?.resources;
+        if (targetResources) {
+          targetResources.abTests = abTestResult.abTests;
+          await configIO.writeDeployedState(updatedState);
+        }
+      }
+
+      if (abTestResult.hasErrors) {
+        const errors = abTestResult.results.filter(r => r.status === 'error');
+        const errorMessages = errors.map(err => `"${err.testName}": ${err.error}`).join('; ');
+        throw new Error(`AB test setup failed: ${errorMessages}`);
       }
     }
 

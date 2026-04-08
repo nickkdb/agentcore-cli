@@ -43,12 +43,12 @@ export const COMMAND_DESCRIPTIONS = {
   traces: 'View and download agent traces.',
   evals: 'View saved eval and batch eval results from past runs.',
   fetch: 'Fetch access info for deployed resources.',
-  pause: 'Pause an online eval config. Supports --arn for configs outside the project.',
-  resume: 'Resume a paused online eval config. Supports --arn for configs outside the project.',
+  pause: 'Pause a deployed resource (online eval config, A/B test).',
+  resume: 'Resume a paused resource (online eval config, A/B test).',
   recommend: 'Run optimization recommendations for system prompts and tool descriptions.',
   recommendations: 'View recommendation history from past runs.',
   run: 'Run evaluations, batch evaluations, or optimization recommendations.',
-  stop: 'Stop a running batch evaluation.',
+  stop: 'Stop a running batch evaluation or A/B test.',
   import: 'Import a runtime, memory, or starter toolkit into this project. [experimental]',
   update: 'Check for and install CLI updates',
   validate: 'Validate agentcore/ config files.',
@@ -120,10 +120,11 @@ export const CLI_ONLY_EXAMPLES: Record<string, { description: string; examples: 
     ],
   },
   stop: {
-    description: 'Stop a running batch evaluation.',
+    description: 'Stop a running batch evaluation or A/B test.',
     examples: [
       'agentcore stop batch-evaluation -i <batch-eval-id>',
       'agentcore stop batch-evaluation -i <batch-eval-id> --json',
+      'agentcore stop ab-test <name>',
     ],
   },
   evals: {

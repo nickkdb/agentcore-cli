@@ -54,6 +54,7 @@ describe('requiresUv', () => {
       agentCoreGateways: [],
       policyEngines: [],
       configBundles: [],
+      abTests: [],
     };
     expect(requiresUv(project)).toBe(true);
   });
@@ -80,6 +81,7 @@ describe('requiresUv', () => {
       agentCoreGateways: [],
       policyEngines: [],
       configBundles: [],
+      abTests: [],
     };
     expect(requiresUv(project)).toBe(false);
   });
@@ -97,6 +99,7 @@ describe('requiresUv', () => {
       agentCoreGateways: [],
       policyEngines: [],
       configBundles: [],
+      abTests: [],
     };
     expect(requiresUv(project)).toBe(false);
   });
@@ -125,6 +128,7 @@ describe('requiresContainerRuntime', () => {
       agentCoreGateways: [],
       policyEngines: [],
       configBundles: [],
+      abTests: [],
     };
     expect(requiresContainerRuntime(project)).toBe(true);
   });
@@ -151,6 +155,7 @@ describe('requiresContainerRuntime', () => {
       agentCoreGateways: [],
       policyEngines: [],
       configBundles: [],
+      abTests: [],
     };
     expect(requiresContainerRuntime(project)).toBe(false);
   });
@@ -168,6 +173,7 @@ describe('requiresContainerRuntime', () => {
       agentCoreGateways: [],
       policyEngines: [],
       configBundles: [],
+      abTests: [],
     };
     expect(requiresContainerRuntime(project)).toBe(false);
   });
@@ -202,6 +208,7 @@ describe('requiresContainerRuntime', () => {
       agentCoreGateways: [],
       policyEngines: [],
       configBundles: [],
+      abTests: [],
     };
     expect(requiresContainerRuntime(project)).toBe(true);
   });
@@ -270,6 +277,7 @@ describe('checkDependencyVersions', () => {
       agentCoreGateways: [],
       policyEngines: [],
       configBundles: [],
+      abTests: [],
     };
 
     const result = await checkDependencyVersions(project);
@@ -291,6 +299,7 @@ describe('checkDependencyVersions', () => {
       agentCoreGateways: [],
       policyEngines: [],
       configBundles: [],
+      abTests: [],
     };
 
     const result = await checkDependencyVersions(project);
@@ -320,6 +329,7 @@ describe('checkDependencyVersions', () => {
       agentCoreGateways: [],
       policyEngines: [],
       configBundles: [],
+      abTests: [],
     };
 
     const result = await checkDependencyVersions(project);

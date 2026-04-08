@@ -1,3 +1,4 @@
+import { ABTestPrimitive } from './ABTestPrimitive';
 import { AgentPrimitive } from './AgentPrimitive';
 import type { BasePrimitive } from './BasePrimitive';
 import { ConfigBundlePrimitive } from './ConfigBundlePrimitive';
@@ -24,6 +25,7 @@ export const gatewayTargetPrimitive = new GatewayTargetPrimitive();
 export const policyEnginePrimitive = new PolicyEnginePrimitive();
 export const policyPrimitive = new PolicyPrimitive();
 export const configBundlePrimitive = new ConfigBundlePrimitive();
+export const abTestPrimitive = new ABTestPrimitive();
 
 /**
  * All primitives in display order.
@@ -39,6 +41,7 @@ export const ALL_PRIMITIVES: BasePrimitive<unknown, RemovableResource>[] = [
   policyEnginePrimitive,
   policyPrimitive,
   configBundlePrimitive,
+  abTestPrimitive,
 ];
 
 /**

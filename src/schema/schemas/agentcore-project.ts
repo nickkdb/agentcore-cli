@@ -9,6 +9,7 @@
 import { isReservedProjectName } from '../constants';
 import { AgentEnvSpecSchema } from './agent-env';
 import { AgentCoreGatewaySchema, AgentCoreGatewayTargetSchema, AgentCoreMcpRuntimeToolSchema } from './mcp';
+import { ABTestSchema } from './primitives/ab-test';
 import { ConfigBundleSchema } from './primitives/config-bundle';
 import { EvaluationLevelSchema, EvaluatorConfigSchema, EvaluatorNameSchema } from './primitives/evaluator';
 import {
@@ -295,6 +296,16 @@ export const AgentCoreProjectSpecSchema = z
         uniqueBy(
           bundle => bundle.name,
           name => `Duplicate config bundle name: ${name}`
+        )
+      ),
+
+    abTests: z
+      .array(ABTestSchema)
+      .default([])
+      .superRefine(
+        uniqueBy(
+          test => test.name,
+          name => `Duplicate AB test name: ${name}`
         )
       ),
   })

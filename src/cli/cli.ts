@@ -1,3 +1,4 @@
+import { registerABTestCommand } from './commands/abtest';
 import { registerAdd } from './commands/add';
 import { registerConfigBundle } from './commands/config-bundle';
 import { registerCreate } from './commands/create';
@@ -162,6 +163,9 @@ export function registerCommands(program: Command) {
   for (const primitive of ALL_PRIMITIVES) {
     primitive.registerCommands(addCmd, removeCmd);
   }
+
+  // Register AB test detail command
+  registerABTestCommand(program);
 }
 
 export const main = async (argv: string[]) => {

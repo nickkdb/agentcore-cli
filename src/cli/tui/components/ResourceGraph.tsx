@@ -21,6 +21,7 @@ const ICONS = {
   'policy-engine': '▣',
   policy: '▢',
   'config-bundle': '⬡',
+  'ab-test': '⚗',
 } as const;
 
 interface ResourceGraphProps {
@@ -130,6 +131,7 @@ export function ResourceGraph({ project, mcp, agentName, resourceStatuses }: Res
   const unassignedTargets = mcp?.unassignedTargets ?? [];
   const policyEngines = project.policyEngines ?? [];
   const configBundles = project.configBundles ?? [];
+  const abTests = project.abTests ?? [];
 
   // Build lookup map and collect pending-removal resources in a single pass
   const { statusMap, pendingRemovals } = useMemo(() => {
@@ -311,6 +313,27 @@ export function ResourceGraph({ project, mcp, agentName, resourceStatuses }: Res
         </Box>
       )}
 
+      {/* AB Tests */}
+      {abTests.length > 0 && (
+        <Box flexDirection="column">
+          <SectionHeader>AB Tests</SectionHeader>
+          {abTests.map(test => {
+            const rsEntry = statusMap.get(`ab-test:${test.name}`);
+            return (
+              <ResourceRow
+                key={test.name}
+                icon={ICONS['ab-test']}
+                color="white"
+                name={test.name}
+                detail={rsEntry?.detail ?? test.description}
+                deploymentState={rsEntry?.deploymentState}
+                identifier={rsEntry?.identifier}
+              />
+            );
+          })}
+        </Box>
+      )}
+
       {/* Removed locally — still deployed in AWS, will be torn down on next deploy */}
       {pendingRemovals.length > 0 && (
         <Box flexDirection="column">
@@ -442,7 +465,8 @@ export function ResourceGraph({ project, mcp, agentName, resourceStatuses }: Res
           <Text color="magenta">{ICONS['online-eval']}</Text> online-eval{'  '}
           <Text color="magenta">{ICONS.gateway}</Text> gateway{'  '}
           <Text color="red">{ICONS['policy-engine']}</Text> policy engine{'  '}
-          <Text color="white">{ICONS['config-bundle']}</Text> config bundle
+          <Text color="white">{ICONS['config-bundle']}</Text> config bundle{'  '}
+          <Text color="white">{ICONS['ab-test']}</Text> ab test
         </Text>
         {resourceStatuses && resourceStatuses.length > 0 && (
           <Box flexDirection="column" marginTop={1}>

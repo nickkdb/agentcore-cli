@@ -1,3 +1,5 @@
+import { ConfigIO } from '../../../lib';
+import { listABTests, updateABTest } from '../../aws/agentcore-ab-tests';
 import { getErrorMessage } from '../../errors';
 import { handlePauseResume } from '../../operations/eval';
 import type { OnlineEvalActionOptions } from '../../operations/eval';
@@ -67,12 +69,135 @@ function registerOnlineEvalSubcommand(parent: Command, action: 'pause' | 'resume
     });
 }
 
+function getRegion(cliRegion?: string): string {
+  if (cliRegion) return cliRegion;
+  return process.env.AWS_DEFAULT_REGION ?? process.env.AWS_REGION ?? 'us-east-1';
+}
+
+async function resolveABTestId(testName: string, region: string): Promise<{ abTestId: string; error?: string }> {
+  try {
+    const configIO = new ConfigIO();
+    const deployedState = await configIO.readDeployedState();
+    for (const target of Object.values(deployedState.targets ?? {})) {
+      const abTests = target.resources?.abTests;
+      if (abTests?.[testName]) {
+        return { abTestId: abTests[testName].abTestId };
+      }
+    }
+  } catch {
+    // No deployed state
+  }
+
+  try {
+    const result = await listABTests({ region, maxResults: 100 });
+    const match = result.abTests.find(t => t.name === testName);
+    if (match) return { abTestId: match.abTestId };
+  } catch {
+    // API call failed
+  }
+
+  return { abTestId: '', error: `AB test "${testName}" not found in deployed state or API.` };
+}
+
+function registerABTestSubcommand(parent: Command, action: 'pause' | 'resume') {
+  const executionStatus = action === 'pause' ? 'PAUSED' : 'RUNNING';
+  const pastTense = action === 'pause' ? 'Paused' : 'Resumed';
+
+  parent
+    .command('ab-test')
+    .description(`${action === 'pause' ? 'Pause' : 'Resume'} a deployed A/B test`)
+    .argument('<name>', 'AB test name')
+    .option('--region <region>', 'AWS region')
+    .option('--json', 'Output as JSON')
+    .action(async (name: string, cliOptions: { region?: string; json?: boolean }) => {
+      try {
+        const region = getRegion(cliOptions.region);
+        const { abTestId, error } = await resolveABTestId(name, region);
+        if (error) {
+          if (cliOptions.json) {
+            console.log(JSON.stringify({ success: false, error }));
+          } else {
+            console.error(error);
+          }
+          process.exit(1);
+        }
+
+        const result = await updateABTest({
+          region,
+          abTestId,
+          executionStatus,
+        });
+
+        if (cliOptions.json) {
+          console.log(JSON.stringify({ success: true, ...result }));
+        } else {
+          console.log(`${pastTense} AB test "${name}" (execution: ${result.executionStatus})`);
+        }
+        process.exit(0);
+      } catch (error) {
+        if (cliOptions.json) {
+          console.log(JSON.stringify({ success: false, error: getErrorMessage(error) }));
+        } else {
+          console.error(`Error: ${getErrorMessage(error)}`);
+        }
+        process.exit(1);
+      }
+    });
+}
+
 export const registerPause = (program: Command) => {
   const pauseCmd = program.command('pause').description(COMMAND_DESCRIPTIONS.pause);
   registerOnlineEvalSubcommand(pauseCmd, 'pause');
+  registerABTestSubcommand(pauseCmd, 'pause');
 };
 
 export const registerResume = (program: Command) => {
   const resumeCmd = program.command('resume').description(COMMAND_DESCRIPTIONS.resume);
   registerOnlineEvalSubcommand(resumeCmd, 'resume');
+  registerABTestSubcommand(resumeCmd, 'resume');
+};
+
+export const registerStop = (program: Command) => {
+  const stopCmd = program.command('stop').description('Stop resources');
+
+  stopCmd
+    .command('ab-test')
+    .description('Stop a deployed A/B test permanently')
+    .argument('<name>', 'AB test name')
+    .option('--region <region>', 'AWS region')
+    .option('--json', 'Output as JSON')
+    .action(async (name: string, cliOptions: { region?: string; json?: boolean }) => {
+      try {
+        const region = getRegion(cliOptions.region);
+        const { abTestId, error } = await resolveABTestId(name, region);
+        if (error) {
+          if (cliOptions.json) {
+            console.log(JSON.stringify({ success: false, error }));
+          } else {
+            console.error(error);
+          }
+          process.exit(1);
+        }
+
+        const result = await updateABTest({
+          region,
+          abTestId,
+          executionStatus: 'STOPPED',
+        });
+
+        if (cliOptions.json) {
+          console.log(JSON.stringify({ success: true, ...result }));
+        } else {
+          console.log(`Stopped AB test "${name}" (execution: ${result.executionStatus})`);
+        }
+        process.exit(0);
+      } catch (error) {
+        if (cliOptions.json) {
+          console.log(JSON.stringify({ success: false, error: getErrorMessage(error) }));
+        } else {
+          console.error(`Error: ${getErrorMessage(error)}`);
+        }
+        process.exit(1);
+      }
+    });
 };

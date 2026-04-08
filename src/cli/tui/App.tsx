@@ -3,6 +3,7 @@ import { createProgram } from '../cli';
 import { LayoutProvider } from './context';
 import { CLI_ONLY_EXAMPLES } from './copy';
 import { MissingProjectMessage, WrongDirectoryMessage, getProjectRootMismatch, projectExists } from './guards';
+import { ABTestPickerScreen } from './screens/ab-test';
 import { AddFlow } from './screens/add/AddFlow';
 import { CliOnlyScreen } from './screens/cli-only';
 import { ConfigBundleFlow } from './screens/config-bundle-hub';
@@ -54,6 +55,7 @@ type Route =
   | { name: 'update' }
   | { name: 'config-bundle' }
   | { name: 'import' }
+  | { name: 'ab-test' }
   | { name: 'cli-only'; commandId: string };
 
 // Commands that don't require being at the project root
@@ -133,6 +135,8 @@ function AppContent() {
       setRoute({ name: 'update' });
     } else if (id === 'config-bundle') {
       setRoute({ name: 'config-bundle' });
+    } else if (id === 'ab-test') {
+      setRoute({ name: 'ab-test' });
     }
   };
 
@@ -314,6 +318,10 @@ function AppContent() {
 
   if (route.name === 'config-bundle') {
     return <ConfigBundleFlow onExit={() => setRoute({ name: 'help' })} />;
+  }
+
+  if (route.name === 'ab-test') {
+    return <ABTestPickerScreen onExit={() => setRoute({ name: 'help' })} />;
   }
 
   if (route.name === 'cli-only') {

@@ -17,7 +17,7 @@ const HIDDEN_FROM_TUI = ['help'] as const;
 /**
  * Commands that are CLI-only (shown but marked as requiring CLI invocation).
  */
-const CLI_ONLY_COMMANDS = ['logs', 'traces', 'pause', 'resume'] as const;
+const CLI_ONLY_COMMANDS = ['logs', 'traces', 'pause', 'resume', 'stop'] as const;
 
 /**
  * Commands hidden from TUI when inside an existing project.

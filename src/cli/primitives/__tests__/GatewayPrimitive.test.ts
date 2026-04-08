@@ -14,6 +14,7 @@ const defaultProject: AgentCoreProjectSpec = {
   agentCoreGateways: [],
   policyEngines: [],
   configBundles: [],
+  abTests: [],
 };
 
 const { mockConfigExists, mockReadProjectSpec, mockWriteProjectSpec } = vi.hoisted(() => ({

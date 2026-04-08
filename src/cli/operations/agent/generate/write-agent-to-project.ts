@@ -73,6 +73,7 @@ export async function writeAgentToProject(config: GenerateConfig, options?: Writ
       agentCoreGateways: [],
       policyEngines: [],
       configBundles: [],
+      abTests: [],
     };
 
     await configIO.writeProjectSpec(project);

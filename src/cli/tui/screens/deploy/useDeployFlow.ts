@@ -15,6 +15,7 @@ import { getErrorMessage, isChangesetInProgressError, isExpiredTokenError } from
 import { ExecLogger } from '../../../logging';
 import { performStackTeardown, setupTransactionSearch } from '../../../operations/deploy';
 import { getGatewayTargetStatuses } from '../../../operations/deploy/gateway-status';
+import { setupABTests } from '../../../operations/deploy/post-deploy-ab-tests';
 import { setupConfigBundles } from '../../../operations/deploy/post-deploy-config-bundles';
 import {
   type StackDiffSummary,
@@ -84,6 +85,8 @@ interface DeployFlowState {
   numStacksWithChanges?: number;
   /** Notes to display after successful deploy (e.g., transaction search info) */
   deployNotes: string[];
+  /** Warnings from post-deploy steps (config bundles, AB tests) */
+  postDeployWarnings: string[];
   /** Whether an on-demand diff is currently running */
   isDiffLoading: boolean;
   /** Request an on-demand diff (lazy: runs once, caches result) */
@@ -130,6 +133,7 @@ export function useDeployFlow(options: DeployFlowOptions = {}): DeployFlowState 
   const [numStacksWithChanges, setNumStacksWithChanges] = useState<number | undefined>();
   const [isDiffLoading, setIsDiffLoading] = useState(false);
   const [deployNotes, setDeployNotes] = useState<string[]>([]);
+  const [postDeployWarnings, setPostDeployWarnings] = useState<string[]>([]);
   const isDiffRunningRef = useRef(false);
   const [deployOutput, setDeployOutput] = useState<string | null>(null);
   const [deployMessages, setDeployMessages] = useState<DeployMessage[]>([]);
@@ -330,10 +334,51 @@ export function useDeployFlow(options: DeployFlowOptions = {}): DeployFlowState 
           for (const err of errors) {
             logger.log(`Config bundle "${err.bundleName}" setup error: ${err.error}`, 'warn');
           }
+          setPostDeployWarnings(prev => [
+            ...prev,
+            ...errors.map(err => `Config bundle "${err.bundleName}": ${err.error}`),
+          ]);
         }
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         logger.log(`Config bundle setup failed: ${message}`, 'warn');
+        setPostDeployWarnings(prev => [...prev, `Config bundle setup failed: ${message}`]);
+      }
+    }
+
+    // Post-deploy: Create/update AB tests
+    const abTestSpecs = ctx.projectSpec.abTests ?? [];
+    if (abTestSpecs.length > 0) {
+      try {
+        const existingABTests = deployedState.targets?.[target.name]?.resources?.abTests;
+        const deployedResources = deployedState.targets?.[target.name]?.resources;
+        const abTestResult = await setupABTests({
+          region: target.region,
+          projectSpec: ctx.projectSpec,
+          existingABTests,
+          deployedResources,
+        });
+
+        if (Object.keys(abTestResult.abTests).length > 0) {
+          const updatedState = await configIO.readDeployedState().catch(() => deployedState);
+          const targetResources = updatedState.targets[target.name]?.resources;
+          if (targetResources) {
+            targetResources.abTests = abTestResult.abTests;
+            await configIO.writeDeployedState(updatedState);
+          }
+        }
+
+        if (abTestResult.hasErrors) {
+          const errors = abTestResult.results.filter(r => r.status === 'error');
+          for (const err of errors) {
+            logger.log(`AB test "${err.testName}" setup error: ${err.error}`, 'warn');
+          }
+          setPostDeployWarnings(prev => [...prev, ...errors.map(err => `AB test "${err.testName}": ${err.error}`)]);
+        }
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.log(`AB test setup failed: ${message}`, 'warn');
+        setPostDeployWarnings(prev => [...prev, `AB test setup failed: ${message}`]);
       }
     }
 
@@ -673,6 +718,7 @@ export function useDeployFlow(options: DeployFlowOptions = {}): DeployFlowState 
     diffSummaries,
     numStacksWithChanges,
     deployNotes,
+    postDeployWarnings,
     isDiffLoading,
     requestDiff,
     stackOutputs,

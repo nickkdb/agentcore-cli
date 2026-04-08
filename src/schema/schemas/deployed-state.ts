@@ -181,6 +181,21 @@ export const ConfigBundleDeployedStateSchema = z.object({
 export type ConfigBundleDeployedState = z.infer<typeof ConfigBundleDeployedStateSchema>;
 
 // ============================================================================
+// AB Test Deployed State
+// ============================================================================
+
+export const ABTestDeployedStateSchema = z.object({
+  abTestId: z.string().min(1),
+  abTestArn: z.string().min(1),
+  /** IAM role ARN used by this AB test. */
+  roleArn: z.string().min(1).optional(),
+  /** Whether the CLI auto-created this role (true = CLI should delete on cleanup). */
+  roleCreatedByCli: z.boolean().optional(),
+});
+
+export type ABTestDeployedState = z.infer<typeof ABTestDeployedStateSchema>;
+
+// ============================================================================
 // Deployed Resource State
 // ============================================================================
 
@@ -193,6 +208,7 @@ export const DeployedResourceStateSchema = z.object({
   evaluators: z.record(z.string(), EvaluatorDeployedStateSchema).optional(),
   onlineEvalConfigs: z.record(z.string(), OnlineEvalDeployedStateSchema).optional(),
   configBundles: z.record(z.string(), ConfigBundleDeployedStateSchema).optional(),
+  abTests: z.record(z.string(), ABTestDeployedStateSchema).optional(),
   policyEngines: z.record(z.string(), PolicyEngineDeployedStateSchema).optional(),
   policies: z.record(z.string(), PolicyDeployedStateSchema).optional(),
   stackName: z.string().optional(),

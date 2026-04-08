@@ -3,6 +3,7 @@ import { VPC_ENDPOINT_WARNING } from '../../../commands/shared/vpc-utils';
 import { computeDefaultCredentialEnvVarName } from '../../../primitives/credential-utils';
 import { ErrorPrompt } from '../../components';
 import { useAvailableAgents } from '../../hooks/useCreateMcp';
+import { AddABTestFlow } from '../ab-test';
 import { AddAgentFlow } from '../agent/AddAgentFlow';
 import type { AddAgentConfig } from '../agent/types';
 import { FRAMEWORK_OPTIONS } from '../agent/types';
@@ -32,6 +33,7 @@ type FlowState =
   | { name: 'online-eval-wizard' }
   | { name: 'policy-wizard' }
   | { name: 'config-bundle-wizard' }
+  | { name: 'ab-test-wizard' }
   | {
       name: 'agent-create-success';
       agentName: string;
@@ -205,6 +207,9 @@ export function AddFlow(props: AddFlowProps) {
         break;
       case 'config-bundle':
         setFlow({ name: 'config-bundle-wizard' });
+        break;
+      case 'ab-test':
+        setFlow({ name: 'ab-test-wizard' });
         break;
     }
   }, []);
@@ -443,6 +448,19 @@ export function AddFlow(props: AddFlowProps) {
   if (flow.name === 'config-bundle-wizard') {
     return (
       <AddConfigBundleFlow
+        isInteractive={props.isInteractive}
+        onExit={props.onExit}
+        onBack={() => setFlow({ name: 'select' })}
+        onDev={props.onDev}
+        onDeploy={props.onDeploy}
+      />
+    );
+  }
+
+  // AB test wizard
+  if (flow.name === 'ab-test-wizard') {
+    return (
+      <AddABTestFlow
         isInteractive={props.isInteractive}
         onExit={props.onExit}
         onBack={() => setFlow({ name: 'select' })}

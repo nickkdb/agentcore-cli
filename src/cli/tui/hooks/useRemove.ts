@@ -5,6 +5,7 @@ import type { RemovableCredential } from '../../primitives/CredentialPrimitive';
 import type { RemovableMemory } from '../../primitives/MemoryPrimitive';
 import type { RemovablePolicyResource } from '../../primitives/PolicyPrimitive';
 import {
+  abTestPrimitive,
   agentPrimitive,
   configBundlePrimitive,
   credentialPrimitive,
@@ -153,6 +154,19 @@ export function useRemovableConfigBundles() {
   return { configBundles, ...rest };
 }
 
+export function useRemovableABTests() {
+  const { items: abTests, ...rest } = useRemovableResources(() => abTestPrimitive.getRemovable());
+  return { abTests, ...rest };
+}
+
+export function useRemoveABTest() {
+  return useRemoveResource(
+    (name: string) => abTestPrimitive.remove(name),
+    'ab-test',
+    name => name
+  );
+}
+
 // ============================================================================
 // Preview Hook
 // ============================================================================
@@ -229,6 +243,11 @@ export function useRemovalPreview() {
     [loadPreview]
   );
 
+  const loadABTestPreview = useCallback(
+    (name: string) => loadPreview(n => abTestPrimitive.previewRemove(n), name),
+    [loadPreview]
+  );
+
   const reset = useCallback(() => {
     setState({ isLoading: false, preview: null, error: null });
   }, []);
@@ -245,6 +264,7 @@ export function useRemovalPreview() {
     loadPolicyEnginePreview,
     loadPolicyPreview,
     loadConfigBundlePreview,
+    loadABTestPreview,
     reset,
   };
 }
