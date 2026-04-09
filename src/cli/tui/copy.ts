@@ -50,6 +50,7 @@ export const COMMAND_DESCRIPTIONS = {
   run: 'Run evaluations, batch evaluations, or optimization recommendations.',
   stop: 'Stop a running batch evaluation or A/B test.',
   import: 'Import a runtime, memory, or starter toolkit into this project. [experimental]',
+  telemetry: 'Manage anonymous usage analytics preferences.',
   update: 'Check for and install CLI updates',
   validate: 'Validate agentcore/ config files.',
   'config-bundle': 'Manage configuration bundle versions and diffs.',

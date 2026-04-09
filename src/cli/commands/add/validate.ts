@@ -8,12 +8,14 @@ import {
   ProtocolModeSchema,
   RuntimeAuthorizerTypeSchema,
   SDKFrameworkSchema,
+  StreamDeliveryResourcesSchema,
   TARGET_TYPE_AUTH_CONFIG,
   TargetLanguageSchema,
   getSupportedFrameworksForProtocol,
   getSupportedModelProviders,
   matchEnumValue,
 } from '../../../schema';
+import { ARN_VALIDATION_MESSAGE, isValidArn } from '../shared/arn-utils';
 import { parseAndValidateLifecycleOptions } from '../shared/lifecycle-utils';
 import { validateVpcOptions } from '../shared/vpc-utils';
 import { validateJwtAuthorizerOptions } from './auth-options';
@@ -35,6 +37,9 @@ export interface ValidationResult {
 // Constants
 const MEMORY_OPTIONS = ['none', 'shortTerm', 'longAndShortTerm'] as const;
 const VALID_STRATEGIES = ['SEMANTIC', 'SUMMARIZATION', 'USER_PREFERENCE', 'EPISODIC'];
+const VALID_STREAM_CONTENT_LEVELS = ['FULL_CONTENT', 'METADATA_ONLY'];
+const VALID_DELIVERY_TYPES = ['kinesis'] as const;
+export const DEFAULT_DELIVERY_TYPE = 'kinesis';
 
 /**
  * Validate that a credential name exists in the project spec.
@@ -674,6 +679,57 @@ export function validateAddMemoryOptions(options: AddMemoryOptions): ValidationR
       if (!VALID_STRATEGIES.includes(strategy)) {
         return { valid: false, error: `Invalid strategy: ${strategy}. Must be one of: ${VALID_STRATEGIES.join(', ')}` };
       }
+    }
+  }
+
+  if (options.streamDeliveryResources && (options.dataStreamArn || options.contentLevel || options.deliveryType)) {
+    return {
+      valid: false,
+      error:
+        '--stream-delivery-resources cannot be combined with --data-stream-arn, --stream-content-level, or --delivery-type',
+    };
+  }
+
+  if (options.contentLevel && !options.dataStreamArn) {
+    return { valid: false, error: '--data-stream-arn is required when --stream-content-level is set' };
+  }
+
+  if (options.deliveryType && !options.dataStreamArn) {
+    return { valid: false, error: '--data-stream-arn is required when --delivery-type is set' };
+  }
+
+  if (options.dataStreamArn && !isValidArn(options.dataStreamArn)) {
+    return { valid: false, error: `--data-stream-arn: ${ARN_VALIDATION_MESSAGE}` };
+  }
+
+  if (
+    options.deliveryType &&
+    !VALID_DELIVERY_TYPES.includes(options.deliveryType as (typeof VALID_DELIVERY_TYPES)[number])
+  ) {
+    return {
+      valid: false,
+      error: `Invalid delivery type. Must be one of: ${VALID_DELIVERY_TYPES.join(', ')}`,
+    };
+  }
+
+  if (options.contentLevel && !VALID_STREAM_CONTENT_LEVELS.includes(options.contentLevel)) {
+    return {
+      valid: false,
+      error: `Invalid content level. Must be one of: ${VALID_STREAM_CONTENT_LEVELS.join(', ')}`,
+    };
+  }
+
+  if (options.streamDeliveryResources) {
+    try {
+      StreamDeliveryResourcesSchema.parse(JSON.parse(options.streamDeliveryResources));
+    } catch (e) {
+      return {
+        valid: false,
+        error:
+          e instanceof SyntaxError
+            ? 'Invalid JSON in --stream-delivery-resources'
+            : 'Invalid --stream-delivery-resources: does not match the expected schema',
+      };
     }
   }
 

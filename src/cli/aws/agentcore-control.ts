@@ -57,7 +57,7 @@ async function paginateAll<T>(
 async function fetchTags(
   client: BedrockAgentCoreControlClient,
   resourceArn: string | undefined,
-  _resourceLabel: string
+  resourceLabel: string
 ): Promise<Record<string, string> | undefined> {
   if (!resourceArn) return undefined;
   try {
@@ -65,8 +65,10 @@ async function fetchTags(
     if (response.tags && Object.keys(response.tags).length > 0) {
       return response.tags;
     }
-  } catch {
-    // Non-fatal — tags are supplementary data; don't break listing if tag fetch fails
+  } catch (err) {
+    console.warn(
+      `Warning: Failed to fetch tags for ${resourceLabel}: ${err instanceof Error ? err.message : String(err)}`
+    );
   }
   return undefined;
 }

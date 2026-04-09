@@ -26,7 +26,6 @@ Memory is a **top-level resource** in the flat resource model. Memories are defi
 {
   "memories": [
     {
-      "type": "AgentCoreMemory",
       "name": "MyMemory",
       "eventExpiryDuration": 30,
       "strategies": [{ "type": "SEMANTIC" }, { "type": "SUMMARIZATION" }]
@@ -215,12 +214,77 @@ Memory events expire after a configurable duration (7-365 days, default 30):
 
 ```json
 {
-  "type": "AgentCoreMemory",
   "name": "MyMemory",
   "eventExpiryDuration": 90,
   "strategies": [{ "type": "SEMANTIC" }]
 }
 ```
+
+## Memory Record Streaming
+
+Memory record streaming delivers real-time events when memory records are created, updated, or deleted. Events are
+pushed to a delivery target in your account, enabling event-driven architectures without polling.
+
+### Enabling Streaming
+
+Via the interactive wizard:
+
+```bash
+agentcore add memory
+# Select "Yes" when prompted for streaming, then provide the data stream ARN and content level
+```
+
+Via CLI flags:
+
+```bash
+agentcore add memory \
+  --name MyMemory \
+  --strategies SEMANTIC \
+  --data-stream-arn arn:aws:kinesis:us-west-2:123456789012:stream/my-stream \
+  --stream-content-level FULL_CONTENT
+```
+
+For advanced configurations (e.g. multiple delivery targets), pass the full JSON:
+
+```bash
+agentcore add memory \
+  --name MyMemory \
+  --strategies SEMANTIC \
+  --stream-delivery-resources '{"resources":[{"kinesis":{"dataStreamArn":"arn:aws:kinesis:us-west-2:123456789012:stream/my-stream","contentConfigurations":[{"type":"MEMORY_RECORDS","level":"FULL_CONTENT"}]}}]}'
+```
+
+### Configuration
+
+```json
+{
+  "name": "MyMemory",
+  "eventExpiryDuration": 30,
+  "strategies": [{ "type": "SEMANTIC" }],
+  "streamDeliveryResources": {
+    "resources": [
+      {
+        "kinesis": {
+          "dataStreamArn": "arn:aws:kinesis:us-west-2:123456789012:stream/my-stream",
+          "contentConfigurations": [{ "type": "MEMORY_RECORDS", "level": "FULL_CONTENT" }]
+        }
+      }
+    ]
+  }
+}
+```
+
+### Content Level
+
+| Level           | Description                                                |
+| --------------- | ---------------------------------------------------------- |
+| `FULL_CONTENT`  | Events include memory record text and all metadata         |
+| `METADATA_ONLY` | Events include only metadata (IDs, timestamps, namespaces) |
+
+The CDK construct automatically grants the memory execution role permission to publish to the configured delivery
+target.
+
+For more details, see the
+[Memory Record Streaming documentation](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory-record-streaming.html).
 
 ## Using Memory in Code
 
