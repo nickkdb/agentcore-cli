@@ -66,11 +66,9 @@ export interface AgentTracesSource {
   };
 }
 
-/** Evaluation config — which evaluator(s) to use as objective signal. */
+/** Evaluation config — exactly one evaluator as objective signal (API constraint: min 1, max 1). */
 export interface RecommendationEvaluationConfig {
-  evaluators: {
-    evaluatorArn: string;
-  }[];
+  evaluators: [{ evaluatorArn: string }];
 }
 
 /** Config for SYSTEM_PROMPT_RECOMMENDATION type. */

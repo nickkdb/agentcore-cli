@@ -77,20 +77,30 @@ export function RecommendationScreen({
     [evaluators]
   );
 
-  const inputSourceItems: SelectableItem[] = useMemo(
-    () => [
-      { id: 'inline', title: 'Enter inline', description: 'Type or paste content directly' },
-      { id: 'file', title: 'Load from file', description: 'Read content from a file path' },
-      {
-        id: 'config-bundle',
-        title: 'Config bundle',
-        description: 'Use system prompt from a deployed config bundle',
-      },
-    ],
-    []
-  );
-
   const isToolDesc = wizard.config.type === 'TOOL_DESCRIPTION_RECOMMENDATION';
+
+  const inputSourceItems: SelectableItem[] = useMemo(
+    () =>
+      isToolDesc
+        ? [
+            { id: 'inline', title: 'Enter inline', description: 'Type tool name:description pairs directly' },
+            {
+              id: 'config-bundle',
+              title: 'Config bundle',
+              description: 'Read tool descriptions from a deployed config bundle',
+            },
+          ]
+        : [
+            { id: 'inline', title: 'Enter inline', description: 'Type or paste content directly' },
+            { id: 'file', title: 'Load from file', description: 'Read content from a file path' },
+            {
+              id: 'config-bundle',
+              title: 'Config bundle',
+              description: 'Use system prompt from a deployed config bundle',
+            },
+          ],
+    [isToolDesc]
+  );
 
   const traceSourceItems: SelectableItem[] = useMemo(
     () =>
@@ -124,6 +134,7 @@ export function RecommendationScreen({
   const isInputSourceStep = wizard.step === 'inputSource';
   const isContentStep = wizard.step === 'content';
   const isBundleStep = wizard.step === 'bundle';
+  const isBundleFieldStep = wizard.step === 'bundleField';
   const isToolsStep = wizard.step === 'tools';
   const isTraceSourceStep = wizard.step === 'traceSource';
   const isDaysStep = wizard.step === 'days';
@@ -257,6 +268,36 @@ export function RecommendationScreen({
     isActive: isBundleStep,
   });
 
+  // Build selectable items for string fields in the selected config bundle
+  const bundleFieldItems: SelectableItem[] = useMemo(() => {
+    const selectedBundle = configBundles.find(cb => cb.bundleArn === wizard.config.bundleName);
+    if (!selectedBundle) return [];
+    return Object.entries(selectedBundle.stringFields).map(([key, value]) => ({
+      id: key,
+      title: key,
+      description: value.length > 80 ? value.slice(0, 80) + '…' : value,
+    }));
+  }, [configBundles, wizard.config.bundleName]);
+
+  // Single-select for: system prompt (always), or tool desc with only 1 field (just press Enter)
+  const useFieldSingleSelect = !isToolDesc || bundleFieldItems.length <= 1;
+  const bundleFieldNav = useListNavigation({
+    items: bundleFieldItems,
+    onSelect: item => wizard.setBundleFields([item.id]),
+    onExit: () => wizard.goBack(),
+    isActive: isBundleFieldStep && useFieldSingleSelect,
+  });
+
+  // Tool description multi-select: only when there are 2+ fields to choose from
+  const bundleFieldMultiNav = useMultiSelectNavigation({
+    items: bundleFieldItems,
+    getId: item => item.id,
+    onConfirm: ids => wizard.setBundleFields(ids),
+    onExit: () => wizard.goBack(),
+    isActive: isBundleFieldStep && !useFieldSingleSelect,
+    requireSelection: true,
+  });
+
   const traceSourceNav = useListNavigation({
     items: traceSourceItems,
     onSelect: item => wizard.setTraceSource(item.id as 'cloudwatch' | 'sessions'),
@@ -298,11 +339,13 @@ export function RecommendationScreen({
         : sessionPhase === 'error'
           ? HELP_TEXT.CONFIRM_CANCEL
           : 'Space toggle · Enter confirm · Esc back'
-      : isTypeStep || isAgentStep || isInputSourceStep || isTraceSourceStep || isBundleStep
-        ? HELP_TEXT.NAVIGATE_SELECT
-        : isConfirmStep
-          ? HELP_TEXT.CONFIRM_CANCEL
-          : HELP_TEXT.TEXT_INPUT;
+      : isBundleFieldStep && !useFieldSingleSelect
+        ? 'Space to select · Enter confirm · Esc back'
+        : isTypeStep || isAgentStep || isInputSourceStep || isTraceSourceStep || isBundleStep || isBundleFieldStep
+          ? HELP_TEXT.NAVIGATE_SELECT
+          : isConfirmStep
+            ? HELP_TEXT.CONFIRM_CANCEL
+            : HELP_TEXT.TEXT_INPUT;
 
   const headerContent = (
     <StepIndicator steps={wizard.steps} currentStep={wizard.step} labels={RECOMMENDATION_STEP_LABELS} />
@@ -328,7 +371,7 @@ export function RecommendationScreen({
         wizard.config.inputSource === 'file'
           ? `File: ${wizard.config.content}`
           : wizard.config.inputSource === 'config-bundle'
-            ? `Bundle: ${configBundles.find(b => b.bundleArn === wizard.config.bundleName)?.name ?? wizard.config.bundleName}`
+            ? `Bundle: ${configBundles.find(b => b.bundleArn === wizard.config.bundleName)?.name ?? wizard.config.bundleName} (${wizard.config.bundleFields.length === 1 ? `field: ${wizard.config.bundleFields[0]}` : `fields: ${wizard.config.bundleFields.join(', ')}`})`
             : 'Inline',
     },
     {
@@ -340,7 +383,7 @@ export function RecommendationScreen({
     },
   ];
 
-  if (!isSystemPrompt) {
+  if (!isSystemPrompt && wizard.config.inputSource !== 'config-bundle') {
     confirmFields.push({ label: 'Tools', value: wizard.config.tools || '(none)' });
   }
 
@@ -431,10 +474,48 @@ export function RecommendationScreen({
         {isBundleStep && configBundles.length > 0 && (
           <WizardSelect
             title="Select config bundle"
-            description="Choose a deployed config bundle to read the system prompt from"
+            description={
+              isToolDesc
+                ? 'Choose a deployed config bundle to read tool descriptions from'
+                : 'Choose a deployed config bundle to read the system prompt from'
+            }
             items={bundleItems}
             selectedIndex={bundleNav.selectedIndex}
             maxVisibleItems={10}
+          />
+        )}
+
+        {isBundleFieldStep && bundleFieldItems.length === 0 && (
+          <Box flexDirection="column">
+            <Text bold>Select prompt field</Text>
+            <Text color="yellow">No string fields found in this config bundle&apos;s configuration.</Text>
+            <Text dimColor>Press Esc to go back and choose a different bundle.</Text>
+          </Box>
+        )}
+
+        {isBundleFieldStep && bundleFieldItems.length > 0 && useFieldSingleSelect && (
+          <WizardSelect
+            title={
+              isToolDesc ? 'Which field contains the tool description?' : 'Which field contains the system prompt?'
+            }
+            description={
+              isToolDesc
+                ? 'Field name becomes tool name, value becomes description'
+                : 'Select the configuration field to use as the system prompt input'
+            }
+            items={bundleFieldItems}
+            selectedIndex={bundleFieldNav.selectedIndex}
+            maxVisibleItems={10}
+          />
+        )}
+
+        {isBundleFieldStep && bundleFieldItems.length > 0 && !useFieldSingleSelect && (
+          <WizardMultiSelect
+            title="Which fields contain tool descriptions?"
+            description="Select fields — field name becomes tool name, value becomes description"
+            items={bundleFieldItems}
+            cursorIndex={bundleFieldMultiNav.cursorIndex}
+            selectedIds={bundleFieldMultiNav.selectedIds}
           />
         )}
 

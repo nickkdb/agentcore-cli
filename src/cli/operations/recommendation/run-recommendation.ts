@@ -60,7 +60,7 @@ export async function runRecommendationCommand(
     }
     logger?.log(`Agent: ${options.agent} (runtime: ${agentState.runtimeId})`);
 
-    // 3. Resolve evaluator IDs/ARNs
+    // 3. Resolve evaluator ID/ARN (API accepts exactly one for system-prompt, none for tool-desc)
     const evaluatorIds: string[] = [];
     for (const evaluator of options.evaluators) {
       const evaluatorId = resolveEvaluatorId(deployedState, evaluator);
@@ -73,7 +73,14 @@ export async function runRecommendationCommand(
       }
       evaluatorIds.push(evaluatorId);
     }
-    logger?.log(`Evaluators: ${evaluatorIds.join(', ')}`);
+    if (options.type === 'SYSTEM_PROMPT_RECOMMENDATION' && evaluatorIds.length !== 1) {
+      return {
+        success: false,
+        error: 'System prompt recommendations require exactly one evaluator.',
+        logFilePath: logger?.logFilePath,
+      };
+    }
+    logger?.log(`Evaluators: ${evaluatorIds.join(', ') || '(none)'}`);
     logger?.endStep('success');
 
     // 4. Read input content (if from file)
@@ -82,6 +89,19 @@ export async function runRecommendationCommand(
       inlineContent = readFileSync(options.promptFile, 'utf-8');
     } else if (options.inputSource === 'inline') {
       inlineContent = options.inlineContent;
+    }
+
+    // Validate that system prompt content is non-empty (API rejects empty text)
+    if (
+      options.type === 'SYSTEM_PROMPT_RECOMMENDATION' &&
+      options.inputSource !== 'config-bundle' &&
+      !inlineContent?.trim()
+    ) {
+      return {
+        success: false,
+        error: 'System prompt content is required. Provide via --inline, --prompt-file, or --bundle-name.',
+        logFilePath: logger?.logFilePath,
+      };
     }
 
     // 5. Extract account ID from agent runtime ARN
@@ -381,8 +401,8 @@ async function buildRecommendationConfig(opts: BuildConfigOptions): Promise<Reco
     };
   }
 
-  const evaluationConfig = {
-    evaluators: opts.evaluatorIds.map(id => ({ evaluatorArn: id })),
+  const evaluationConfig: import('../../aws/agentcore-recommendation').RecommendationEvaluationConfig = {
+    evaluators: [{ evaluatorArn: opts.evaluatorIds[0]! }],
   };
 
   if (opts.type === 'SYSTEM_PROMPT_RECOMMENDATION') {

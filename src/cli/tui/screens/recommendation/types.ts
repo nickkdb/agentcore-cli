@@ -11,6 +11,7 @@ export type RecommendationStep =
   | 'inputSource'
   | 'content'
   | 'bundle'
+  | 'bundleField'
   | 'tools'
   | 'traceSource'
   | 'days'
@@ -29,6 +30,7 @@ export interface RecommendationWizardConfig {
   sessionIds: string[];
   bundleName: string;
   bundleVersion: string;
+  bundleFields: string[];
 }
 
 export const RECOMMENDATION_STEP_LABELS: Record<RecommendationStep, string> = {
@@ -38,6 +40,7 @@ export const RECOMMENDATION_STEP_LABELS: Record<RecommendationStep, string> = {
   inputSource: 'Source',
   content: 'Content',
   bundle: 'Bundle',
+  bundleField: 'Fields',
   tools: 'Tools',
   traceSource: 'Traces',
   days: 'Lookback',
@@ -64,6 +67,6 @@ export interface ConfigBundleItem {
   bundleId: string;
   bundleArn: string;
   versionId: string;
-  /** System prompt extracted from the local project config (first component with a systemPrompt field). */
-  systemPrompt?: string;
+  /** All string-valued configuration fields across components, keyed by field name. */
+  stringFields: Record<string, string>;
 }

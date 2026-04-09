@@ -19,20 +19,24 @@ function getAllSteps(
     steps.push('evaluator');
   }
 
-  // For system prompt: ask input source and content
-  // For tool description: skip inputSource/content (tools step handles it)
+  // Input source selection (both types support inline and config-bundle)
+  steps.push('inputSource');
+
   if (type === 'SYSTEM_PROMPT_RECOMMENDATION') {
-    steps.push('inputSource');
     if (inputSource === 'inline' || inputSource === 'file') {
       steps.push('content');
     } else if (inputSource === 'config-bundle') {
       steps.push('bundle');
+      steps.push('bundleField');
     }
-  }
-
-  // Tools step only for tool description recommendations
-  if (type === 'TOOL_DESCRIPTION_RECOMMENDATION') {
-    steps.push('tools');
+  } else {
+    // TOOL_DESCRIPTION_RECOMMENDATION
+    if (inputSource === 'config-bundle') {
+      steps.push('bundle');
+      steps.push('bundleField');
+    } else {
+      steps.push('tools');
+    }
   }
 
   steps.push('traceSource');
@@ -67,6 +71,7 @@ function getDefaultConfig(): RecommendationWizardConfig {
     sessionIds: [],
     bundleName: '',
     bundleVersion: '',
+    bundleFields: [],
   };
 }
 
@@ -175,6 +180,14 @@ export function useRecommendationWizard() {
     [advance]
   );
 
+  const setBundleFields = useCallback(
+    (bundleFields: string[]) => {
+      setConfig(c => ({ ...c, bundleFields }));
+      advance('bundleField');
+    },
+    [advance]
+  );
+
   const setSessions = useCallback(
     (sessionIds: string[]) => {
       setConfig(c => ({ ...c, sessionIds }));
@@ -200,6 +213,7 @@ export function useRecommendationWizard() {
     setInputSource,
     setContent,
     setBundle,
+    setBundleFields,
     setTools,
     setTraceSource,
     setDays,

@@ -16,7 +16,7 @@ export interface RunRecommendationCommandOptions {
   type: RecommendationType;
   /** Agent name (from project) */
   agent: string;
-  /** Evaluator names, Builtin.* IDs, or ARNs */
+  /** Evaluator name, Builtin.* ID, or ARN (API accepts exactly one for system-prompt) */
   evaluators: string[];
   /** Input source kind */
   inputSource: RecommendationInputSourceKind;

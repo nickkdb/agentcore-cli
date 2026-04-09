@@ -2,13 +2,15 @@ import { validateAwsCredentials } from '../../../aws/account';
 import { listEvaluators } from '../../../aws/agentcore-control';
 import { detectRegion } from '../../../aws/region';
 import { getErrorMessage } from '../../../errors';
+import type { SessionInfo } from '../../../operations/eval';
+import { discoverSessions } from '../../../operations/eval';
 import { saveBatchEvalRun } from '../../../operations/eval/batch-eval-storage';
 import { runBatchEvaluationCommand } from '../../../operations/eval/run-batch-evaluation';
 import type {
   BatchEvaluationResult,
   RunBatchEvaluationCommandResult,
 } from '../../../operations/eval/run-batch-evaluation';
-import { loadDeployedProjectConfig } from '../../../operations/resolve-agent';
+import { loadDeployedProjectConfig, resolveAgent } from '../../../operations/resolve-agent';
 import {
   ConfirmReview,
   ErrorPrompt,
@@ -27,24 +29,30 @@ import { useListNavigation, useMultiSelectNavigation } from '../../hooks';
 import type { EvaluatorItem } from '../online-eval/types';
 import type { AgentItem } from './types';
 import { Box, Text } from 'ink';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 // ============================================================================
 // Types
 // ============================================================================
 
-type BatchEvalStep = 'agent' | 'evaluators' | 'name' | 'confirm';
+const DEFAULT_LOOKBACK_DAYS = 7;
+
+type BatchEvalStep = 'agent' | 'evaluators' | 'days' | 'sessions' | 'name' | 'confirm';
 
 interface BatchEvalConfig {
   agent: string;
   evaluators: string[];
   evaluatorNames: string[];
+  days: number;
+  sessionIds: string[];
   name: string;
 }
 
 const STEP_LABELS: Record<BatchEvalStep, string> = {
   agent: 'Agent',
   evaluators: 'Evaluators',
+  days: 'Lookback',
+  sessions: 'Sessions',
   name: 'Name',
   confirm: 'Confirm',
 };
@@ -172,6 +180,8 @@ export function RunBatchEvalFlow({ onExit }: RunBatchEvalFlowProps) {
           agent: config.agent,
           evaluators: config.evaluators,
           name: config.name || undefined,
+          sessionIds: config.sessionIds.length > 0 ? config.sessionIds : undefined,
+          lookbackDays: config.days,
           onProgress: (status, _message) => {
             if (cancelled) return;
             setFlow(prev => {
@@ -317,7 +327,10 @@ interface BatchEvalWizardProps {
 function BatchEvalWizard({ agents, evaluators: rawEvaluators, onComplete, onExit }: BatchEvalWizardProps) {
   const skipAgent = agents.length <= 1;
   const allSteps = useMemo<BatchEvalStep[]>(
-    () => (skipAgent ? ['evaluators', 'name', 'confirm'] : ['agent', 'evaluators', 'name', 'confirm']),
+    () =>
+      skipAgent
+        ? ['evaluators', 'days', 'sessions', 'name', 'confirm']
+        : ['agent', 'evaluators', 'days', 'sessions', 'name', 'confirm'],
     [skipAgent]
   );
 
@@ -326,6 +339,8 @@ function BatchEvalWizard({ agents, evaluators: rawEvaluators, onComplete, onExit
     agent: skipAgent ? agents[0]!.name : '',
     evaluators: [],
     evaluatorNames: [],
+    days: DEFAULT_LOOKBACK_DAYS,
+    sessionIds: [],
     name: '',
   });
 
@@ -357,10 +372,94 @@ function BatchEvalWizard({ agents, evaluators: rawEvaluators, onComplete, onExit
     [rawEvaluators]
   );
 
+  // ── Session discovery ──────────────────────────────────────────────────────
+
+  type SessionResult = { phase: 'loaded'; sessions: SessionInfo[] } | { phase: 'error'; message: string };
+
+  const [sessionResult, setSessionResult] = useState<SessionResult & { key: string }>();
+  const fetchingRef = useRef('');
+
   const isAgentStep = step === 'agent';
   const isEvaluatorsStep = step === 'evaluators';
+  const isDaysStep = step === 'days';
+  const isSessionsStep = step === 'sessions';
   const isNameStep = step === 'name';
   const isConfirmStep = step === 'confirm';
+
+  const fetchKey = `${config.agent}:${config.days}`;
+  const sessionPhase = !isSessionsStep ? 'idle' : sessionResult?.key === fetchKey ? sessionResult.phase : 'loading';
+
+  useEffect(() => {
+    if (!isSessionsStep) return;
+    if (sessionResult?.key === fetchKey) return;
+    if (fetchingRef.current === fetchKey) return;
+    fetchingRef.current = fetchKey;
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const context = await loadDeployedProjectConfig();
+        const { region } = await detectRegion();
+        const agentResult = resolveAgent(context, { runtime: config.agent });
+        if (!agentResult.success) {
+          if (!cancelled) setSessionResult({ key: fetchKey, phase: 'error', message: agentResult.error });
+          return;
+        }
+
+        const sessions = await discoverSessions({
+          runtimeId: agentResult.agent.runtimeId,
+          region,
+          lookbackDays: config.days,
+        });
+
+        if (cancelled) return;
+
+        if (sessions.length === 0) {
+          setSessionResult({
+            key: fetchKey,
+            phase: 'error',
+            message: 'No sessions found in the lookback window. Try increasing the lookback days.',
+          });
+        } else {
+          setSessionResult({ key: fetchKey, phase: 'loaded', sessions });
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setSessionResult({
+            key: fetchKey,
+            phase: 'error',
+            message: err instanceof Error ? err.message : 'Failed to discover sessions',
+          });
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isSessionsStep, fetchKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const sessionItems: SelectableItem[] = useMemo(() => {
+    const sessions = sessionResult?.phase === 'loaded' ? sessionResult.sessions : [];
+    return sessions.map(s => {
+      const date = s.firstSeen
+        ? new Date(s.firstSeen).toLocaleString([], {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+        : '';
+      const shortId = s.sessionId.length > 36 ? s.sessionId.slice(0, 36) + '…' : s.sessionId;
+      return {
+        id: s.sessionId,
+        title: shortId,
+        description: `${s.spanCount} spans · ${date}`,
+      };
+    });
+  }, [sessionResult]);
+
+  // ── Navigation hooks ──────────────────────────────────────────────────────
 
   const agentNav = useListNavigation({
     items: agentItems,
@@ -388,6 +487,26 @@ function BatchEvalWizard({ agents, evaluators: rawEvaluators, onComplete, onExit
     requireSelection: true,
   });
 
+  // Handle Esc during session loading/error
+  useListNavigation({
+    items: [{ id: 'back', title: 'Back' }],
+    onSelect: () => goBack(),
+    onExit: () => goBack(),
+    isActive: isSessionsStep && sessionPhase !== 'loaded',
+  });
+
+  const sessionsNav = useMultiSelectNavigation({
+    items: sessionItems,
+    getId: item => item.id,
+    onConfirm: ids => {
+      setConfig(c => ({ ...c, sessionIds: ids }));
+      goNext();
+    },
+    onExit: () => goBack(),
+    isActive: isSessionsStep && sessionPhase === 'loaded',
+    requireSelection: true,
+  });
+
   useListNavigation({
     items: [{ id: 'confirm', title: 'Confirm' }],
     onSelect: () => onComplete(config),
@@ -399,9 +518,17 @@ function BatchEvalWizard({ agents, evaluators: rawEvaluators, onComplete, onExit
     ? HELP_TEXT.NAVIGATE_SELECT
     : isEvaluatorsStep
       ? 'Space toggle · Enter confirm · Esc back'
-      : isNameStep
+      : isDaysStep
         ? HELP_TEXT.TEXT_INPUT
-        : HELP_TEXT.CONFIRM_CANCEL;
+        : isSessionsStep
+          ? sessionPhase === 'loading'
+            ? ''
+            : sessionPhase === 'error'
+              ? HELP_TEXT.CONFIRM_CANCEL
+              : 'Space toggle · Enter confirm · Esc back'
+          : isNameStep
+            ? HELP_TEXT.TEXT_INPUT
+            : HELP_TEXT.CONFIRM_CANCEL;
 
   const headerContent = <StepIndicator steps={allSteps} currentStep={step} labels={STEP_LABELS} />;
 
@@ -428,6 +555,45 @@ function BatchEvalWizard({ agents, evaluators: rawEvaluators, onComplete, onExit
           />
         )}
 
+        {isDaysStep && (
+          <Box flexDirection="column">
+            <Text dimColor>Note: Traces may take 5–10 min to appear after agent invocations.</Text>
+            <TextInput
+              key="days"
+              prompt="Lookback window (days)"
+              initialValue={String(DEFAULT_LOOKBACK_DAYS)}
+              onSubmit={value => {
+                const days = parseInt(value, 10);
+                if (!isNaN(days) && days >= 1 && days <= 90) {
+                  setConfig(c => ({ ...c, days }));
+                  goNext();
+                }
+              }}
+              onCancel={() => goBack()}
+              customValidation={value => {
+                const days = parseInt(value, 10);
+                if (isNaN(days)) return 'Must be a number';
+                if (days < 1 || days > 90) return 'Must be between 1 and 90';
+                return true;
+              }}
+            />
+          </Box>
+        )}
+
+        {isSessionsStep && sessionPhase === 'loading' && <GradientText text="Discovering sessions..." />}
+
+        {isSessionsStep && sessionResult?.phase === 'error' && <Text color="red">{sessionResult.message}</Text>}
+
+        {isSessionsStep && sessionPhase === 'loaded' && (
+          <WizardMultiSelect
+            title="Select sessions to evaluate"
+            description={`Found ${sessionItems.length} session${sessionItems.length !== 1 ? 's' : ''} — select one or more`}
+            items={sessionItems}
+            cursorIndex={sessionsNav.cursorIndex}
+            selectedIds={sessionsNav.selectedIds}
+          />
+        )}
+
         {isNameStep && (
           <Box flexDirection="column">
             <Text dimColor>Optional — leave blank for auto-generated name.</Text>
@@ -450,6 +616,11 @@ function BatchEvalWizard({ agents, evaluators: rawEvaluators, onComplete, onExit
             fields={[
               { label: 'Agent', value: config.agent },
               { label: 'Evaluators', value: config.evaluatorNames.join(', ') },
+              { label: 'Lookback', value: `${config.days} day${config.days !== 1 ? 's' : ''}` },
+              {
+                label: 'Sessions',
+                value: `${config.sessionIds.length} selected`,
+              },
               ...(config.name ? [{ label: 'Name', value: config.name }] : []),
             ]}
           />

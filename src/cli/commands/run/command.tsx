@@ -168,6 +168,8 @@ export const registerRun = (program: Command) => {
     .requiredOption('-r, --runtime <name>', 'Runtime name from project config')
     .requiredOption('-e, --evaluator <ids...>', 'Evaluator name(s) — Builtin.* IDs')
     .option('-n, --name <name>', 'Name for the batch evaluation (auto-generated if omitted)')
+    .option('-d, --lookback-days <days>', 'Lookback window in days (filters sessions by time range)')
+    .option('-s, --session-ids <ids...>', 'Specific session IDs to evaluate')
     .option('--region <region>', 'AWS region (auto-detected if omitted)')
     .option('--execution-role <arn>', 'IAM execution role ARN for batch evaluation')
     .option('--json', 'Output as JSON')
@@ -176,6 +178,8 @@ export const registerRun = (program: Command) => {
         runtime: string;
         evaluator: string[];
         name?: string;
+        lookbackDays?: string;
+        sessionIds?: string[];
         region?: string;
         executionRole?: string;
         json?: boolean;
@@ -183,12 +187,15 @@ export const registerRun = (program: Command) => {
         requireProject();
 
         try {
+          const lookbackDays = cliOptions.lookbackDays ? parseInt(cliOptions.lookbackDays, 10) : undefined;
           const result = await runBatchEvaluationCommand({
             agent: cliOptions.runtime,
             evaluators: cliOptions.evaluator,
             name: cliOptions.name,
             region: cliOptions.region,
             executionRoleArn: cliOptions.executionRole,
+            sessionIds: cliOptions.sessionIds,
+            lookbackDays: lookbackDays && !isNaN(lookbackDays) ? lookbackDays : undefined,
             onProgress: cliOptions.json
               ? undefined
               : (_status, message) => {
@@ -233,10 +240,7 @@ export const registerRun = (program: Command) => {
     .description('Optimize a system prompt or tool descriptions using agent traces as signal')
     .option('-t, --type <type>', 'What to optimize: system-prompt or tool-description (default: system-prompt)')
     .option('-r, --runtime <name>', 'Runtime name from project config')
-    .option(
-      '-e, --evaluator <names...>',
-      'Evaluator name(s) — required for system-prompt, optional for tool-description'
-    )
+    .option('-e, --evaluator <name>', 'Evaluator name — required for system-prompt (exactly one)')
     .option('--prompt-file <path>', 'Load the current system prompt from a file')
     .option('--inline <content>', 'Provide the current system prompt or tool descriptions inline')
     .option('--bundle-name <name>', 'Read current content from a deployed config bundle')
@@ -255,7 +259,7 @@ export const registerRun = (program: Command) => {
       async (cliOptions: {
         type?: string;
         runtime?: string;
-        evaluator?: string[];
+        evaluator?: string;
         promptFile?: string;
         inline?: string;
         bundleName?: string;
@@ -283,7 +287,7 @@ export const registerRun = (program: Command) => {
         }
 
         const agent = cliOptions.runtime;
-        const evaluators = cliOptions.evaluator;
+        const evaluator = cliOptions.evaluator;
 
         if (!agent) {
           const error = '--runtime is required';
@@ -296,7 +300,7 @@ export const registerRun = (program: Command) => {
         }
 
         // Evaluator is required for system-prompt recs, optional for tool-description
-        if (recType === 'SYSTEM_PROMPT_RECOMMENDATION' && (!evaluators || evaluators.length === 0)) {
+        if (recType === 'SYSTEM_PROMPT_RECOMMENDATION' && !evaluator) {
           const error = '--evaluator is required for system-prompt recommendations';
           if (cliOptions.json) {
             console.log(JSON.stringify({ success: false, error }));
@@ -324,7 +328,7 @@ export const registerRun = (program: Command) => {
           const result = await runRecommendationCommand({
             type: recType,
             agent,
-            evaluators: evaluators ?? [],
+            evaluators: evaluator ? [evaluator] : [],
             promptFile: cliOptions.promptFile,
             inlineContent: cliOptions.inline,
             bundleName: cliOptions.bundleName,
@@ -351,7 +355,7 @@ export const registerRun = (program: Command) => {
           // Save results locally
           try {
             if (result.recommendationId) {
-              saveRecommendationRun(result.recommendationId, result, recType, agent, evaluators ?? []);
+              saveRecommendationRun(result.recommendationId, result, recType, agent, evaluator ? [evaluator] : []);
             }
           } catch {
             // Non-fatal — skip saving

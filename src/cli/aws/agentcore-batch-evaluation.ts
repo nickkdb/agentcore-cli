@@ -22,9 +22,20 @@ import { SignatureV4 } from '@smithy/signature-v4';
 // Types
 // ============================================================================
 
+export interface SessionFilterConfig {
+  startTime?: string;
+  endTime?: string;
+}
+
+export interface CloudWatchSessionInput {
+  sessionIds?: string[];
+  sessionFilterConfig?: SessionFilterConfig;
+}
+
 export interface CloudWatchSource {
   serviceNames: string[];
   logGroupNames: string[];
+  sessionInput?: CloudWatchSessionInput;
 }
 
 export interface BatchEvaluationConfig {

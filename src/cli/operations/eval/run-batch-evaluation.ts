@@ -9,7 +9,11 @@
 import { ConfigIO } from '../../../lib';
 import type { DeployedState } from '../../../schema';
 import { generateClientToken, getBatchEvaluation, startBatchEvaluation } from '../../aws/agentcore-batch-evaluation';
-import type { EvaluationResults, GetBatchEvaluationResult } from '../../aws/agentcore-batch-evaluation';
+import type {
+  CloudWatchSessionInput,
+  EvaluationResults,
+  GetBatchEvaluationResult,
+} from '../../aws/agentcore-batch-evaluation';
 import { detectRegion } from '../../aws/region';
 import { ExecLogger } from '../../logging/exec-logger';
 import { CloudWatchLogsClient, GetLogEventsCommand } from '@aws-sdk/client-cloudwatch-logs';
@@ -29,6 +33,10 @@ export interface RunBatchEvaluationOptions {
   region?: string;
   /** Explicit execution role ARN (falls back to agent's deployed role) */
   executionRoleArn?: string;
+  /** Specific session IDs to evaluate (optional — filters CloudWatch source) */
+  sessionIds?: string[];
+  /** Lookback window in days (optional — filters CloudWatch source by time range) */
+  lookbackDays?: number;
   /** Poll interval in ms */
   pollIntervalMs?: number;
   /** Progress callback */
@@ -131,6 +139,20 @@ export async function runBatchEvaluationCommand(
 
     onProgress?.('starting', `Starting batch evaluation "${evalName}"...`);
 
+    // Build optional session input for CloudWatch filtering
+    // API requires either sessionIds OR sessionFilterConfig, not both — sessionIds takes precedence
+    const sessionInput: CloudWatchSessionInput | undefined = (() => {
+      if (options.sessionIds && options.sessionIds.length > 0) {
+        return { sessionIds: options.sessionIds };
+      }
+      if (options.lookbackDays) {
+        const endTime = new Date().toISOString();
+        const startTime = new Date(Date.now() - options.lookbackDays * 24 * 60 * 60 * 1000).toISOString();
+        return { sessionFilterConfig: { startTime, endTime } };
+      }
+      return undefined;
+    })();
+
     const startPayload = {
       region,
       name: evalName,
@@ -141,6 +163,7 @@ export async function runBatchEvaluationCommand(
         cloudWatchSource: {
           serviceNames: [serviceName],
           logGroupNames: [runtimeLogGroup],
+          ...(sessionInput ? { sessionInput } : {}),
         },
       },
       ...(options.executionRoleArn ? { executionRoleArn: options.executionRoleArn } : {}),

@@ -122,7 +122,9 @@ describe('agentcore-recommendation', () => {
                 endTime: '2026-03-30T00:00:00.000Z',
               },
             },
-            evaluationConfig: { evaluators: [] },
+            evaluationConfig: {
+              evaluators: [{ evaluatorArn: 'arn:aws:bedrock-agentcore:::evaluator/Builtin.Helpfulness' }],
+            },
           },
         },
       });
@@ -158,7 +160,9 @@ describe('agentcore-recommendation', () => {
                 endTime: '2026-03-30T00:00:00.000Z',
               },
             },
-            evaluationConfig: { evaluators: [] },
+            evaluationConfig: {
+              evaluators: [{ evaluatorArn: 'arn:aws:bedrock-agentcore:::evaluator/Builtin.Helpfulness' }],
+            },
           },
         },
       });

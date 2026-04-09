@@ -132,14 +132,39 @@ export function RecommendationFlow({ onExit }: RecommendationFlowProps) {
       }
     }, 1000);
 
-    // For config-bundle input, look up the system prompt from the loaded config bundles
-    const bundleSystemPrompt =
-      config.inputSource === 'config-bundle'
-        ? configBundles.find(cb => cb.bundleArn === config.bundleName)?.systemPrompt
-        : undefined;
+    // For config-bundle input, look up selected field values from the loaded config bundles
+    const selectedBundle =
+      config.inputSource === 'config-bundle' ? configBundles.find(cb => cb.bundleArn === config.bundleName) : undefined;
 
     void (async () => {
       try {
+        // Resolve inline content and tools from config bundle fields
+        let resolvedInlineContent: string | undefined;
+        let resolvedTools: string[] | undefined;
+
+        if (config.inputSource === 'config-bundle' && selectedBundle) {
+          if (config.type === 'SYSTEM_PROMPT_RECOMMENDATION') {
+            // System prompt: single field → use its value as inline content
+            const fieldName = config.bundleFields[0];
+            const fieldValue = fieldName ? selectedBundle.stringFields[fieldName] : undefined;
+            if (!fieldValue) {
+              throw new Error(`Field "${fieldName}" not found or empty in the selected config bundle.`);
+            }
+            resolvedInlineContent = fieldValue;
+          } else {
+            // Tool description: multiple fields → each field becomes toolName:description
+            resolvedTools = config.bundleFields.map(fieldName => {
+              const value = selectedBundle.stringFields[fieldName];
+              if (!value) {
+                throw new Error(`Field "${fieldName}" not found or empty in the selected config bundle.`);
+              }
+              return `${fieldName}:${value}`;
+            });
+          }
+        } else if (config.inputSource === 'config-bundle') {
+          throw new Error('Selected config bundle not found.');
+        }
+
         const result = await runRecommendationCommand({
           type: config.type,
           agent: config.agent,
@@ -149,15 +174,17 @@ export function RecommendationFlow({ onExit }: RecommendationFlowProps) {
             config.inputSource === 'inline'
               ? config.content
               : config.inputSource === 'config-bundle'
-                ? bundleSystemPrompt
+                ? resolvedInlineContent
                 : undefined,
           promptFile: config.inputSource === 'file' ? config.content : undefined,
-          tools: config.tools
-            ? config.tools
-                .split(/,(?=[a-zA-Z0-9_\-.]+:)/)
-                .map(t => t.trim())
-                .filter(Boolean)
-            : undefined,
+          tools:
+            resolvedTools ??
+            (config.tools
+              ? config.tools
+                  .split(/,(?=[a-zA-Z0-9_\-.]+:)/)
+                  .map(t => t.trim())
+                  .filter(Boolean)
+              : undefined),
           traceSource: config.traceSource,
           lookbackDays: config.days,
           sessionIds: config.sessionIds.length > 0 ? config.sessionIds : undefined,
@@ -467,15 +494,16 @@ function buildConfigBundleItems(
       if (seen.has(name)) continue;
       seen.add(name);
 
-      // Extract systemPrompt from matching project config bundle
-      let systemPrompt: string | undefined;
+      // Collect all string-valued configuration fields across components
+      const stringFields: Record<string, string> = {};
       const projBundle = projectBundles.find(pb => pb.name === name);
       if (projBundle?.components) {
         for (const comp of Object.values(projBundle.components)) {
-          const sp = comp?.configuration?.systemPrompt;
-          if (typeof sp === 'string') {
-            systemPrompt = sp;
-            break;
+          if (!comp?.configuration) continue;
+          for (const [key, value] of Object.entries(comp.configuration)) {
+            if (typeof value === 'string' && value.trim().length > 0) {
+              stringFields[key] = value;
+            }
           }
         }
       }
@@ -485,7 +513,7 @@ function buildConfigBundleItems(
         bundleId: state.bundleId,
         bundleArn: state.bundleArn,
         versionId: state.versionId,
-        systemPrompt,
+        stringFields,
       });
     }
   }
