@@ -25,9 +25,14 @@ function shortVersion(version: string): string {
   return version.slice(0, 8);
 }
 
-/** Pad a string to a fixed width. */
-function pad(str: string, width: number): string {
-  return str.length >= width ? str : str + ' '.repeat(width - str.length);
+/** Format a Unix epoch timestamp (seconds) to a UTC date string. */
+function formatTimestamp(ts: string | number): string {
+  const ms = typeof ts === 'string' ? parseFloat(ts) * 1000 : ts * 1000;
+  const d = new Date(ms);
+  return d
+    .toISOString()
+    .replace('T', ' ')
+    .replace(/\.\d+Z$/, ' UTC');
 }
 
 /** Build a horizontal rule with optional left label and right label. */
@@ -191,16 +196,36 @@ export function ABTestDetailScreen({ abTestId, region, onExit }: ABTestDetailScr
         <Box marginTop={1} flexDirection="column">
           {test.results ? (
             <>
-              <Text dimColor>{rule('Results', test.results.analysisTimestamp)}</Text>
+              <Text dimColor>
+                {rule(
+                  'Results',
+                  test.results.analysisTimestamp ? formatTimestamp(test.results.analysisTimestamp) : undefined
+                )}
+              </Text>
               <Box marginTop={1}>
-                <Text dimColor>{`${pad('', 15)}${pad('Control', 12)}${pad('Treatment', 12)}Δ`}</Text>
+                <Box minWidth={24}>
+                  <Text dimColor>{''}</Text>
+                </Box>
+                <Box minWidth={12}>
+                  <Text dimColor>{'Control'}</Text>
+                </Box>
+                <Box minWidth={12}>
+                  <Text dimColor>{'Treatment'}</Text>
+                </Box>
+                <Text dimColor>{'Δ'}</Text>
               </Box>
               {test.results.evaluatorMetrics.map((metric, i) => (
                 <Box key={i} flexDirection="column" marginTop={i > 0 ? 1 : 0}>
                   <Box>
-                    <Text bold>{pad(extractId(metric.evaluatorArn), 15)}</Text>
-                    <Text>{pad(metric.controlStats.mean.toFixed(4), 12)}</Text>
-                    <Text>{pad(metric.variantResults[0]?.mean.toFixed(4) ?? '', 12)}</Text>
+                    <Box minWidth={24}>
+                      <Text bold>{extractId(metric.evaluatorArn)}</Text>
+                    </Box>
+                    <Box minWidth={12}>
+                      <Text>{metric.controlStats.mean.toFixed(4)}</Text>
+                    </Box>
+                    <Box minWidth={12}>
+                      <Text>{metric.variantResults[0]?.mean.toFixed(4) ?? ''}</Text>
+                    </Box>
                     {metric.variantResults[0]?.isSignificant ? (
                       <Text color="green">{`+${(metric.variantResults[0]?.percentChange ?? 0).toFixed(2)}% ✓`}</Text>
                     ) : (
@@ -208,9 +233,15 @@ export function ABTestDetailScreen({ abTestId, region, onExit }: ABTestDetailScr
                     )}
                   </Box>
                   <Box>
-                    <Text dimColor>{pad('', 15)}</Text>
-                    <Text dimColor>{pad(`n=${metric.controlStats.sampleSize}`, 12)}</Text>
-                    <Text dimColor>{pad(`n=${metric.variantResults[0]?.sampleSize ?? ''}`, 12)}</Text>
+                    <Box minWidth={24}>
+                      <Text>{''}</Text>
+                    </Box>
+                    <Box minWidth={12}>
+                      <Text dimColor>{`n=${metric.controlStats.sampleSize}`}</Text>
+                    </Box>
+                    <Box minWidth={12}>
+                      <Text dimColor>{`n=${metric.variantResults[0]?.sampleSize ?? ''}`}</Text>
+                    </Box>
                     <Text dimColor>{`p=${metric.variantResults[0]?.pValue?.toFixed(3) ?? 'N/A'}`}</Text>
                   </Box>
                 </Box>
