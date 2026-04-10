@@ -13,6 +13,7 @@ import type {
   CloudWatchSessionInput,
   EvaluationResults,
   GetBatchEvaluationResult,
+  SessionMetadataEntry,
 } from '../../aws/agentcore-batch-evaluation';
 import { detectRegion } from '../../aws/region';
 import { ExecLogger } from '../../logging/exec-logger';
@@ -37,6 +38,8 @@ export interface RunBatchEvaluationOptions {
   sessionIds?: string[];
   /** Lookback window in days (optional — filters CloudWatch source by time range) */
   lookbackDays?: number;
+  /** Session metadata with ground truth (assertions, expected trajectory, turns) */
+  sessionMetadata?: SessionMetadataEntry[];
   /** Poll interval in ms */
   pollIntervalMs?: number;
   /** Progress callback */
@@ -91,10 +94,16 @@ export async function runBatchEvaluationCommand(
     // 1. Read project config and deployed state
     logger?.startStep('Load project config');
     const configIO = new ConfigIO();
-    const [projectSpec, deployedState] = await Promise.all([configIO.readProjectSpec(), configIO.readDeployedState()]);
+    const [projectSpec, deployedState, awsTargets] = await Promise.all([
+      configIO.readProjectSpec(),
+      configIO.readDeployedState(),
+      configIO.resolveAWSDeploymentTargets(),
+    ]);
 
+    // Use the deployed target region (from aws-targets) rather than generic detectRegion()
+    const targetRegion = awsTargets.length > 0 ? awsTargets[0]!.region : undefined;
     const { region: detectedRegion } = await detectRegion();
-    const region = options.region ?? detectedRegion;
+    const region = options.region ?? targetRegion ?? detectedRegion;
     const stage = process.env.AGENTCORE_STAGE?.toLowerCase() ?? 'prod';
     logger?.log(`Region: ${region}, Stage: ${stage}`);
     logger?.endStep('success');
@@ -121,16 +130,19 @@ export async function runBatchEvaluationCommand(
     logger?.endStep('success');
 
     // 2b. Resolve evaluator names to deployed IDs
+    // Handles: "Builtin.Correctness", "arn:aws:...:evaluator/Builtin.Correctness", or custom evaluator names
     const targetResources = Object.values(deployedState.targets).find(t => t.resources?.runtimes?.[agent])?.resources;
     const resolvedEvaluators = evaluators.map(name => {
-      if (name.startsWith('Builtin.')) return name;
-      const deployed = targetResources?.evaluators?.[name];
+      // Extract short name from ARN if passed (e.g. "arn:aws:bedrock-agentcore:::evaluator/Builtin.Correctness" → "Builtin.Correctness")
+      const shortName = name.includes('evaluator/') ? name.split('evaluator/').pop()! : name;
+      if (shortName.startsWith('Builtin.')) return shortName;
+      const deployed = targetResources?.evaluators?.[shortName];
       if (deployed?.evaluatorId) {
-        logger?.log(`Resolved evaluator "${name}" → ${deployed.evaluatorId}`);
+        logger?.log(`Resolved evaluator "${shortName}" → ${deployed.evaluatorId}`);
         return deployed.evaluatorId;
       }
-      logger?.log(`Evaluator "${name}" not found in deployed state, passing as-is`, 'warn');
-      return name;
+      logger?.log(`Evaluator "${shortName}" not found in deployed state, passing as-is`, 'warn');
+      return shortName;
     });
 
     // 3. Start the batch evaluation
@@ -141,9 +153,15 @@ export async function runBatchEvaluationCommand(
 
     // Build optional session input for CloudWatch filtering
     // API requires either sessionIds OR sessionFilterConfig, not both — sessionIds takes precedence
+    // Merge explicit sessionIds with any sessionIds from sessionMetadata (deduplicated)
+    const metadataSessionIds = options.sessionMetadata?.map(m => m.sessionId).filter(Boolean) ?? [];
+    const explicitSessionIds = options.sessionIds ?? [];
+    const effectiveSessionIds = [...new Set([...explicitSessionIds, ...metadataSessionIds])];
+    const hasSessionIds = effectiveSessionIds.length > 0;
+
     const sessionInput: CloudWatchSessionInput | undefined = (() => {
-      if (options.sessionIds && options.sessionIds.length > 0) {
-        return { sessionIds: options.sessionIds };
+      if (hasSessionIds) {
+        return { sessionIds: effectiveSessionIds };
       }
       if (options.lookbackDays) {
         const endTime = new Date().toISOString();
@@ -166,6 +184,9 @@ export async function runBatchEvaluationCommand(
           ...(sessionInput ? { sessionInput } : {}),
         },
       },
+      ...(options.sessionMetadata && options.sessionMetadata.length > 0
+        ? { sessionMetadata: options.sessionMetadata }
+        : {}),
       ...(options.executionRoleArn ? { executionRoleArn: options.executionRoleArn } : {}),
       clientToken: generateClientToken(),
     };

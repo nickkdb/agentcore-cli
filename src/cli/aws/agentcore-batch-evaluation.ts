@@ -42,6 +42,43 @@ export interface BatchEvaluationConfig {
   evaluators: { evaluatorId: string }[];
 }
 
+export interface GroundTruthAssertion {
+  text: string;
+}
+
+export interface GroundTruthTurnInput {
+  prompt: string;
+}
+
+export interface GroundTruthTurnExpectedResponse {
+  text: string;
+}
+
+export interface GroundTruthTurn {
+  input: GroundTruthTurnInput;
+  expectedResponse: GroundTruthTurnExpectedResponse;
+}
+
+export interface ExpectedTrajectory {
+  toolNames: string[];
+}
+
+export interface InlineGroundTruth {
+  assertions?: GroundTruthAssertion[];
+  expectedTrajectory?: ExpectedTrajectory;
+  turns?: GroundTruthTurn[];
+}
+
+export interface GroundTruth {
+  inline: InlineGroundTruth;
+}
+
+export interface SessionMetadataEntry {
+  sessionId: string;
+  testScenarioId?: string;
+  groundTruth?: GroundTruth;
+}
+
 export interface StartBatchEvaluationOptions {
   region: string;
   name: string;
@@ -49,6 +86,7 @@ export interface StartBatchEvaluationOptions {
   sessionSource: {
     cloudWatchSource: CloudWatchSource;
   };
+  sessionMetadata?: SessionMetadataEntry[];
   executionRoleArn?: string;
   clientToken?: string;
 }
@@ -217,6 +255,9 @@ export async function startBatchEvaluation(options: StartBatchEvaluationOptions)
     evaluationConfig: options.evaluationConfig,
     sessionSource: options.sessionSource,
   };
+  if (options.sessionMetadata && options.sessionMetadata.length > 0) {
+    body.sessionMetadata = options.sessionMetadata;
+  }
   if (options.executionRoleArn) {
     body.executionRoleArn = options.executionRoleArn;
   }

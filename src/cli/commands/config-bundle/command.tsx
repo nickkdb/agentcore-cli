@@ -107,13 +107,13 @@ export const registerConfigBundle = (program: Command) => {
   const cmd = program
     .command('config-bundle')
     .alias('cb')
-    .description('View configuration bundle version history and diffs');
+    .description('Manage configuration bundles (use bundle name from agentcore.json, not the ID)');
 
   // --- versions ---
   cmd
     .command('versions')
     .description('List version history for a configuration bundle')
-    .requiredOption('--bundle <name>', 'Bundle name')
+    .requiredOption('--bundle <name>', 'Bundle name as defined in agentcore.json (e.g. "MyBundle")')
     .option('--branch <name>', 'Filter by branch name')
     .option('--latest-per-branch', 'Show only the latest version per branch')
     .option('--created-by <name>', 'Filter by creator name (e.g. "user", "recommendation")')
@@ -198,10 +198,10 @@ export const registerConfigBundle = (program: Command) => {
   // --- diff ---
   cmd
     .command('diff')
-    .description('Diff two versions of a configuration bundle')
-    .requiredOption('--bundle <name>', 'Bundle name')
-    .requiredOption('--from <id>', 'Source version ID')
-    .requiredOption('--to <id>', 'Target version ID')
+    .description('Diff two versions of a configuration bundle (get version IDs from `cb versions`)')
+    .requiredOption('--bundle <name>', 'Bundle name as defined in agentcore.json (e.g. "MyBundle")')
+    .requiredOption('--from <id>', 'Source version ID (from `config-bundle versions --json`)')
+    .requiredOption('--to <id>', 'Target version ID (from `config-bundle versions --json`)')
     .option('--region <region>', 'AWS region override')
     .option('--json', 'Output as JSON')
     .action(async (cliOptions: { bundle: string; from: string; to: string; region?: string; json?: boolean }) => {

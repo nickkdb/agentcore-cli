@@ -8,6 +8,7 @@ import type { AddConfigBundleConfig, ComponentInputMethod } from './types';
 import { CONFIG_BUNDLE_STEP_LABELS, INPUT_METHOD_OPTIONS } from './types';
 import { useAddConfigBundleWizard } from './useAddConfigBundleWizard';
 import { existsSync, readFileSync } from 'fs';
+import { Box, Text } from 'ink';
 import React, { useMemo } from 'react';
 
 interface AddConfigBundleScreenProps {
@@ -129,24 +130,36 @@ export function AddConfigBundleScreen({ onComplete, onExit, existingBundleNames 
         )}
 
         {isComponentsStep && wizard.config.inputMethod === 'inline' && (
-          <TextInput
-            key="components-inline"
-            prompt="Component configurations (JSON)"
-            initialValue=""
-            expandable
-            onSubmit={value => {
-              const parsed = JSON.parse(value) as Record<string, { configuration: Record<string, unknown> }>;
-              wizard.setComponents(parsed, value);
-            }}
-            onCancel={() => wizard.goBack()}
-            customValidation={validateComponentsJson}
-          />
+          <>
+            <Box flexDirection="column" marginBottom={1}>
+              <Text dimColor>Expected format: a JSON map of component ARN → configuration</Text>
+              <Text dimColor>Example:</Text>
+              <Text dimColor>
+                {'  '}&#123; &quot;arn:aws:bedrock-agentcore:REGION:ACCOUNT:agent-runtime/RUNTIME&quot;: &#123;
+                &quot;configuration&quot;: &#123; &quot;key&quot;: &quot;value&quot; &#125; &#125; &#125;
+              </Text>
+            </Box>
+            <TextInput
+              key="components-inline"
+              prompt="Component configurations (JSON)"
+              placeholder='{"arn:aws:...": {"configuration": {"key": "value"}}}'
+              initialValue=""
+              expandable
+              onSubmit={value => {
+                const parsed = JSON.parse(value) as Record<string, { configuration: Record<string, unknown> }>;
+                wizard.setComponents(parsed, value);
+              }}
+              onCancel={() => wizard.goBack()}
+              customValidation={validateComponentsJson}
+            />
+          </>
         )}
 
         {isComponentsStep && wizard.config.inputMethod === 'file' && (
           <TextInput
             key="components-file"
             prompt="Path to components JSON file"
+            placeholder="./components.json"
             initialValue=""
             onSubmit={value => {
               const raw = readFileSync(value.trim(), 'utf-8');

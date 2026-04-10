@@ -28,7 +28,7 @@ type FlowState =
     }
   | { name: 'results'; result: RunRecommendationCommandResult; config: RecommendationWizardConfig; filePath?: string }
   | { name: 'creds-error'; message: string }
-  | { name: 'error'; message: string };
+  | { name: 'error'; message: string; logFilePath?: string };
 
 interface RecommendationFlowProps {
   onExit: () => void;
@@ -223,7 +223,7 @@ export function RecommendationFlow({ onExit }: RecommendationFlowProps) {
           });
           await new Promise(resolve => setTimeout(resolve, 2000));
           if (cancelled) return;
-          setFlow({ name: 'error', message: result.error ?? 'Recommendation failed' });
+          setFlow({ name: 'error', message: result.error ?? 'Recommendation failed', logFilePath: result.logFilePath });
           return;
         }
 
@@ -344,7 +344,7 @@ export function RecommendationFlow({ onExit }: RecommendationFlowProps) {
   return (
     <ErrorPrompt
       message="Recommendation failed"
-      detail={flow.message}
+      detail={flow.logFilePath ? `${flow.message}\n\nLog: ${flow.logFilePath}` : flow.message}
       onBack={() => setFlow({ name: 'loading' })}
       onExit={onExit}
     />

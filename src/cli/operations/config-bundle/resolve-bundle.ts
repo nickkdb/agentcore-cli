@@ -30,12 +30,18 @@ export async function resolveBundleByName(
     const bundles = target?.resources?.configBundles;
     const bundle = bundles?.[bundleName];
     if (bundle) {
-      return {
-        bundleId: bundle.bundleId,
-        bundleArn: bundle.bundleArn,
-        versionId: bundle.versionId,
-        region,
-      };
+      // Verify the deployed-state ID is still valid (bundles may have been recreated)
+      try {
+        const verified = await getConfigurationBundle({ region, bundleId: bundle.bundleId, branchName: 'main' });
+        return {
+          bundleId: bundle.bundleId,
+          bundleArn: bundle.bundleArn,
+          versionId: verified.versionId,
+          region,
+        };
+      } catch {
+        // Stale deployed-state entry — fall through to API lookup
+      }
     }
   }
 
@@ -47,7 +53,7 @@ export async function resolveBundleByName(
   }
 
   // Fetch the bundle to get the latest versionId (required by Recommendation API)
-  const bundle = await getConfigurationBundle({ region, bundleId: match.bundleId });
+  const bundle = await getConfigurationBundle({ region, bundleId: match.bundleId, branchName: 'main' });
 
   return {
     bundleId: match.bundleId,

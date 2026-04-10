@@ -16,6 +16,8 @@ const VALID_RESOURCE_TYPES = [
   'online-eval',
   'policy-engine',
   'policy',
+  'config-bundle',
+  'ab-test',
 ] as const;
 const VALID_STATES = ['deployed', 'local-only', 'pending-removal'] as const;
 
@@ -58,7 +60,7 @@ export const registerStatus = (program: Command) => {
     .option('--target <name>', 'Select deployment target')
     .option(
       '--type <type>',
-      'Filter by resource type (agent, memory, credential, gateway, evaluator, online-eval, policy-engine, policy)'
+      'Filter by resource type (agent, memory, credential, gateway, evaluator, online-eval, policy-engine, policy, config-bundle, ab-test)'
     )
     .option('--state <state>', 'Filter by deployment state (deployed, local-only, pending-removal)')
     .option('--runtime <name>', 'Filter to a specific runtime')
@@ -142,11 +144,13 @@ export const registerStatus = (program: Command) => {
         const onlineEvals = filtered.filter(r => r.resourceType === 'online-eval');
         const policyEngines = filtered.filter(r => r.resourceType === 'policy-engine');
         const policies = filtered.filter(r => r.resourceType === 'policy');
+        const configBundles = filtered.filter(r => r.resourceType === 'config-bundle');
+        const abTests = filtered.filter(r => r.resourceType === 'ab-test');
 
         render(
           <Box flexDirection="column">
             <Text bold>
-              AgentCore Status (target: {result.targetName}
+              AgentCore Status (target: {result.targetName || 'No target configured'}
               {result.targetRegion ? `, ${result.targetRegion}` : ''})
             </Text>
 
@@ -225,6 +229,24 @@ export const registerStatus = (program: Command) => {
                 <Text bold>Policies</Text>
                 {policies.map(entry => (
                   <ResourceEntry key={`${entry.resourceType}-${entry.detail}-${entry.name}`} entry={entry} />
+                ))}
+              </Box>
+            )}
+
+            {configBundles.length > 0 && (
+              <Box flexDirection="column" marginTop={1}>
+                <Text bold>Config Bundles</Text>
+                {configBundles.map(entry => (
+                  <ResourceEntry key={`${entry.resourceType}-${entry.name}`} entry={entry} />
+                ))}
+              </Box>
+            )}
+
+            {abTests.length > 0 && (
+              <Box flexDirection="column" marginTop={1}>
+                <Text bold>A/B Tests</Text>
+                {abTests.map(entry => (
+                  <ResourceEntry key={`${entry.resourceType}-${entry.name}`} entry={entry} />
                 ))}
               </Box>
             )}

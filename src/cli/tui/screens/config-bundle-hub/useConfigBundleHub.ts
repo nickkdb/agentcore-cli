@@ -3,7 +3,10 @@
  * and enriches deployed ones with version metadata from the API.
  */
 import type { ConfigurationBundleVersionSummary } from '../../../../cli/aws/agentcore-config-bundles';
-import { listConfigurationBundleVersions } from '../../../../cli/aws/agentcore-config-bundles';
+import {
+  listConfigurationBundleVersions,
+  listConfigurationBundles,
+} from '../../../../cli/aws/agentcore-config-bundles';
 import { ConfigIO } from '../../../../lib';
 import { useEffect, useRef, useState } from 'react';
 
@@ -86,10 +89,14 @@ export function useConfigBundleHub(): ConfigBundleHubState {
             }
 
             // Deployed — fetch version metadata from API
+            // Use a helper that falls back to the list API if the deployed-state bundleId is stale
+            let effectiveBundleId = deployed.bundleId;
+            let effectiveBundleArn = deployed.bundleArn;
+
             try {
               const versions = await listConfigurationBundleVersions({
                 region: resolvedRegion,
-                bundleId: deployed.bundleId,
+                bundleId: effectiveBundleId,
                 maxResults: 50,
               });
               const branchSet = new Set<string>();
@@ -99,8 +106,8 @@ export function useConfigBundleHub(): ConfigBundleHubState {
                 if (v.versionCreatedAt > latestTs) latestTs = v.versionCreatedAt;
               }
               return {
-                bundleId: deployed.bundleId,
-                bundleArn: deployed.bundleArn,
+                bundleId: effectiveBundleId,
+                bundleArn: effectiveBundleArn,
                 bundleName: bundleSpec.name,
                 description: bundleSpec.description,
                 versionCount: versions.versions.length,
@@ -108,9 +115,40 @@ export function useConfigBundleHub(): ConfigBundleHubState {
                 lastUpdated: latestTs || undefined,
               };
             } catch {
+              // Stale deployed-state ID — try to resolve via list API
+              try {
+                const allBundles = await listConfigurationBundles({ region: resolvedRegion, maxResults: 100 });
+                const match = allBundles.bundles.find(b => b.bundleName === bundleSpec.name);
+                if (match) {
+                  effectiveBundleId = match.bundleId;
+                  effectiveBundleArn = match.bundleArn;
+                  const versions = await listConfigurationBundleVersions({
+                    region: resolvedRegion,
+                    bundleId: effectiveBundleId,
+                    maxResults: 50,
+                  });
+                  const branchSet = new Set<string>();
+                  let latestTs = '';
+                  for (const v of versions.versions) {
+                    if (v.lineageMetadata?.branchName) branchSet.add(v.lineageMetadata.branchName);
+                    if (v.versionCreatedAt > latestTs) latestTs = v.versionCreatedAt;
+                  }
+                  return {
+                    bundleId: effectiveBundleId,
+                    bundleArn: effectiveBundleArn,
+                    bundleName: bundleSpec.name,
+                    description: bundleSpec.description,
+                    versionCount: versions.versions.length,
+                    branches: [...branchSet],
+                    lastUpdated: latestTs || undefined,
+                  };
+                }
+              } catch {
+                // Both paths failed
+              }
               return {
-                bundleId: deployed.bundleId,
-                bundleArn: deployed.bundleArn,
+                bundleId: effectiveBundleId,
+                bundleArn: effectiveBundleArn,
                 bundleName: bundleSpec.name,
                 description: bundleSpec.description,
                 versionCount: 0,

@@ -170,6 +170,10 @@ export const registerRun = (program: Command) => {
     .option('-n, --name <name>', 'Name for the batch evaluation (auto-generated if omitted)')
     .option('-d, --lookback-days <days>', 'Lookback window in days (filters sessions by time range)')
     .option('-s, --session-ids <ids...>', 'Specific session IDs to evaluate')
+    .option(
+      '-g, --ground-truth <path>',
+      'JSON file with session metadata and ground truth (assertions, expected trajectory, turns)'
+    )
     .option('--region <region>', 'AWS region (auto-detected if omitted)')
     .option('--execution-role <arn>', 'IAM execution role ARN for batch evaluation')
     .option('--json', 'Output as JSON')
@@ -180,6 +184,7 @@ export const registerRun = (program: Command) => {
         name?: string;
         lookbackDays?: string;
         sessionIds?: string[];
+        groundTruth?: string;
         region?: string;
         executionRole?: string;
         json?: boolean;
@@ -187,6 +192,23 @@ export const registerRun = (program: Command) => {
         requireProject();
 
         try {
+          // Parse ground truth file if provided
+          let sessionMetadata: import('../../aws/agentcore-batch-evaluation').SessionMetadataEntry[] | undefined;
+          if (cliOptions.groundTruth) {
+            const { readFileSync } = await import('node:fs');
+            const gtContent = readFileSync(cliOptions.groundTruth, 'utf-8');
+            const gtData = JSON.parse(gtContent) as Record<string, unknown>;
+            // Accept either a raw array or an object with a sessionMetadata key
+            sessionMetadata = Array.isArray(gtData)
+              ? (gtData as import('../../aws/agentcore-batch-evaluation').SessionMetadataEntry[])
+              : (gtData.sessionMetadata as import('../../aws/agentcore-batch-evaluation').SessionMetadataEntry[]);
+            if (!Array.isArray(sessionMetadata)) {
+              throw new Error(
+                'Ground truth file must be a JSON array of session metadata entries, or an object with a "sessionMetadata" key'
+              );
+            }
+          }
+
           const lookbackDays = cliOptions.lookbackDays ? parseInt(cliOptions.lookbackDays, 10) : undefined;
           const result = await runBatchEvaluationCommand({
             agent: cliOptions.runtime,
@@ -196,6 +218,7 @@ export const registerRun = (program: Command) => {
             executionRoleArn: cliOptions.executionRole,
             sessionIds: cliOptions.sessionIds,
             lookbackDays: lookbackDays && !isNaN(lookbackDays) ? lookbackDays : undefined,
+            sessionMetadata,
             onProgress: cliOptions.json
               ? undefined
               : (_status, message) => {
@@ -221,6 +244,9 @@ export const registerRun = (program: Command) => {
             formatBatchEvalOutput(result);
           } else {
             render(<Text color="red">{result.error}</Text>);
+            if (result.logFilePath) {
+              console.error(`\nLog: ${result.logFilePath}`);
+            }
           }
 
           process.exit(result.success ? 0 : 1);
@@ -348,14 +374,24 @@ export const registerRun = (program: Command) => {
               console.log(JSON.stringify(result));
             } else {
               render(<Text color="red">{result.error}</Text>);
+              if (result.logFilePath) {
+                console.error(`\nLog: ${result.logFilePath}`);
+              }
             }
             process.exit(1);
           }
 
           // Save results locally
+          let savedFilePath: string | undefined;
           try {
             if (result.recommendationId) {
-              saveRecommendationRun(result.recommendationId, result, recType, agent, evaluator ? [evaluator] : []);
+              savedFilePath = saveRecommendationRun(
+                result.recommendationId,
+                result,
+                recType,
+                agent,
+                evaluator ? [evaluator] : []
+              );
             }
           } catch {
             // Non-fatal — skip saving
@@ -387,6 +423,9 @@ export const registerRun = (program: Command) => {
               }
             }
 
+            if (savedFilePath) {
+              console.log(`\nResults saved to: ${savedFilePath}`);
+            }
             console.log('');
           }
 

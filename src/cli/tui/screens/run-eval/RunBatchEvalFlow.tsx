@@ -1,4 +1,5 @@
 import { validateAwsCredentials } from '../../../aws/account';
+import type { SessionMetadataEntry } from '../../../aws/agentcore-batch-evaluation';
 import { listEvaluators } from '../../../aws/agentcore-control';
 import { detectRegion } from '../../../aws/region';
 import { getErrorMessage } from '../../../errors';
@@ -16,6 +17,7 @@ import {
   ErrorPrompt,
   GradientText,
   Panel,
+  PathInput,
   Screen,
   StepIndicator,
   StepProgress,
@@ -27,8 +29,12 @@ import type { SelectableItem, Step } from '../../components';
 import { HELP_TEXT } from '../../constants';
 import { useListNavigation, useMultiSelectNavigation } from '../../hooks';
 import type { EvaluatorItem } from '../online-eval/types';
+import { GroundTruthForm } from './GroundTruthForm';
 import type { AgentItem } from './types';
+import type { GroundTruthData } from './useRunEvalWizard';
 import { Box, Text } from 'ink';
+import { readFileSync } from 'node:fs';
+import { resolve as resolvePath } from 'node:path';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 // ============================================================================
@@ -37,7 +43,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 const DEFAULT_LOOKBACK_DAYS = 7;
 
-type BatchEvalStep = 'agent' | 'evaluators' | 'days' | 'sessions' | 'name' | 'confirm';
+type BatchEvalStep = 'agent' | 'evaluators' | 'days' | 'sessions' | 'ground-truth' | 'name' | 'confirm';
 
 interface BatchEvalConfig {
   agent: string;
@@ -45,6 +51,8 @@ interface BatchEvalConfig {
   evaluatorNames: string[];
   days: number;
   sessionIds: string[];
+  groundTruthFile: string;
+  sessionMetadata?: SessionMetadataEntry[];
   name: string;
 }
 
@@ -53,6 +61,7 @@ const STEP_LABELS: Record<BatchEvalStep, string> = {
   evaluators: 'Evaluators',
   days: 'Lookback',
   sessions: 'Sessions',
+  'ground-truth': 'Ground Truth',
   name: 'Name',
   confirm: 'Confirm',
 };
@@ -61,9 +70,9 @@ type FlowState =
   | { name: 'loading' }
   | { name: 'wizard'; agents: AgentItem[]; evaluators: EvaluatorItem[] }
   | { name: 'running'; config: BatchEvalConfig; steps: Step[]; elapsed: number }
-  | { name: 'results'; result: RunBatchEvaluationCommandResult }
+  | { name: 'results'; result: RunBatchEvaluationCommandResult; savedFilePath?: string }
   | { name: 'creds-error'; message: string }
-  | { name: 'error'; message: string };
+  | { name: 'error'; message: string; logFilePath?: string };
 
 // ============================================================================
 // Flow Component
@@ -90,8 +99,11 @@ export function RunBatchEvalFlow({ onExit }: RunBatchEvalFlowProps) {
       }
 
       try {
-        const { region } = await detectRegion();
-        const [evalResult, context] = await Promise.all([listEvaluators({ region }), loadDeployedProjectConfig()]);
+        const context = await loadDeployedProjectConfig();
+        const targetRegion = context.awsTargets?.[0]?.region;
+        const { region: detectedRegion } = await detectRegion();
+        const region = targetRegion ?? detectedRegion;
+        const evalResult = await listEvaluators({ region });
 
         if (cancelled) return;
 
@@ -182,6 +194,7 @@ export function RunBatchEvalFlow({ onExit }: RunBatchEvalFlowProps) {
           name: config.name || undefined,
           sessionIds: config.sessionIds.length > 0 ? config.sessionIds : undefined,
           lookbackDays: config.days,
+          sessionMetadata: config.sessionMetadata,
           onProgress: (status, _message) => {
             if (cancelled) return;
             setFlow(prev => {
@@ -200,9 +213,10 @@ export function RunBatchEvalFlow({ onExit }: RunBatchEvalFlowProps) {
         if (cancelled) return;
 
         // Save results locally
+        let savedFilePath: string | undefined;
         if (result.success) {
           try {
-            saveBatchEvalRun(result);
+            savedFilePath = saveBatchEvalRun(result);
           } catch {
             // Non-fatal
           }
@@ -218,7 +232,11 @@ export function RunBatchEvalFlow({ onExit }: RunBatchEvalFlowProps) {
           });
           await new Promise(resolve => setTimeout(resolve, 2000));
           if (cancelled) return;
-          setFlow({ name: 'error', message: result.error ?? 'Batch evaluation failed' });
+          setFlow({
+            name: 'error',
+            message: result.error ?? 'Batch evaluation failed',
+            logFilePath: result.logFilePath,
+          });
           return;
         }
 
@@ -229,7 +247,7 @@ export function RunBatchEvalFlow({ onExit }: RunBatchEvalFlowProps) {
           return { ...prev, steps };
         });
 
-        setFlow({ name: 'results', result });
+        setFlow({ name: 'results', result, savedFilePath });
       } catch (err) {
         clearInterval(timer);
         if (!cancelled) {
@@ -300,13 +318,20 @@ export function RunBatchEvalFlow({ onExit }: RunBatchEvalFlowProps) {
   }
 
   if (flow.name === 'results') {
-    return <ResultsView result={flow.result} onRunAnother={() => setFlow({ name: 'loading' })} onExit={onExit} />;
+    return (
+      <ResultsView
+        result={flow.result}
+        savedFilePath={flow.savedFilePath}
+        onRunAnother={() => setFlow({ name: 'loading' })}
+        onExit={onExit}
+      />
+    );
   }
 
   return (
     <ErrorPrompt
       message="Batch evaluation failed"
-      detail={flow.message}
+      detail={flow.logFilePath ? `${flow.message}\n\nLog: ${flow.logFilePath}` : flow.message}
       onBack={() => setFlow({ name: 'loading' })}
       onExit={onExit}
     />
@@ -329,8 +354,8 @@ function BatchEvalWizard({ agents, evaluators: rawEvaluators, onComplete, onExit
   const allSteps = useMemo<BatchEvalStep[]>(
     () =>
       skipAgent
-        ? ['evaluators', 'days', 'sessions', 'name', 'confirm']
-        : ['agent', 'evaluators', 'days', 'sessions', 'name', 'confirm'],
+        ? ['evaluators', 'days', 'sessions', 'ground-truth', 'name', 'confirm']
+        : ['agent', 'evaluators', 'days', 'sessions', 'ground-truth', 'name', 'confirm'],
     [skipAgent]
   );
 
@@ -341,15 +366,21 @@ function BatchEvalWizard({ agents, evaluators: rawEvaluators, onComplete, onExit
     evaluatorNames: [],
     days: DEFAULT_LOOKBACK_DAYS,
     sessionIds: [],
+    groundTruthFile: '',
+    sessionMetadata: undefined,
     name: '',
   });
 
   const currentIndex = allSteps.indexOf(step);
+  const [groundTruthError, setGroundTruthError] = useState<string | null>(null);
+  const [gtMode, setGtMode] = useState<'choose' | 'file' | 'inline'>('choose');
 
   const goBack = useCallback(() => {
     const prev = allSteps[currentIndex - 1];
-    if (prev) setStep(prev);
-    else onExit();
+    if (prev) {
+      if (prev === 'ground-truth') setGtMode('choose');
+      setStep(prev);
+    } else onExit();
   }, [allSteps, currentIndex, onExit]);
 
   const goNext = useCallback(() => {
@@ -383,6 +414,7 @@ function BatchEvalWizard({ agents, evaluators: rawEvaluators, onComplete, onExit
   const isEvaluatorsStep = step === 'evaluators';
   const isDaysStep = step === 'days';
   const isSessionsStep = step === 'sessions';
+  const isGroundTruthStep = step === 'ground-truth';
   const isNameStep = step === 'name';
   const isConfirmStep = step === 'confirm';
 
@@ -399,7 +431,9 @@ function BatchEvalWizard({ agents, evaluators: rawEvaluators, onComplete, onExit
     void (async () => {
       try {
         const context = await loadDeployedProjectConfig();
-        const { region } = await detectRegion();
+        const targetRegion = context.awsTargets?.[0]?.region;
+        const { region: detectedRegion } = await detectRegion();
+        const region = targetRegion ?? detectedRegion;
         const agentResult = resolveAgent(context, { runtime: config.agent });
         if (!agentResult.success) {
           if (!cancelled) setSessionResult({ key: fetchKey, phase: 'error', message: agentResult.error });
@@ -507,6 +541,32 @@ function BatchEvalWizard({ agents, evaluators: rawEvaluators, onComplete, onExit
     requireSelection: true,
   });
 
+  const gtChoiceItems: SelectableItem[] = useMemo(
+    () => [
+      { id: 'skip', title: 'Skip', description: 'No ground truth' },
+      { id: 'file', title: 'Load from file', description: 'JSON file with session metadata and ground truth' },
+      { id: 'inline', title: 'Enter manually', description: 'Type assertions, trajectory, and expected response' },
+    ],
+    []
+  );
+
+  const gtChoiceNav = useListNavigation({
+    items: gtChoiceItems,
+    onSelect: item => {
+      setGroundTruthError(null);
+      if (item.id === 'skip') {
+        setConfig(c => ({ ...c, groundTruthFile: '', sessionMetadata: undefined }));
+        goNext();
+      } else if (item.id === 'file') {
+        setGtMode('file');
+      } else {
+        setGtMode('inline');
+      }
+    },
+    onExit: () => goBack(),
+    isActive: isGroundTruthStep && gtMode === 'choose',
+  });
+
   useListNavigation({
     items: [{ id: 'confirm', title: 'Confirm' }],
     onSelect: () => onComplete(config),
@@ -526,14 +586,20 @@ function BatchEvalWizard({ agents, evaluators: rawEvaluators, onComplete, onExit
             : sessionPhase === 'error'
               ? HELP_TEXT.CONFIRM_CANCEL
               : 'Space toggle · Enter confirm · Esc back'
-          : isNameStep
-            ? HELP_TEXT.TEXT_INPUT
-            : HELP_TEXT.CONFIRM_CANCEL;
+          : isGroundTruthStep
+            ? gtMode === 'choose'
+              ? HELP_TEXT.NAVIGATE_SELECT
+              : gtMode === 'file'
+                ? HELP_TEXT.TEXT_INPUT
+                : 'Enter value · Enter on empty to skip section · Esc back'
+            : isNameStep
+              ? HELP_TEXT.TEXT_INPUT
+              : HELP_TEXT.CONFIRM_CANCEL;
 
   const headerContent = <StepIndicator steps={allSteps} currentStep={step} labels={STEP_LABELS} />;
 
   return (
-    <Screen title="Run Batch Evaluation" onExit={onExit} helpText={helpText} headerContent={headerContent}>
+    <Screen title="Run Batch Evaluation" onExit={goBack} helpText={helpText} headerContent={headerContent}>
       <Panel>
         {isAgentStep && (
           <WizardSelect
@@ -594,6 +660,84 @@ function BatchEvalWizard({ agents, evaluators: rawEvaluators, onComplete, onExit
           />
         )}
 
+        {isGroundTruthStep && gtMode === 'choose' && (
+          <WizardSelect
+            title="Ground truth (optional)"
+            description="Provide assertions, expected trajectory, or expected responses for evaluation"
+            items={gtChoiceItems}
+            selectedIndex={gtChoiceNav.selectedIndex}
+          />
+        )}
+
+        {isGroundTruthStep && gtMode === 'file' && (
+          <Box flexDirection="column">
+            <Text dimColor>Select a JSON file with session ground truth (assertions, expected trajectory, turns).</Text>
+            {groundTruthError && <Text color="red">{groundTruthError}</Text>}
+            <PathInput
+              placeholder="path/to/ground-truth.json"
+              pathType="file"
+              onSubmit={value => {
+                setGroundTruthError(null);
+                try {
+                  const resolved = resolvePath(value.trim());
+                  const content = readFileSync(resolved, 'utf-8');
+                  const parsed = JSON.parse(content) as Record<string, unknown>;
+                  const metadata: SessionMetadataEntry[] = Array.isArray(parsed)
+                    ? (parsed as SessionMetadataEntry[])
+                    : (parsed.sessionMetadata as SessionMetadataEntry[]);
+                  if (!Array.isArray(metadata)) {
+                    setGroundTruthError('File must be a JSON array or contain a "sessionMetadata" array');
+                    return;
+                  }
+                  setConfig(c => ({ ...c, groundTruthFile: resolved, sessionMetadata: metadata }));
+                  goNext();
+                } catch (err) {
+                  setGroundTruthError(`Failed to load file: ${err instanceof Error ? err.message : String(err)}`);
+                }
+              }}
+              onCancel={() => {
+                setGroundTruthError(null);
+                setGtMode('choose');
+              }}
+            />
+          </Box>
+        )}
+
+        {isGroundTruthStep && gtMode === 'inline' && (
+          <GroundTruthForm
+            sessionId={config.sessionIds.length === 1 ? config.sessionIds[0]! : `${config.sessionIds.length} sessions`}
+            onSubmit={(gt: GroundTruthData) => {
+              // Apply the same ground truth to all selected sessions
+              const metadata: SessionMetadataEntry[] = config.sessionIds.map(sid => ({
+                sessionId: sid,
+                groundTruth: {
+                  inline: {
+                    ...(gt.assertions.length > 0 ? { assertions: gt.assertions.map(text => ({ text })) } : {}),
+                    ...(gt.expectedTrajectory.length > 0
+                      ? { expectedTrajectory: { toolNames: gt.expectedTrajectory } }
+                      : {}),
+                    ...(gt.expectedResponse
+                      ? {
+                          turns: [
+                            {
+                              input: { prompt: '' },
+                              expectedResponse: { text: gt.expectedResponse },
+                            },
+                          ],
+                        }
+                      : {}),
+                  },
+                },
+              }));
+              setConfig(c => ({ ...c, groundTruthFile: '', sessionMetadata: metadata }));
+              goNext();
+            }}
+            onCancel={() => {
+              setGtMode('choose');
+            }}
+          />
+        )}
+
         {isNameStep && (
           <Box flexDirection="column">
             <Text dimColor>Optional — leave blank for auto-generated name.</Text>
@@ -621,6 +765,9 @@ function BatchEvalWizard({ agents, evaluators: rawEvaluators, onComplete, onExit
                 label: 'Sessions',
                 value: `${config.sessionIds.length} selected`,
               },
+              ...(config.sessionMetadata
+                ? [{ label: 'Ground Truth', value: `${config.sessionMetadata.length} session(s) with ground truth` }]
+                : []),
               ...(config.name ? [{ label: 'Name', value: config.name }] : []),
             ]}
           />
@@ -642,11 +789,12 @@ function scoreColor(score: number): string {
 
 interface ResultsViewProps {
   result: RunBatchEvaluationCommandResult;
+  savedFilePath?: string;
   onRunAnother: () => void;
   onExit: () => void;
 }
 
-function ResultsView({ result, onRunAnother, onExit }: ResultsViewProps) {
+function ResultsView({ result, savedFilePath, onRunAnother, onExit }: ResultsViewProps) {
   const actions = [
     { id: 'another', title: 'Run another batch evaluation' },
     { id: 'back', title: 'Back' },
@@ -744,6 +892,11 @@ function ResultsView({ result, onRunAnother, onExit }: ResultsViewProps) {
             </Box>
           )}
 
+          {savedFilePath && (
+            <Box marginTop={1}>
+              <Text dimColor>Results saved to: {savedFilePath}</Text>
+            </Box>
+          )}
           {result.logFilePath && (
             <Box marginTop={1}>
               <Text dimColor>Log: {result.logFilePath}</Text>
