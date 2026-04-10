@@ -65,3 +65,6 @@ export {
   PolicySchema,
   ValidationModeSchema,
 } from './policy';
+
+export type { HttpGateway } from './http-gateway';
+export { HttpGatewayNameSchema, HttpGatewaySchema } from './http-gateway';

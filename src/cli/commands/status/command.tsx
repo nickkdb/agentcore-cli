@@ -146,6 +146,7 @@ export const registerStatus = (program: Command) => {
         const policies = filtered.filter(r => r.resourceType === 'policy');
         const configBundles = filtered.filter(r => r.resourceType === 'config-bundle');
         const abTests = filtered.filter(r => r.resourceType === 'ab-test');
+        // TODO: Add http-gateway resource type when diffResourceSet for HTTP gateways is added to action.ts
 
         render(
           <Box flexDirection="column">
@@ -244,12 +245,21 @@ export const registerStatus = (program: Command) => {
 
             {abTests.length > 0 && (
               <Box flexDirection="column" marginTop={1}>
-                <Text bold>A/B Tests</Text>
+                <Text bold>AB Tests</Text>
                 {abTests.map(entry => (
-                  <ResourceEntry key={`${entry.resourceType}-${entry.name}`} entry={entry} />
+                  <Box key={`${entry.resourceType}-${entry.name}`} flexDirection="column">
+                    <ResourceEntry entry={entry} />
+                    {entry.invocationUrl && (
+                      <Text dimColor>
+                        {'  '}Gateway URL: {entry.invocationUrl}
+                      </Text>
+                    )}
+                  </Box>
                 ))}
               </Box>
             )}
+
+            {/* TODO: Add HTTP Gateways render section when diffResourceSet is added to action.ts */}
 
             {filtered.length === 0 && <Text dimColor>No resources match the given filters.</Text>}
           </Box>

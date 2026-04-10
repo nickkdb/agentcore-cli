@@ -26,6 +26,8 @@ export function AddABTestFlow({ isInteractive = true, onExit, onBack, onDev, onD
   const [flow, setFlow] = useState<FlowState>({ name: 'create-wizard' });
 
   // Load deployed state for bundle lists
+  const [agents, setAgents] = useState<{ name: string }[]>([]);
+  const [existingHttpGateways, setExistingHttpGateways] = useState<string[]>([]);
   const [deployedBundles, setDeployedBundles] = useState<{ name: string; bundleId: string }[]>([]);
   const [onlineEvalConfigs, setOnlineEvalConfigs] = useState<string[]>([]);
   const [region, setRegion] = useState('us-east-1');
@@ -53,6 +55,14 @@ export function AddABTestFlow({ isInteractive = true, onExit, onBack, onDev, onD
           }
           break;
         }
+
+        // Agents from project spec runtimes
+        const runtimes = projectSpec.runtimes ?? [];
+        setAgents(runtimes.map(r => ({ name: r.name })));
+
+        // Existing HTTP gateways from project spec
+        const httpGws = projectSpec.httpGateways ?? [];
+        setExistingHttpGateways(httpGws.map(gw => gw.name));
 
         // Online eval configs from project spec
         const evalConfigs = projectSpec.onlineEvalConfigs ?? [];
@@ -95,7 +105,8 @@ export function AddABTestFlow({ isInteractive = true, onExit, onBack, onDev, onD
       void createABTest({
         name: config.name,
         description: config.description || undefined,
-        gateway: config.gateway,
+        agent: config.agent,
+        gatewayChoice: config.gatewayChoice,
         controlBundle: config.controlBundle,
         controlVersion: config.controlVersion,
         treatmentBundle: config.treatmentBundle,
@@ -120,6 +131,8 @@ export function AddABTestFlow({ isInteractive = true, onExit, onBack, onDev, onD
     return (
       <AddABTestScreen
         existingTestNames={existingNames}
+        agents={agents}
+        existingHttpGateways={existingHttpGateways}
         deployedBundles={deployedBundles}
         onlineEvalConfigs={onlineEvalConfigs}
         fetchBundleVersions={fetchBundleVersions}

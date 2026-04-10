@@ -7,10 +7,13 @@ import { BasePrimitive } from './BasePrimitive';
 import type { AddResult, AddScreenComponent, RemovableResource } from './types';
 import type { Command } from '@commander-js/extra-typings';
 
+export type GatewayChoice = { type: 'create-new' } | { type: 'existing-http'; name: string };
+
 export interface AddABTestOptions {
   name: string;
   description?: string;
-  gatewayArn: string;
+  agent: string;
+  gatewayChoice?: GatewayChoice;
   roleArn?: string;
   controlBundle: string;
   controlVersion: string;
@@ -58,7 +61,27 @@ export class ABTestPrimitive extends BasePrimitive<AddABTestOptions, RemovableAB
         return { success: false, error: `AB test "${testName}" not found.` };
       }
 
+      const removedTest = project.abTests[index]!;
       project.abTests.splice(index, 1);
+
+      // Cascade: remove orphaned HTTP gateway
+      if (removedTest?.gatewayRef) {
+        const gwMatch = /^\{\{gateway:(.+)\}\}$/.exec(removedTest.gatewayRef);
+        if (gwMatch) {
+          const gwName = gwMatch[1];
+          const stillReferenced = project.abTests.some(t => {
+            const m = /^\{\{gateway:(.+)\}\}$/.exec(t.gatewayRef);
+            return m && m[1] === gwName;
+          });
+          if (!stillReferenced) {
+            const gwIndex = project.httpGateways.findIndex(gw => gw.name === gwName);
+            if (gwIndex !== -1) {
+              project.httpGateways.splice(gwIndex, 1);
+            }
+          }
+        }
+      }
+
       await this.writeProjectSpec(project);
 
       return { success: true };
@@ -78,10 +101,30 @@ export class ABTestPrimitive extends BasePrimitive<AddABTestOptions, RemovableAB
     const summary: string[] = [`Removing AB test: ${testName}`];
     const schemaChanges: SchemaChange[] = [];
 
+    const testIndex = project.abTests.findIndex(t => t.name === testName);
     const afterSpec = {
       ...project,
       abTests: project.abTests.filter(t => t.name !== testName),
+      httpGateways: [...project.httpGateways],
     };
+
+    // Check if the gateway would be orphaned
+    const test = project.abTests[testIndex];
+    if (test?.gatewayRef) {
+      const gwMatch = /^\{\{gateway:(.+)\}\}$/.exec(test.gatewayRef);
+      if (gwMatch) {
+        const gwName = gwMatch[1];
+        const otherTests = project.abTests.filter((_, i) => i !== testIndex);
+        const stillReferenced = otherTests.some(t => {
+          const m = /^\{\{gateway:(.+)\}\}$/.exec(t.gatewayRef);
+          return m && m[1] === gwName;
+        });
+        if (!stillReferenced) {
+          summary.push(`Also removing HTTP gateway: ${gwName} (no other AB tests reference it)`);
+          afterSpec.httpGateways = project.httpGateways.filter(gw => gw.name !== gwName);
+        }
+      }
+    }
 
     schemaChanges.push({
       file: 'agentcore/agentcore.json',
@@ -116,7 +159,7 @@ export class ABTestPrimitive extends BasePrimitive<AddABTestOptions, RemovableAB
       .description('Add an A/B test to the project')
       .option('--name <name>', 'AB test name')
       .option('--description <text>', 'AB test description')
-      .option('--gateway-arn <arn>', 'Gateway ARN')
+      .option('--agent <name>', 'Agent to A/B test')
       .option('--role-arn <arn>', 'IAM role ARN for the AB test (auto-created if not provided)')
       .option('--control-bundle <name>', 'Control variant config bundle name or ARN')
       .option('--control-version <id>', 'Control variant config bundle version')
@@ -124,16 +167,19 @@ export class ABTestPrimitive extends BasePrimitive<AddABTestOptions, RemovableAB
       .option('--treatment-version <id>', 'Treatment variant config bundle version')
       .option('--control-weight <n>', 'Traffic weight for control (1-100)', parseInt)
       .option('--treatment-weight <n>', 'Traffic weight for treatment (1-100)', parseInt)
+      .option('--gateway <name>', 'Use an existing HTTP gateway (skips auto-creation and --agent)')
       .option('--online-eval <name>', 'Online evaluation config name or ARN')
       .option('--traffic-header <name>', 'Header name for traffic routing')
-      .option('--max-duration <days>', 'Maximum duration in days (1-90)', parseInt)
+      // TODO(post-preview): Re-enable --max-duration once configurable duration is launched.
+      // .option('--max-duration <days>', 'Maximum duration in days (1-90)', parseInt)
       .option('--enable', 'Enable the AB test on creation')
       .option('--json', 'Output as JSON')
       .action(
         async (cliOptions: {
           name?: string;
           description?: string;
-          gatewayArn?: string;
+          agent?: string;
+          gateway?: string;
           roleArn?: string;
           controlBundle?: string;
           controlVersion?: string;
@@ -164,7 +210,7 @@ export class ABTestPrimitive extends BasePrimitive<AddABTestOptions, RemovableAB
               };
 
               if (!cliOptions.name) fail('--name is required');
-              if (!cliOptions.gatewayArn) fail('--gateway-arn is required');
+              if (!cliOptions.gateway && !cliOptions.agent) fail('--agent is required (unless --gateway is provided)');
               if (!cliOptions.controlBundle) fail('--control-bundle is required');
               if (!cliOptions.controlVersion) fail('--control-version is required');
               if (!cliOptions.treatmentBundle) fail('--treatment-bundle is required');
@@ -176,7 +222,10 @@ export class ABTestPrimitive extends BasePrimitive<AddABTestOptions, RemovableAB
               const result = await this.add({
                 name: cliOptions.name!,
                 description: cliOptions.description,
-                gatewayArn: cliOptions.gatewayArn!,
+                agent: cliOptions.agent ?? '',
+                gatewayChoice: cliOptions.gateway
+                  ? { type: 'existing-http', name: cliOptions.gateway }
+                  : { type: 'create-new' },
                 roleArn: cliOptions.roleArn!,
                 controlBundle: cliOptions.controlBundle!,
                 controlVersion: cliOptions.controlVersion!,
@@ -239,10 +288,41 @@ export class ABTestPrimitive extends BasePrimitive<AddABTestOptions, RemovableAB
 
     this.checkDuplicate(project.abTests, options.name);
 
+    // Resolve gateway reference based on the user's choice
+    let gatewayRef: string;
+    const choice = options.gatewayChoice ?? { type: 'create-new' };
+
+    if (choice.type === 'existing-http') {
+      // Reuse an existing HTTP gateway from the project spec
+      const existing = project.httpGateways.find(gw => gw.name === choice.name);
+      if (!existing) {
+        throw new Error(`HTTP gateway "${choice.name}" not found in project.`);
+      }
+      gatewayRef = `{{gateway:${choice.name}}}`;
+    } else {
+      // Create new HTTP gateway — truncate name to fit 48-char limit
+      const httpGwName = `${options.name.replace(/_/g, '-').slice(0, 44)}-gw`;
+      const existingGw = project.httpGateways.find(gw => gw.name === httpGwName);
+      if (existingGw) {
+        if (existingGw.runtimeRef !== options.agent) {
+          throw new Error(
+            `HTTP gateway "${httpGwName}" already exists with a different runtime (${existingGw.runtimeRef}). ` +
+              `Choose a different AB test name to avoid a gateway name collision.`
+          );
+        }
+      } else {
+        project.httpGateways.push({
+          name: httpGwName,
+          runtimeRef: options.agent,
+        });
+      }
+      gatewayRef = `{{gateway:${httpGwName}}}`;
+    }
+
     const abTest: ABTest = {
       name: options.name,
       ...(options.description && { description: options.description }),
-      gatewayArn: options.gatewayArn,
+      gatewayRef,
       ...(options.roleArn && { roleArn: options.roleArn }),
       variants: [
         {

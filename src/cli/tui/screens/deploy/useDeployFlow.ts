@@ -15,8 +15,10 @@ import { getErrorMessage, isChangesetInProgressError, isExpiredTokenError } from
 import { ExecLogger } from '../../../logging';
 import { performStackTeardown, setupTransactionSearch } from '../../../operations/deploy';
 import { getGatewayTargetStatuses } from '../../../operations/deploy/gateway-status';
-import { setupABTests } from '../../../operations/deploy/post-deploy-ab-tests';
+import { deleteOrphanedABTests, setupABTests } from '../../../operations/deploy/post-deploy-ab-tests';
 import { setupConfigBundles } from '../../../operations/deploy/post-deploy-config-bundles';
+import { setupHttpGateways } from '../../../operations/deploy/post-deploy-http-gateways';
+import { enableOnlineEvalConfigs } from '../../../operations/deploy/post-deploy-online-evals';
 import {
   type StackDiffSummary,
   type Step,
@@ -292,7 +294,7 @@ export function useDeployFlow(options: DeployFlowOptions = {}): DeployFlowState 
     setStackOutputs(outputs);
 
     const existingState = await configIO.readDeployedState().catch(() => undefined);
-    const deployedState = buildDeployedState({
+    let deployedState = buildDeployedState({
       targetName: target.name,
       stackName: currentStackName,
       agents,
@@ -307,6 +309,38 @@ export function useDeployFlow(options: DeployFlowOptions = {}): DeployFlowState 
       policies,
     });
     await configIO.writeDeployedState(deployedState);
+
+    // Post-deploy: Enable online eval configs that have enableOnCreate (CFN deploys them as DISABLED).
+    // Only enable configs that are newly deployed — skip configs that already existed before this
+    // deploy run, so we don't re-enable configs a customer intentionally disabled.
+    const onlineEvalSpecs = ctx.projectSpec.onlineEvalConfigs ?? [];
+    const deployedOnlineEvalConfigs = deployedState.targets?.[target.name]?.resources?.onlineEvalConfigs ?? {};
+    const previouslyDeployedOnlineEvals = existingState?.targets?.[target.name]?.resources?.onlineEvalConfigs ?? {};
+    const newOnlineEvalSpecs = onlineEvalSpecs.filter(c => !previouslyDeployedOnlineEvals[c.name]);
+    if (newOnlineEvalSpecs.length > 0 && Object.keys(deployedOnlineEvalConfigs).length > 0) {
+      try {
+        const enableResult = await enableOnlineEvalConfigs({
+          region: target.region,
+          onlineEvalConfigs: newOnlineEvalSpecs,
+          deployedOnlineEvalConfigs,
+        });
+
+        if (enableResult.hasErrors) {
+          const errors = enableResult.results.filter(r => r.status === 'error');
+          for (const err of errors) {
+            logger.log(`Online eval enable "${err.configName}" error: ${err.error}`, 'warn');
+          }
+          setPostDeployWarnings(prev => [
+            ...prev,
+            ...errors.map(err => `Online eval "${err.configName}": ${err.error}`),
+          ]);
+        }
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.log(`Online eval enable failed: ${message}`, 'warn');
+        setPostDeployWarnings(prev => [...prev, `Online eval enable failed: ${message}`]);
+      }
+    }
 
     // Post-deploy: Create/update configuration bundles
     const configBundleSpecs = ctx.projectSpec.configBundles ?? [];
@@ -343,6 +377,84 @@ export function useDeployFlow(options: DeployFlowOptions = {}): DeployFlowState 
         const message = err instanceof Error ? err.message : String(err);
         logger.log(`Config bundle setup failed: ${message}`, 'warn');
         setPostDeployWarnings(prev => [...prev, `Config bundle setup failed: ${message}`]);
+      }
+    }
+
+    // Pre-gateway: Delete orphaned AB tests so their gateway rules are cleaned up
+    // before we attempt to delete orphaned HTTP gateways.
+    const existingABTests = deployedState.targets?.[target.name]?.resources?.abTests;
+    if (existingABTests && Object.keys(existingABTests).length > 0) {
+      try {
+        const deleteResult = await deleteOrphanedABTests({
+          region: target.region,
+          projectSpec: ctx.projectSpec,
+          existingABTests,
+        });
+
+        if (deleteResult.hasErrors) {
+          const errors = deleteResult.results.filter(r => r.status === 'error');
+          for (const err of errors) {
+            logger.log(`AB test delete "${err.testName}" error: ${err.error}`, 'warn');
+          }
+          setPostDeployWarnings(prev => [...prev, ...errors.map(err => `AB test "${err.testName}": ${err.error}`)]);
+        }
+
+        // Update deployed state to remove deleted AB tests
+        if (deleteResult.results.some(r => r.status === 'deleted')) {
+          const updatedState = await configIO.readDeployedState().catch(() => deployedState);
+          const targetResources = updatedState.targets[target.name]?.resources;
+          if (targetResources?.abTests) {
+            for (const r of deleteResult.results) {
+              if (r.status === 'deleted') delete targetResources.abTests[r.testName];
+            }
+            await configIO.writeDeployedState(updatedState);
+            deployedState = updatedState;
+          }
+        }
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.log(`AB test orphan cleanup failed: ${message}`, 'warn');
+        setPostDeployWarnings(prev => [...prev, `AB test orphan cleanup failed: ${message}`]);
+      }
+    }
+
+    // Post-deploy: Create/update HTTP gateways
+    const httpGatewaySpecs = ctx.projectSpec.httpGateways ?? [];
+    const existingHttpGateways = deployedState.targets?.[target.name]?.resources?.httpGateways;
+    if (httpGatewaySpecs.length > 0 || Object.keys(existingHttpGateways ?? {}).length > 0) {
+      try {
+        const deployedResources = deployedState.targets?.[target.name]?.resources;
+        const httpGatewayResult = await setupHttpGateways({
+          region: target.region,
+          projectName: ctx.projectSpec.name,
+          projectSpec: ctx.projectSpec,
+          existingHttpGateways,
+          deployedResources,
+        });
+
+        // Always merge HTTP gateway state (even if empty, to clear deleted gateways)
+        const updatedState = await configIO.readDeployedState().catch(() => deployedState);
+        const targetResources = updatedState.targets[target.name]?.resources;
+        if (targetResources) {
+          targetResources.httpGateways = httpGatewayResult.httpGateways;
+          await configIO.writeDeployedState(updatedState);
+          deployedState = updatedState;
+        }
+
+        if (httpGatewayResult.hasErrors) {
+          const errors = httpGatewayResult.results.filter(r => r.status === 'error');
+          for (const err of errors) {
+            logger.log(`HTTP gateway "${err.gatewayName}" setup error: ${err.error}`, 'warn');
+          }
+          setPostDeployWarnings(prev => [
+            ...prev,
+            ...errors.map(err => `HTTP gateway "${err.gatewayName}": ${err.error}`),
+          ]);
+        }
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.log(`HTTP gateway setup failed: ${message}`, 'warn');
+        setPostDeployWarnings(prev => [...prev, `HTTP gateway setup failed: ${message}`]);
       }
     }
 

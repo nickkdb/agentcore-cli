@@ -1,7 +1,16 @@
+import { getCredentialProvider } from '../../../aws/account';
 import { getABTest, updateABTest } from '../../../aws/agentcore-ab-tests';
 import type { GetABTestResult } from '../../../aws/agentcore-ab-tests';
+import { getOnlineEvaluationConfig } from '../../../aws/agentcore-control';
+import { getHttpGateway } from '../../../aws/agentcore-http-gateways';
 import { getErrorMessage } from '../../../errors';
-import { Screen } from '../../components';
+import { GradientText, Screen } from '../../components';
+import {
+  CloudWatchLogsClient,
+  DescribeDeliveriesCommand,
+  DescribeDeliverySourcesCommand,
+  FilterLogEventsCommand,
+} from '@aws-sdk/client-cloudwatch-logs';
 import { Box, Text, useInput } from 'ink';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -9,6 +18,17 @@ interface ABTestDetailScreenProps {
   abTestId: string;
   region: string;
   onExit: () => void;
+}
+
+/** Derive the gateway URL from a gateway ARN. */
+function gatewayUrlFromArn(arn: string): string {
+  const parts = arn.split(':');
+  const region = parts[3];
+  const gatewayId = parts[5]?.split('/')[1];
+  if (region && gatewayId) {
+    return `https://${gatewayId}.gateway.bedrock-agentcore.${region}.amazonaws.com`;
+  }
+  return arn;
 }
 
 /** Extract the resource ID from an ARN (last segment after / or :). */
@@ -45,11 +65,193 @@ function rule(left?: string, right?: string, width = 48): string {
   return `${leftPart}${fill}${rightPart}`;
 }
 
+interface DebugCheckResult {
+  label: string;
+  status: 'pass' | 'fail' | 'warn';
+  detail: string;
+}
+
+async function runDebugChecks(test: GetABTestResult, region: string): Promise<DebugCheckResult[]> {
+  const results: DebugCheckResult[] = [];
+  const logsClient = new CloudWatchLogsClient({ region, credentials: getCredentialProvider() });
+
+  // 1. AB Test Status
+  results.push({
+    label: 'AB Test Status',
+    status: test.status === 'ACTIVE' && test.executionStatus === 'RUNNING' ? 'pass' : 'warn',
+    detail: `${test.status} / ${test.executionStatus}`,
+  });
+
+  // 1b. AB Test Role
+  results.push({
+    label: 'AB Test Role',
+    status: test.roleArn ? 'pass' : 'warn',
+    detail: test.roleArn ?? 'No role ARN',
+  });
+
+  // 2. Online Eval Config
+  const evalConfigArn = test.evaluationConfig.onlineEvaluationConfigArn;
+  const evalConfigId = extractId(evalConfigArn);
+  try {
+    const evalConfig = await getOnlineEvaluationConfig({ region, configId: evalConfigId });
+    results.push({
+      label: 'Online Eval Config',
+      status: evalConfig.executionStatus === 'ENABLED' ? 'pass' : 'fail',
+      detail: `${evalConfig.configName} — ${evalConfig.executionStatus}`,
+    });
+  } catch (err) {
+    results.push({ label: 'Online Eval Config', status: 'fail', detail: getErrorMessage(err) });
+  }
+
+  // 2b. Gateway Role
+  const gatewayId = extractId(test.gatewayArn);
+  try {
+    const gateway = await getHttpGateway({ region, gatewayId });
+    results.push({
+      label: 'Gateway Role',
+      status: gateway.roleArn ? 'pass' : 'warn',
+      detail: gateway.roleArn ?? 'No role ARN',
+    });
+  } catch (err) {
+    results.push({ label: 'Gateway Role', status: 'fail', detail: getErrorMessage(err) });
+  }
+
+  // 3. Gateway Trace Delivery (source + destination + delivery)
+  try {
+    const [sources, deliveries] = await Promise.all([
+      logsClient.send(new DescribeDeliverySourcesCommand({})),
+      logsClient.send(new DescribeDeliveriesCommand({})),
+    ]);
+
+    const source = (sources.deliverySources ?? []).find(
+      s => s.resourceArns?.some(a => a.includes(gatewayId)) && s.logType === 'TRACES'
+    );
+    const delivery = source ? (deliveries.deliveries ?? []).find(d => d.deliverySourceName === source.name) : undefined;
+
+    const hasSource = !!source;
+    const hasDelivery = !!delivery;
+
+    if (hasSource && hasDelivery) {
+      results.push({
+        label: 'Gateway Trace Delivery',
+        status: 'pass',
+        detail: `Source: ${source.name} → Delivery: ${delivery.id}`,
+      });
+    } else if (hasSource) {
+      results.push({
+        label: 'Gateway Trace Delivery',
+        status: 'fail',
+        detail: `Source exists (${source.name}) but no delivery/destination — traces not flowing`,
+      });
+    } else {
+      results.push({
+        label: 'Gateway Trace Delivery',
+        status: 'fail',
+        detail: 'Not enabled — gateway spans will not flow to aws/spans',
+      });
+    }
+  } catch (err) {
+    results.push({ label: 'Gateway Trace Delivery', status: 'fail', detail: getErrorMessage(err) });
+  }
+
+  // 4. Gateway Spans in aws/spans
+  const fiveMinAgo = Date.now() - 5 * 60 * 1000;
+  try {
+    const spanEvents = await logsClient.send(
+      new FilterLogEventsCommand({
+        logGroupName: 'aws/spans',
+        startTime: fiveMinAgo,
+        filterPattern: `"${gatewayId}"`,
+        limit: 50,
+      })
+    );
+    const count = spanEvents.events?.length ?? 0;
+    results.push({
+      label: 'Gateway Spans (last 5m)',
+      status: count > 0 ? 'pass' : 'warn',
+      detail: count > 0 ? `${count} spans found` : 'No recent spans — send traffic through the gateway',
+    });
+  } catch (err) {
+    results.push({ label: 'Gateway Spans', status: 'fail', detail: getErrorMessage(err) });
+  }
+
+  // 5. Eval Results with variant breakdown
+  try {
+    const evalLogGroup = `/aws/bedrock-agentcore/evaluations/results/${evalConfigId}`;
+    const thirtyMinAgo = Date.now() - 30 * 60 * 1000;
+
+    const [allEvents, controlEvents, treatmentEvents] = await Promise.all([
+      logsClient.send(new FilterLogEventsCommand({ logGroupName: evalLogGroup, startTime: thirtyMinAgo, limit: 1 })),
+      logsClient.send(
+        new FilterLogEventsCommand({
+          logGroupName: evalLogGroup,
+          startTime: thirtyMinAgo,
+          filterPattern: `"experiment.treatment_name" "C" "${test.abTestArn}"`,
+          limit: 100,
+        })
+      ),
+      logsClient.send(
+        new FilterLogEventsCommand({
+          logGroupName: evalLogGroup,
+          startTime: thirtyMinAgo,
+          filterPattern: `"experiment.treatment_name" "T1" "${test.abTestArn}"`,
+          limit: 100,
+        })
+      ),
+    ]);
+
+    const hasResults = (allEvents.events?.length ?? 0) > 0;
+    const controlCount = controlEvents.events?.length ?? 0;
+    const treatmentCount = treatmentEvents.events?.length ?? 0;
+
+    if (!hasResults) {
+      results.push({
+        label: 'Eval Results (last 30m)',
+        status: 'warn',
+        detail: 'No eval results yet — wait ~5m after session timeout for evaluator to process',
+      });
+    } else {
+      const tagged = controlCount + treatmentCount;
+      results.push({
+        label: 'Eval Results (last 30m)',
+        status: tagged > 0 ? 'pass' : 'warn',
+        detail:
+          tagged > 0
+            ? `C: ${controlCount}, T1: ${treatmentCount}`
+            : 'Results exist but none tagged with variant — check gateway trace delivery',
+      });
+    }
+  } catch (err) {
+    const msg = getErrorMessage(err);
+    results.push({
+      label: 'Eval Results',
+      status: msg.includes('ResourceNotFoundException') ? 'warn' : 'fail',
+      detail: msg.includes('ResourceNotFoundException') ? 'Log group not found — evaluator has not run yet' : msg,
+    });
+  }
+
+  // 6. Aggregation Results
+  const metrics = test.results?.evaluatorMetrics ?? [];
+  const reporting = metrics.filter(m => m.controlStats?.sampleSize > 0);
+  results.push({
+    label: 'Aggregation Results',
+    status: reporting.length > 0 ? 'pass' : 'warn',
+    detail:
+      reporting.length > 0
+        ? `${reporting.length} evaluator(s) reporting`
+        : 'No aggregation data yet — wait ~12-15m after traffic',
+  });
+
+  return results;
+}
+
 export function ABTestDetailScreen({ abTestId, region, onExit }: ABTestDetailScreenProps) {
   const [test, setTest] = useState<GetABTestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [confirmingStop, setConfirmingStop] = useState(false);
+  const [debugResults, setDebugResults] = useState<DebugCheckResult[] | null>(null);
+  const [debugLoading, setDebugLoading] = useState(false);
 
   const hasFetched = useRef(false);
   useEffect(() => {
@@ -115,6 +317,20 @@ export function ABTestDetailScreen({ abTestId, region, onExit }: ABTestDetailScr
       setConfirmingStop(true);
       setActionMessage(null);
     }
+
+    if (input === 'd' || input === 'D') {
+      setDebugLoading(true);
+      setDebugResults(null);
+      void runDebugChecks(test, region)
+        .then(results => {
+          setDebugResults(results);
+          setDebugLoading(false);
+        })
+        .catch(() => {
+          setDebugResults([{ label: 'Debug', status: 'fail' as const, detail: 'Diagnostics failed to run' }]);
+          setDebugLoading(false);
+        });
+    }
   });
 
   if (error) {
@@ -139,13 +355,13 @@ export function ABTestDetailScreen({ abTestId, region, onExit }: ABTestDetailScr
   const executionColor =
     test.executionStatus === 'RUNNING' ? 'green' : test.executionStatus === 'PAUSED' ? 'yellow' : 'red';
 
-  const helpKeys = 'P pause · R resume · S stop · Esc exit';
+  const helpKeys = 'P pause · R resume · S stop · D debug · Esc exit';
 
   // Build status text: only show provisioning status if not ACTIVE
   const statusPrefix = test.status !== 'ACTIVE' ? `${test.status}  ` : '';
 
-  // Duration text
-  const durationText = test.maxDurationDays ? `${test.maxDurationDays} day max` : '';
+  // TODO(post-preview): Re-enable duration display once configurable duration is launched.
+  const durationText = '';
 
   // Column width for side-by-side variants
   const colW = 28;
@@ -162,9 +378,14 @@ export function ABTestDetailScreen({ abTestId, region, onExit }: ABTestDetailScr
           {durationText && <Text dimColor>{durationText}</Text>}
         </Box>
 
-        {/* ── Header: Line 2 — gateway ────────────────────────── */}
+        {/* ── Header: Line 2 — gateway URL ─────────────────────── */}
         <Box>
-          <Text dimColor>{`Gateway: ${extractId(test.gatewayArn)}`}</Text>
+          <Text dimColor>{`Gateway URL: ${gatewayUrlFromArn(test.gatewayArn)}`}</Text>
+        </Box>
+
+        {/* ── Header: Line 3 — online eval ────────────────────── */}
+        <Box>
+          <Text dimColor>{`Online Eval: ${extractId(test.evaluationConfig.onlineEvaluationConfigArn)}`}</Text>
         </Box>
 
         {/* ── Description (if present) ────────────────────────── */}
@@ -256,6 +477,29 @@ export function ABTestDetailScreen({ abTestId, region, onExit }: ABTestDetailScr
             </>
           )}
         </Box>
+
+        {/* ── Debug Panel ─────────────────────────────────────── */}
+        {debugLoading && (
+          <Box marginTop={1}>
+            <GradientText text="Running pipeline diagnostics..." />
+          </Box>
+        )}
+        {debugResults && (
+          <Box marginTop={1} flexDirection="column">
+            <Text dimColor>{rule('Pipeline Debug')}</Text>
+            {debugResults.map((check, i) => {
+              const icon = check.status === 'pass' ? '✓' : check.status === 'fail' ? '✗' : '⚠';
+              const color = check.status === 'pass' ? 'green' : check.status === 'fail' ? 'red' : 'yellow';
+              return (
+                <Box key={i}>
+                  <Text color={color}>{`  ${icon} `}</Text>
+                  <Text bold>{check.label}</Text>
+                  <Text dimColor>{`  ${check.detail}`}</Text>
+                </Box>
+              );
+            })}
+          </Box>
+        )}
 
         {/* ── Stop confirmation ────────────────────────────────── */}
         {confirmingStop && (

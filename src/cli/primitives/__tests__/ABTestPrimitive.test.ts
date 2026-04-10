@@ -13,7 +13,7 @@ vi.mock('../../../lib/index.js', () => ({
   findConfigRoot: () => '/fake/root',
 }));
 
-function makeProject(abTests: { name: string }[] = []) {
+function makeProject(abTests: { name: string; gatewayRef?: string }[] = []) {
   return {
     name: 'TestProject',
     version: 1,
@@ -27,12 +27,13 @@ function makeProject(abTests: { name: string }[] = []) {
     policyEngines: [],
     configBundles: [],
     abTests,
+    httpGateways: [] as { name: string; runtimeRef: string }[],
   };
 }
 
 const validOptions: AddABTestOptions = {
   name: 'MyTest',
-  gatewayArn: 'arn:aws:bedrock-agentcore:us-east-1:123456789012:gateway/gw-abc',
+  agent: 'my-agent',
   controlBundle: 'arn:bundle:control',
   controlVersion: 'v1',
   treatmentBundle: 'arn:bundle:treatment',
@@ -188,6 +189,38 @@ describe('ABTestPrimitive', () => {
       if (!result.success) {
         expect(result.error).toBe('io error');
       }
+    });
+
+    it('cascade-deletes orphaned HTTP gateway when last referencing AB test is removed', async () => {
+      const project = makeProject([{ name: 'TestA', gatewayRef: '{{gateway:TestA-gw}}' }]);
+      project.httpGateways = [{ name: 'TestA-gw', runtimeRef: 'my-agent' }];
+      mockReadProjectSpec.mockResolvedValue(project);
+      mockWriteProjectSpec.mockResolvedValue(undefined);
+
+      const result = await primitive.remove('TestA');
+
+      expect(result.success).toBe(true);
+      const writtenSpec = mockWriteProjectSpec.mock.calls[0]![0];
+      expect(writtenSpec.abTests).toHaveLength(0);
+      expect(writtenSpec.httpGateways).toHaveLength(0);
+    });
+
+    it('retains HTTP gateway when another AB test still references it', async () => {
+      const project = makeProject([
+        { name: 'TestA', gatewayRef: '{{gateway:shared-gw}}' },
+        { name: 'TestB', gatewayRef: '{{gateway:shared-gw}}' },
+      ]);
+      project.httpGateways = [{ name: 'shared-gw', runtimeRef: 'my-agent' }];
+      mockReadProjectSpec.mockResolvedValue(project);
+      mockWriteProjectSpec.mockResolvedValue(undefined);
+
+      const result = await primitive.remove('TestA');
+
+      expect(result.success).toBe(true);
+      const writtenSpec = mockWriteProjectSpec.mock.calls[0]![0];
+      expect(writtenSpec.abTests).toHaveLength(1);
+      expect(writtenSpec.httpGateways).toHaveLength(1);
+      expect(writtenSpec.httpGateways[0].name).toBe('shared-gw');
     });
   });
 

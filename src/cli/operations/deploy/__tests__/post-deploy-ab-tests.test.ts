@@ -1,5 +1,5 @@
 import type { AgentCoreProjectSpec, DeployedResourceState } from '../../../../schema';
-import { setupABTests } from '../post-deploy-ab-tests.js';
+import { deleteOrphanedABTests, setupABTests } from '../post-deploy-ab-tests.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ── Hoisted mocks ──────────────────────────────────────────────────────────
@@ -57,13 +57,14 @@ function makeProjectSpec(abTests: AgentCoreProjectSpec['abTests'] = []): AgentCo
     agentCoreGateways: [],
     policyEngines: [],
     configBundles: [],
+    httpGateways: [],
     abTests,
   };
 }
 
 const sampleABTest = {
   name: 'TestOne',
-  gatewayArn: 'arn:aws:bedrock-agentcore:us-east-1:123456789012:gateway/gw-123',
+  gatewayRef: 'arn:aws:bedrock-agentcore:us-east-1:123456789012:gateway/gw-123',
   variants: [
     {
       name: 'C' as const,
@@ -214,7 +215,7 @@ describe('setupABTests', () => {
     it('resolves gateway placeholder to ARN', async () => {
       const testWithPlaceholder = {
         ...sampleABTest,
-        gatewayArn: '{{gateway:my-gw}}',
+        gatewayRef: '{{gateway:my-gw}}',
       };
       mockCreateABTest.mockResolvedValue({ abTestId: 'abt-005', abTestArn: 'arn:abt:005' });
 
@@ -232,6 +233,31 @@ describe('setupABTests', () => {
 
       expect(mockCreateABTest.mock.calls[0]![0].gatewayArn).toBe(
         'arn:aws:bedrock-agentcore:us-east-1:123:gateway/resolved-gw'
+      );
+    });
+
+    it('resolves gateway placeholder to ARN from HTTP gateways', async () => {
+      const testWithPlaceholder = {
+        ...sampleABTest,
+        gatewayRef: '{{gateway:my-http-gw}}',
+      };
+      mockCreateABTest.mockResolvedValue({ abTestId: 'abt-007', abTestArn: 'arn:abt:007' });
+
+      await setupABTests({
+        region: 'us-east-1',
+        projectSpec: makeProjectSpec([testWithPlaceholder]),
+        deployedResources: {
+          httpGateways: {
+            'my-http-gw': {
+              gatewayId: 'httpgw-001',
+              gatewayArn: 'arn:aws:bedrock-agentcore:us-east-1:123:httpgateway/httpgw-001',
+            },
+          },
+        } as unknown as DeployedResourceState,
+      });
+
+      expect(mockCreateABTest.mock.calls[0]![0].gatewayArn).toBe(
+        'arn:aws:bedrock-agentcore:us-east-1:123:httpgateway/httpgw-001'
       );
     });
 
@@ -260,7 +286,7 @@ describe('setupABTests', () => {
     it('deletes orphaned AB test not in project spec', async () => {
       mockDeleteABTest.mockResolvedValue({ success: true });
 
-      const result = await setupABTests({
+      const result = await deleteOrphanedABTests({
         region: 'us-east-1',
         projectSpec: makeProjectSpec([]),
         existingABTests: {
@@ -276,7 +302,7 @@ describe('setupABTests', () => {
       mockDeleteABTest.mockResolvedValue({ success: true });
       mockIAMSend.mockResolvedValue({});
 
-      await setupABTests({
+      await deleteOrphanedABTests({
         region: 'us-east-1',
         projectSpec: makeProjectSpec([]),
         existingABTests: {
@@ -306,7 +332,7 @@ describe('setupABTests', () => {
     it('does not delete role when roleCreatedByCli is false', async () => {
       mockDeleteABTest.mockResolvedValue({ success: true });
 
-      await setupABTests({
+      await deleteOrphanedABTests({
         region: 'us-east-1',
         projectSpec: makeProjectSpec([]),
         existingABTests: {
@@ -325,7 +351,7 @@ describe('setupABTests', () => {
     it('reports error when deletion fails', async () => {
       mockDeleteABTest.mockRejectedValue(new Error('delete failed'));
 
-      const result = await setupABTests({
+      const result = await deleteOrphanedABTests({
         region: 'us-east-1',
         projectSpec: makeProjectSpec([]),
         existingABTests: {
@@ -392,7 +418,7 @@ describe('setupABTests', () => {
       mockDeleteABTest.mockResolvedValue({ success: true });
       mockIAMSend.mockRejectedValue(new Error('IAM permission denied'));
 
-      const result = await setupABTests({
+      const result = await deleteOrphanedABTests({
         region: 'us-east-1',
         projectSpec: makeProjectSpec([]),
         existingABTests: {
@@ -411,27 +437,24 @@ describe('setupABTests', () => {
   });
 
   describe('mixed operations', () => {
-    it('creates new, skips existing, and deletes orphaned in one call', async () => {
+    it('creates new and skips existing', async () => {
       const newTest = { ...sampleABTest, name: 'NewTest' };
       const keptTest = { ...sampleABTest, name: 'KeptTest' };
 
       mockCreateABTest.mockResolvedValue({ abTestId: 'abt-new', abTestArn: 'arn:abt:new' });
-      mockDeleteABTest.mockResolvedValue({ success: true });
 
       const result = await setupABTests({
         region: 'us-east-1',
         projectSpec: makeProjectSpec([newTest, keptTest]),
         existingABTests: {
           KeptTest: { abTestId: 'abt-kept', abTestArn: 'arn:abt:kept' },
-          OrphanTest: { abTestId: 'abt-orphan', abTestArn: 'arn:abt:orphan' },
         },
       });
 
-      expect(result.results).toHaveLength(3);
+      expect(result.results).toHaveLength(2);
       const statuses = result.results.map(r => `${r.testName}:${r.status}`);
       expect(statuses).toContain('NewTest:created');
       expect(statuses).toContain('KeptTest:skipped');
-      expect(statuses).toContain('OrphanTest:deleted');
     });
   });
 });

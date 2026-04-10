@@ -196,6 +196,21 @@ export const ABTestDeployedStateSchema = z.object({
 export type ABTestDeployedState = z.infer<typeof ABTestDeployedStateSchema>;
 
 // ============================================================================
+// HTTP Gateway Deployed State
+// ============================================================================
+
+export const HttpGatewayDeployedStateSchema = z.object({
+  gatewayId: z.string().min(1),
+  gatewayArn: z.string().min(1),
+  gatewayUrl: z.string().optional(),
+  targetId: z.string().min(1).optional(),
+  roleArn: z.string().min(1).optional(),
+  roleCreatedByCli: z.boolean().optional(),
+});
+
+export type HttpGatewayDeployedState = z.infer<typeof HttpGatewayDeployedStateSchema>;
+
+// ============================================================================
 // Deployed Resource State
 // ============================================================================
 
@@ -209,6 +224,7 @@ export const DeployedResourceStateSchema = z.object({
   onlineEvalConfigs: z.record(z.string(), OnlineEvalDeployedStateSchema).optional(),
   configBundles: z.record(z.string(), ConfigBundleDeployedStateSchema).optional(),
   abTests: z.record(z.string(), ABTestDeployedStateSchema).optional(),
+  httpGateways: z.record(z.string(), HttpGatewayDeployedStateSchema).optional(),
   policyEngines: z.record(z.string(), PolicyEngineDeployedStateSchema).optional(),
   policies: z.record(z.string(), PolicyDeployedStateSchema).optional(),
   stackName: z.string().optional(),

@@ -12,6 +12,7 @@ import { AgentCoreGatewaySchema, AgentCoreGatewayTargetSchema, AgentCoreMcpRunti
 import { ABTestSchema } from './primitives/ab-test';
 import { ConfigBundleSchema } from './primitives/config-bundle';
 import { EvaluationLevelSchema, EvaluatorConfigSchema, EvaluatorNameSchema } from './primitives/evaluator';
+import { HttpGatewaySchema } from './primitives/http-gateway';
 import {
   DEFAULT_EPISODIC_REFLECTION_NAMESPACES,
   DEFAULT_STRATEGY_NAMESPACES,
@@ -337,6 +338,16 @@ export const AgentCoreProjectSpecSchema = z
           name => `Duplicate AB test name: ${name}`
         )
       ),
+
+    httpGateways: z
+      .array(HttpGatewaySchema)
+      .default([])
+      .superRefine(
+        uniqueBy(
+          gw => gw.name,
+          name => `Duplicate HTTP gateway name: ${name}`
+        )
+      ),
   })
   .strict()
   .superRefine((spec, ctx) => {
@@ -370,6 +381,35 @@ export const AgentCoreProjectSpecSchema = z
             code: z.ZodIssueCode.custom,
             message: `Online eval config "${config.name}" references code-based evaluator "${evalName}". Code-based evaluators are not supported for online evaluation.`,
           });
+        }
+      }
+    }
+
+    // Validate HTTP gateway runtimeRef references
+    for (const gw of spec.httpGateways) {
+      const runtimeExists = spec.runtimes.some(r => r.name === gw.runtimeRef);
+      if (!runtimeExists) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `HTTP gateway "${gw.name}" references unknown runtime "${gw.runtimeRef}"`,
+        });
+      }
+    }
+
+    // Validate AB test gateway references
+    for (const test of spec.abTests) {
+      const gwField = test.gatewayRef;
+      if (gwField && typeof gwField === 'string') {
+        const match = /^\{\{gateway:(.+)\}\}$/.exec(gwField);
+        if (match) {
+          const gwName = match[1];
+          const gwExists = spec.httpGateways.some(gw => gw.name === gwName);
+          if (!gwExists) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: `AB test "${test.name}" references gateway "${gwName}" which does not exist in httpGateways`,
+            });
+          }
         }
       }
     }

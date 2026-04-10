@@ -47,12 +47,23 @@ async function resolveABTestId(testName: string, region: string): Promise<{ abTe
   return { abTestId: '', error: `AB test "${testName}" not found in deployed state or API.` };
 }
 
+function gatewayUrlFromArn(arn: string): string {
+  const parts = arn.split(':');
+  const region = parts[3];
+  const gatewayId = parts[5]?.split('/')[1];
+  if (region && gatewayId) {
+    return `https://${gatewayId}.gateway.bedrock-agentcore.${region}.amazonaws.com`;
+  }
+  return arn;
+}
+
 function formatABTestDetails(test: GetABTestResult): string {
   const lines: string[] = [];
   lines.push(`AB Test: ${test.name}`);
   lines.push(`  Status: ${test.status}`);
   lines.push(`  Execution: ${test.executionStatus}`);
-  lines.push(`  Gateway: ${test.gatewayArn}`);
+  lines.push(`  Gateway URL: ${gatewayUrlFromArn(test.gatewayArn)}`);
+  lines.push(`  Online Eval: ${test.evaluationConfig.onlineEvaluationConfigArn}`);
   if (test.description) lines.push(`  Description: ${test.description}`);
 
   for (const variant of test.variants) {
@@ -62,7 +73,8 @@ function formatABTestDetails(test: GetABTestResult): string {
     );
   }
 
-  if (test.maxDurationDays) lines.push(`  Max Duration: ${test.maxDurationDays} days`);
+  // TODO(post-preview): Re-enable max duration display once configurable duration is launched.
+  // if (test.maxDurationDays) lines.push(`  Max Duration: ${test.maxDurationDays} days`);
   if (test.startedAt) lines.push(`  Started: ${test.startedAt}`);
   if (test.stoppedAt) lines.push(`  Stopped: ${test.stoppedAt}`);
   if (test.failureReason) lines.push(`  Failure: ${test.failureReason}`);

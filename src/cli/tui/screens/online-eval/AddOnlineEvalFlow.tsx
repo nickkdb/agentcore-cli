@@ -3,7 +3,7 @@ import { validateAwsCredentials } from '../../../aws/account';
 import { listEvaluators } from '../../../aws/agentcore-control';
 import { detectRegion } from '../../../aws/region';
 import { getErrorMessage } from '../../../errors';
-import { ErrorPrompt } from '../../components';
+import { ErrorPrompt, GradientText } from '../../components';
 import { useCreateOnlineEval, useExistingOnlineEvalNames } from '../../hooks/useCreateOnlineEval';
 import { AddSuccessScreen } from '../add/AddSuccessScreen';
 import { AddOnlineEvalScreen } from './AddOnlineEvalScreen';
@@ -101,7 +101,7 @@ export function AddOnlineEvalFlow({ isInteractive = true, onExit, onBack, onDev,
   );
 
   if (flow.name === 'loading') {
-    return null;
+    return <GradientText text="Preparing online eval setup..." />;
   }
 
   if (flow.name === 'creds-error') {

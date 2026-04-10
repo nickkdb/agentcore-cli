@@ -1,10 +1,12 @@
 import { abTestPrimitive } from '../../primitives/registry';
+import type { GatewayChoice } from '../screens/ab-test/types';
 import { useCallback, useEffect, useState } from 'react';
 
 interface CreateABTestConfig {
   name: string;
   description?: string;
-  gateway: string;
+  agent: string;
+  gatewayChoice?: GatewayChoice;
   controlBundle: string;
   controlVersion: string;
   treatmentBundle: string;
@@ -27,7 +29,8 @@ export function useCreateABTest() {
       const addResult = await abTestPrimitive.add({
         name: config.name,
         description: config.description,
-        gatewayArn: config.gateway,
+        agent: config.agent,
+        gatewayChoice: config.gatewayChoice,
         controlBundle: config.controlBundle,
         controlVersion: config.controlVersion,
         treatmentBundle: config.treatmentBundle,

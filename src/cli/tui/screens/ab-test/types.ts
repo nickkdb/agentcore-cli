@@ -5,6 +5,7 @@
 export type AddABTestStep =
   | 'name'
   | 'description'
+  | 'agent'
   | 'gateway'
   | 'variants'
   | 'onlineEval'
@@ -12,10 +13,13 @@ export type AddABTestStep =
   | 'enableOnCreate'
   | 'confirm';
 
+export type GatewayChoice = { type: 'create-new' } | { type: 'existing-http'; name: string };
+
 export interface AddABTestConfig {
   name: string;
   description: string;
-  gateway: string;
+  agent: string;
+  gatewayChoice: GatewayChoice;
   controlBundle: string;
   controlVersion: string;
   treatmentBundle: string;
@@ -29,6 +33,7 @@ export interface AddABTestConfig {
 export const AB_TEST_STEP_LABELS: Record<AddABTestStep, string> = {
   name: 'Name',
   description: 'Description',
+  agent: 'Agent',
   gateway: 'Gateway',
   variants: 'Variants',
   onlineEval: 'Eval',

@@ -118,6 +118,28 @@ function diffResourceSet<TLocal extends { name: string }, TDeployed>({
   return entries;
 }
 
+/**
+ * Build the full gateway invocation URL for an AB test.
+ * Appends the runtime target name and /invocations path to the gateway base URL.
+ */
+function buildGatewayInvocationUrl(
+  gwState: { gatewayId: string; gatewayArn: string; gatewayUrl?: string },
+  gwName: string,
+  project: AgentCoreProjectSpec
+): string | undefined {
+  // Use stored URL or derive from ARN: arn:aws:bedrock-agentcore:{region}:{account}:gateway/{id}
+  const baseUrl =
+    gwState.gatewayUrl ??
+    (() => {
+      const region = gwState.gatewayArn.split(':')[3];
+      return region ? `https://${gwState.gatewayId}.gateway.bedrock-agentcore.${region}.amazonaws.com` : undefined;
+    })();
+  if (!baseUrl) return undefined;
+  const gwSpec = (project.httpGateways ?? []).find(gw => gw.name === gwName);
+  if (!gwSpec) return baseUrl;
+  return `${baseUrl}/${gwSpec.runtimeRef}/invocations`;
+}
+
 export function computeResourceStatuses(
   project: AgentCoreProjectSpec,
   resources: DeployedResourceState | undefined
@@ -219,6 +241,21 @@ export function computeResourceStatuses(
     getIdentifier: deployed => deployed.abTestArn,
     getLocalDetail: item => item.description,
   });
+
+  // Enrich deployed AB tests with gateway invocation URL
+  const httpGatewayState = resources?.httpGateways ?? {};
+  for (const entry of abTests) {
+    if (entry.deploymentState !== 'deployed') continue;
+    const testSpec = (project.abTests ?? []).find(t => t.name === entry.name);
+    if (!testSpec) continue;
+    const gwMatch = /^\{\{gateway:(.+)\}\}$/.exec(testSpec.gatewayRef);
+    const gwName = gwMatch?.[1];
+    if (!gwName) continue;
+    const gwState = httpGatewayState[gwName];
+    if (!gwState) continue;
+    const url = buildGatewayInvocationUrl(gwState, gwName, project);
+    if (url) entry.invocationUrl = url;
+  }
 
   return [
     ...agents,

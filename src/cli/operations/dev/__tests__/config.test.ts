@@ -23,6 +23,7 @@ describe('getDevConfig', () => {
       policyEngines: [],
       configBundles: [],
       abTests: [],
+      httpGateways: [],
     };
 
     const config = getDevConfig(workingDir, project);
@@ -52,6 +53,7 @@ describe('getDevConfig', () => {
       policyEngines: [],
       configBundles: [],
       abTests: [],
+      httpGateways: [],
     };
 
     const config = getDevConfig(workingDir, project);
@@ -81,6 +83,7 @@ describe('getDevConfig', () => {
       policyEngines: [],
       configBundles: [],
       abTests: [],
+      httpGateways: [],
     };
 
     const config = getDevConfig(workingDir, project, '/test/project/agentcore');
@@ -116,6 +119,7 @@ describe('getDevConfig', () => {
       policyEngines: [],
       configBundles: [],
       abTests: [],
+      httpGateways: [],
     };
 
     expect(() => getDevConfig(workingDir, project, undefined, 'NonExistentAgent')).toThrow(
@@ -146,6 +150,7 @@ describe('getDevConfig', () => {
       policyEngines: [],
       configBundles: [],
       abTests: [],
+      httpGateways: [],
     };
 
     expect(() => getDevConfig(workingDir, project, undefined, 'NodeAgent')).toThrow('Dev mode only supports Python');
@@ -174,6 +179,7 @@ describe('getDevConfig', () => {
       policyEngines: [],
       configBundles: [],
       abTests: [],
+      httpGateways: [],
     };
 
     const config = getDevConfig(workingDir, project, '/test/project/agentcore');
@@ -205,6 +211,7 @@ describe('getDevConfig', () => {
       policyEngines: [],
       configBundles: [],
       abTests: [],
+      httpGateways: [],
     };
 
     // No configRoot provided
@@ -236,6 +243,7 @@ describe('getDevConfig', () => {
       policyEngines: [],
       configBundles: [],
       abTests: [],
+      httpGateways: [],
     };
 
     const config = getDevConfig(workingDir, project, '/test/project/agentcore');
@@ -267,6 +275,7 @@ describe('getDevConfig', () => {
       policyEngines: [],
       configBundles: [],
       abTests: [],
+      httpGateways: [],
     };
 
     const config = getDevConfig(workingDir, project, '/test/project/agentcore');
@@ -297,6 +306,7 @@ describe('getDevConfig', () => {
       policyEngines: [],
       configBundles: [],
       abTests: [],
+      httpGateways: [],
     };
 
     const config = getDevConfig(workingDir, project, '/test/project/agentcore');
@@ -327,6 +337,7 @@ describe('getDevConfig', () => {
       policyEngines: [],
       configBundles: [],
       abTests: [],
+      httpGateways: [],
     };
 
     const config = getDevConfig(workingDir, project, '/test/project/agentcore');
@@ -357,6 +368,7 @@ describe('getDevConfig', () => {
       policyEngines: [],
       configBundles: [],
       abTests: [],
+      httpGateways: [],
     };
 
     const config = getDevConfig(workingDir, project, '/test/project/agentcore');
@@ -387,6 +399,7 @@ describe('getDevConfig', () => {
       policyEngines: [],
       configBundles: [],
       abTests: [],
+      httpGateways: [],
     };
 
     const config = getDevConfig(workingDir, project, '/test/project/agentcore');
@@ -418,6 +431,7 @@ describe('getDevConfig', () => {
       policyEngines: [],
       configBundles: [],
       abTests: [],
+      httpGateways: [],
     };
 
     const config = getDevConfig(workingDir, project, '/test/project/agentcore');
@@ -462,6 +476,7 @@ describe('getAgentPort', () => {
       policyEngines: [],
       configBundles: [],
       abTests: [],
+      httpGateways: [],
     };
 
     expect(getAgentPort(project, 'Agent1', 8080)).toBe(8080);
@@ -482,6 +497,7 @@ describe('getAgentPort', () => {
       policyEngines: [],
       configBundles: [],
       abTests: [],
+      httpGateways: [],
     };
 
     expect(getAgentPort(project, 'NonExistent', 9000)).toBe(9000);
@@ -507,6 +523,7 @@ describe('getDevSupportedAgents', () => {
       policyEngines: [],
       configBundles: [],
       abTests: [],
+      httpGateways: [],
     };
 
     expect(getDevSupportedAgents(project)).toEqual([]);
@@ -535,6 +552,7 @@ describe('getDevSupportedAgents', () => {
       policyEngines: [],
       configBundles: [],
       abTests: [],
+      httpGateways: [],
     };
 
     expect(getDevSupportedAgents(project)).toEqual([]);
@@ -571,6 +589,7 @@ describe('getDevSupportedAgents', () => {
       policyEngines: [],
       configBundles: [],
       abTests: [],
+      httpGateways: [],
     };
 
     const supported = getDevSupportedAgents(project);
@@ -601,6 +620,7 @@ describe('getDevSupportedAgents', () => {
       policyEngines: [],
       configBundles: [],
       abTests: [],
+      httpGateways: [],
     };
 
     const supported = getDevSupportedAgents(project);
@@ -639,6 +659,7 @@ describe('getDevSupportedAgents', () => {
       policyEngines: [],
       configBundles: [],
       abTests: [],
+      httpGateways: [],
     };
 
     const supported = getDevSupportedAgents(project);

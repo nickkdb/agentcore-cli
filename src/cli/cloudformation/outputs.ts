@@ -410,6 +410,18 @@ export function buildDeployedState(opts: BuildDeployedStateOptions): DeployedSta
     targetState.resources!.configBundles = existingConfigBundles;
   }
 
+  // Carry forward AB tests from existing state (managed post-deploy, not via CFN outputs)
+  const existingABTests = existingState?.targets?.[targetName]?.resources?.abTests;
+  if (existingABTests && Object.keys(existingABTests).length > 0) {
+    targetState.resources!.abTests = existingABTests;
+  }
+
+  // Carry forward HTTP gateways from existing state (managed post-deploy, not via CFN outputs)
+  const existingHttpGateways = existingState?.targets?.[targetName]?.resources?.httpGateways;
+  if (existingHttpGateways && Object.keys(existingHttpGateways).length > 0) {
+    targetState.resources!.httpGateways = existingHttpGateways;
+  }
+
   return {
     targets: {
       ...existingState?.targets,

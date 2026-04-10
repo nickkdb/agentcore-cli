@@ -60,7 +60,7 @@ export const ABTestSchema = z
   .object({
     name: ABTestNameSchema,
     description: ABTestDescriptionSchema,
-    gatewayArn: z.string().min(1),
+    gatewayRef: z.string().min(1),
     roleArn: z.string().min(1).optional(),
     variants: z.array(ABTestVariantSchema).length(2),
     evaluationConfig: ABTestEvaluationConfigSchema,

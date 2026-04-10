@@ -1,11 +1,12 @@
 import type { VariantConfig } from './VariantConfigForm';
-import type { AddABTestConfig, AddABTestStep } from './types';
-import { useCallback, useState } from 'react';
+import type { AddABTestConfig, AddABTestStep, GatewayChoice } from './types';
+import { useCallback, useRef, useState } from 'react';
 
 const ALL_STEPS: AddABTestStep[] = [
   'name',
   'description',
   'gateway',
+  'agent',
   'variants',
   'onlineEval',
   'maxDuration',
@@ -17,7 +18,8 @@ function getDefaultConfig(): AddABTestConfig {
   return {
     name: '',
     description: '',
-    gateway: '',
+    agent: '',
+    gatewayChoice: { type: 'create-new' },
     controlBundle: '',
     controlVersion: '',
     treatmentBundle: '',
@@ -29,20 +31,39 @@ function getDefaultConfig(): AddABTestConfig {
   };
 }
 
+export type StepSkipCheck = (step: AddABTestStep) => boolean;
+
 export function useAddABTestWizard() {
   const [config, setConfig] = useState<AddABTestConfig>(getDefaultConfig);
   const [step, setStep] = useState<AddABTestStep>('name');
+  const skipCheckRef = useRef<StepSkipCheck>(() => false);
 
   const currentIndex = ALL_STEPS.indexOf(step);
 
+  /** Register a callback that returns true for steps that should be skipped. */
+  const setSkipCheck = useCallback((check: StepSkipCheck) => {
+    skipCheckRef.current = check;
+  }, []);
+
   const goBack = useCallback(() => {
-    const prevStep = ALL_STEPS[currentIndex - 1];
-    if (prevStep) setStep(prevStep);
+    // Walk backwards, skipping auto-skippable steps
+    for (let i = currentIndex - 1; i >= 0; i--) {
+      if (!skipCheckRef.current(ALL_STEPS[i]!)) {
+        setStep(ALL_STEPS[i]!);
+        return;
+      }
+    }
   }, [currentIndex]);
 
   const nextStep = useCallback((currentStep: AddABTestStep): AddABTestStep | undefined => {
     const idx = ALL_STEPS.indexOf(currentStep);
-    return ALL_STEPS[idx + 1];
+    // Walk forwards, skipping auto-skippable steps
+    for (let i = idx + 1; i < ALL_STEPS.length; i++) {
+      if (!skipCheckRef.current(ALL_STEPS[i]!)) {
+        return ALL_STEPS[i]!;
+      }
+    }
+    return undefined;
   }, []);
 
   const advance = useCallback(
@@ -69,9 +90,17 @@ export function useAddABTestWizard() {
     [advance]
   );
 
+  const setAgent = useCallback(
+    (agent: string) => {
+      setConfig(c => ({ ...c, agent }));
+      advance('agent');
+    },
+    [advance]
+  );
+
   const setGateway = useCallback(
-    (gateway: string) => {
-      setConfig(c => ({ ...c, gateway }));
+    (gatewayChoice: GatewayChoice) => {
+      setConfig(c => ({ ...c, gatewayChoice }));
       advance('gateway');
     },
     [advance]
@@ -127,8 +156,10 @@ export function useAddABTestWizard() {
     steps: ALL_STEPS,
     currentIndex,
     goBack,
+    setSkipCheck,
     setName,
     setDescription,
+    setAgent,
     setGateway,
     setVariants,
     setOnlineEval,

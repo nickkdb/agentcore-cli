@@ -6,10 +6,11 @@ import {
   CreateRoleCommand,
   DeleteRoleCommand,
   DeleteRolePolicyCommand,
+  GetRoleCommand,
   IAMClient,
   PutRolePolicyCommand,
 } from '@aws-sdk/client-iam';
-import { randomBytes } from 'node:crypto';
+import { createHash } from 'node:crypto';
 
 // ============================================================================
 // Types
@@ -60,8 +61,6 @@ export async function setupABTests(options: SetupABTestsOptions): Promise<SetupA
   const results: ABTestSetupResult[] = [];
   const abTests: Record<string, ABTestDeployedState> = {};
 
-  const specTestNames = new Set(projectSpec.abTests.map(t => t.name));
-
   // Create or skip tests from the spec
   for (const testSpec of projectSpec.abTests) {
     try {
@@ -97,7 +96,15 @@ export async function setupABTests(options: SetupABTestsOptions): Promise<SetupA
 
       // Resolve ARN references from deployed state
       const resolvedVariants = resolveVariants(testSpec.variants, deployedResources);
-      const resolvedGatewayArn = resolveGatewayArn(testSpec.gatewayArn, deployedResources);
+      const resolvedGatewayArn = resolveGatewayArn(testSpec.gatewayRef, deployedResources);
+      if (!resolvedGatewayArn.startsWith('arn:') || resolvedGatewayArn.split(':').length < 6) {
+        results.push({
+          testName: testSpec.name,
+          status: 'error',
+          error: `Gateway ARN could not be resolved for AB test "${testSpec.name}". Reference "${testSpec.gatewayRef}" did not match any deployed gateway. Ensure the HTTP gateway was deployed successfully.`,
+        });
+        continue;
+      }
       const resolvedEvalConfig = resolveEvalConfig(testSpec.evaluationConfig, deployedResources);
 
       // Resolve or auto-create role
@@ -151,40 +158,65 @@ export async function setupABTests(options: SetupABTestsOptions): Promise<SetupA
     }
   }
 
-  // Delete orphaned AB tests (in deployed-state but removed from spec)
-  if (existingABTests) {
-    for (const [testName, testState] of Object.entries(existingABTests)) {
-      if (!specTestNames.has(testName)) {
-        try {
-          const deleteResult = await deleteABTest({
-            region,
-            abTestId: testState.abTestId,
-          });
+  // Orphaned AB tests are deleted by deleteOrphanedABTests() which runs
+  // as a separate pre-pass before HTTP gateway setup. No deletion loop here.
 
-          // Clean up the auto-created IAM role if we created it
-          if (testState.roleCreatedByCli && testState.roleArn) {
-            await deleteABTestRole(region, testState.roleArn);
-          }
+  return {
+    results,
+    abTests,
+    hasErrors: results.some(r => r.status === 'error'),
+  };
+}
 
-          results.push({
-            testName,
-            status: deleteResult.success ? 'deleted' : 'error',
-            error: deleteResult.error,
-          });
-        } catch (err) {
-          results.push({
-            testName,
-            status: 'error',
-            error: err instanceof Error ? err.message : String(err),
-          });
+/**
+ * Delete orphaned AB tests (in deployed-state but removed from spec).
+ *
+ * AB tests create rules on HTTP gateways, so they must be deleted before
+ * the gateway can be deleted. Call this before setupHttpGateways.
+ *
+ * The main setupABTests deletion loop becomes a no-op for any tests
+ * already cleaned up here.
+ */
+export async function deleteOrphanedABTests(options: {
+  region: string;
+  projectSpec: AgentCoreProjectSpec;
+  existingABTests?: Record<string, ABTestDeployedState>;
+}): Promise<{ results: ABTestSetupResult[]; hasErrors: boolean }> {
+  const { region, projectSpec, existingABTests } = options;
+  if (!existingABTests) return { results: [], hasErrors: false };
+
+  const specTestNames = new Set(projectSpec.abTests.map(t => t.name));
+  const results: ABTestSetupResult[] = [];
+
+  for (const [testName, testState] of Object.entries(existingABTests)) {
+    if (!specTestNames.has(testName)) {
+      try {
+        const deleteResult = await deleteABTest({
+          region,
+          abTestId: testState.abTestId,
+        });
+
+        if (deleteResult.success && testState.roleCreatedByCli && testState.roleArn) {
+          await deleteABTestRole(region, testState.roleArn);
         }
+
+        results.push({
+          testName,
+          status: deleteResult.success ? 'deleted' : 'error',
+          error: deleteResult.error,
+        });
+      } catch (err) {
+        results.push({
+          testName,
+          status: 'error',
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
   }
 
   return {
     results,
-    abTests,
     hasErrors: results.some(r => r.status === 'error'),
   };
 }
@@ -273,6 +305,12 @@ function resolveGatewayArn(ref: string, deployedResources?: DeployedResourceStat
     return gateways[gwName].gatewayArn;
   }
 
+  // Check HTTP gateways (imperatively created for A/B testing)
+  const httpGateways = deployedResources?.httpGateways;
+  if (httpGateways && gwName && httpGateways[gwName]) {
+    return httpGateways[gwName].gatewayArn;
+  }
+
   return ref;
 }
 
@@ -302,11 +340,11 @@ function resolveEvalConfig(
  * AgentCore-{ProjectName}-ABTest{TestName}-{Hash}
  */
 function generateRoleName(projectName: string, testName: string): string {
-  const hash = randomBytes(6).toString('base64url').slice(0, 8);
+  // Deterministic hash so retries produce the same role name (avoids orphaned roles)
+  const hash = createHash('sha256').update(`${projectName}:${testName}`).digest('hex').slice(0, 8);
   const base = `AgentCore-${projectName}-ABTest${testName}`;
   // IAM role names max 64 chars
-  const truncated = base.slice(0, 55);
-  return `${truncated}-${hash}`;
+  return `${base.slice(0, 55)}-${hash}`;
 }
 
 /**
@@ -348,18 +386,42 @@ async function getOrCreateABTestRole(options: CreateABTestRoleOptions): Promise<
     ],
   });
 
-  const createResult = await iamClient.send(
-    new CreateRoleCommand({
-      RoleName: roleName,
-      AssumeRolePolicyDocument: trustPolicy,
-      Description: `Auto-created execution role for AgentCore AB test: ${testName}`,
-      Tags: [
-        { Key: 'agentcore:created-by', Value: 'agentcore-cli' },
-        { Key: 'agentcore:project-name', Value: projectName },
-        { Key: 'agentcore:ab-test-name', Value: testName },
-      ],
-    })
-  );
+  let roleArn: string;
+  let needsPropagationWait = false;
+
+  try {
+    const createResult = await iamClient.send(
+      new CreateRoleCommand({
+        RoleName: roleName,
+        AssumeRolePolicyDocument: trustPolicy,
+        Description: `Auto-created execution role for AgentCore AB test: ${testName}`,
+        Tags: [
+          { Key: 'agentcore:created-by', Value: 'agentcore-cli' },
+          { Key: 'agentcore:project-name', Value: projectName },
+          { Key: 'agentcore:ab-test-name', Value: testName },
+        ],
+      })
+    );
+
+    roleArn = createResult.Role?.Arn ?? '';
+    if (!roleArn) {
+      throw new Error(`IAM CreateRole succeeded but returned no role ARN for "${roleName}"`);
+    }
+    needsPropagationWait = true;
+  } catch (err: unknown) {
+    // Handle retry after a previous failed deploy left the role behind
+    const errName = (err as { name?: string }).name;
+    if (errName === 'EntityAlreadyExistsException') {
+      console.log(`IAM role "${roleName}" already exists — reusing it`);
+      const existing = await iamClient.send(new GetRoleCommand({ RoleName: roleName }));
+      roleArn = existing.Role?.Arn ?? '';
+      if (!roleArn) {
+        throw new Error(`Role "${roleName}" already exists but ARN could not be retrieved`);
+      }
+    } else {
+      throw err;
+    }
+  }
 
   const policy = JSON.stringify({
     Version: '2012-10-17',
@@ -429,6 +491,7 @@ async function getOrCreateABTestRole(options: CreateABTestRoleOptions): Promise<
     ],
   });
 
+  // Re-apply the inline policy (idempotent — covers both new and recovered roles)
   await iamClient.send(
     new PutRolePolicyCommand({
       RoleName: roleName,
@@ -437,10 +500,12 @@ async function getOrCreateABTestRole(options: CreateABTestRoleOptions): Promise<
     })
   );
 
-  // Wait for IAM role propagation before returning
-  await new Promise(resolve => setTimeout(resolve, 15_000));
+  if (needsPropagationWait) {
+    console.log('Waiting for IAM role propagation (~15s)...');
+    await new Promise(resolve => setTimeout(resolve, 15_000));
+  }
 
-  return createResult.Role!.Arn!;
+  return roleArn;
 }
 
 async function deleteABTestRole(region: string, roleArn: string): Promise<void> {

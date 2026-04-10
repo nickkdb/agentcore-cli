@@ -215,6 +215,7 @@ export function VariantConfigForm({
               key="weight"
               prompt={`  Treatment weight (1-99) — control will be ${controlWeight}%`}
               initialValue="20"
+              onChange={value => setTreatmentWeight(value)}
               onSubmit={value => {
                 const n = parseInt(value, 10);
                 if (!isNaN(n) && n >= 1 && n <= 99) {

@@ -90,7 +90,7 @@ describe('VariantWeightSchema', () => {
 describe('ABTestSchema', () => {
   const validABTest = {
     name: 'TestOne',
-    gatewayArn: 'arn:aws:bedrock-agentcore:us-east-1:123456789012:gateway/gw-123',
+    gatewayRef: 'arn:aws:bedrock-agentcore:us-east-1:123456789012:gateway/gw-123',
     variants: [
       {
         name: 'C',

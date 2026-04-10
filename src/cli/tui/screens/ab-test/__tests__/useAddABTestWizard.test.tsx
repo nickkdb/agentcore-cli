@@ -1,4 +1,6 @@
 import type { VariantConfig } from '../VariantConfigForm';
+import type { GatewayChoice } from '../types';
+import type { StepSkipCheck } from '../useAddABTestWizard';
 import { useAddABTestWizard } from '../useAddABTestWizard';
 import { Text } from 'ink';
 import { render } from 'ink-testing-library';
@@ -25,11 +27,13 @@ function Harness() {
 interface HarnessHandle {
   setName: (name: string) => void;
   setDescription: (desc: string) => void;
-  setGateway: (gw: string) => void;
+  setAgent: (agent: string) => void;
+  setGateway: (choice: GatewayChoice) => void;
   setVariants: (vc: VariantConfig) => void;
   setOnlineEval: (eval_: string) => void;
   setMaxDuration: (days: number | undefined) => void;
   setEnableOnCreate: (enable: boolean) => void;
+  setSkipCheck: (check: StepSkipCheck) => void;
   goBack: () => void;
   reset: () => void;
 }
@@ -39,11 +43,13 @@ const ImperativeHarness = React.forwardRef<HarnessHandle>((_, ref) => {
   useImperativeHandle(ref, () => ({
     setName: wizard.setName,
     setDescription: wizard.setDescription,
+    setAgent: wizard.setAgent,
     setGateway: wizard.setGateway,
     setVariants: wizard.setVariants,
     setOnlineEval: wizard.setOnlineEval,
     setMaxDuration: wizard.setMaxDuration,
     setEnableOnCreate: wizard.setEnableOnCreate,
+    setSkipCheck: wizard.setSkipCheck,
     goBack: wizard.goBack,
     reset: wizard.reset,
   }));
@@ -52,7 +58,7 @@ const ImperativeHarness = React.forwardRef<HarnessHandle>((_, ref) => {
       step:{wizard.step}
       name:{wizard.config.name}
       description:{wizard.config.description}
-      gateway:{wizard.config.gateway}
+      agent:{wizard.config.agent}
       controlBundle:{wizard.config.controlBundle}
       treatmentWeight:{wizard.config.treatmentWeight}
       onlineEval:{wizard.config.onlineEval}
@@ -82,10 +88,12 @@ describe('useAddABTestWizard', () => {
       expect(lastFrame()).toContain('enableOnCreate:true');
     });
 
-    it('has all 8 steps', () => {
+    it('has all 9 steps', () => {
       const { lastFrame } = render(<Harness />);
       const frame = lastFrame()!.replace(/\n/g, '');
-      expect(frame).toContain('steps:name,description,gateway,variants,onlineEval,maxDuration,enableOnCreate,confirm');
+      expect(frame).toContain(
+        'steps:name,description,gateway,agent,variants,onlineEval,maxDuration,enableOnCreate,confirm'
+      );
     });
   });
 
@@ -105,22 +113,34 @@ describe('useAddABTestWizard', () => {
       const { lastFrame } = render(<ImperativeHarness ref={ref} />);
 
       act(() => ref.current!.setName('Test1'));
-      act(() => ref.current!.setDescription('A description'));
+      act(() => ref.current!.setDescription('desc'));
 
       expect(lastFrame()).toContain('step:gateway');
-      expect(lastFrame()).toContain('description:A description');
+      expect(lastFrame()).toContain('description:desc');
     });
 
-    it('setGateway advances to variants', () => {
+    it('setGateway advances to agent', () => {
       const ref = React.createRef<HarnessHandle>();
       const { lastFrame } = render(<ImperativeHarness ref={ref} />);
 
       act(() => ref.current!.setName('T'));
       act(() => ref.current!.setDescription(''));
-      act(() => ref.current!.setGateway('arn:gateway'));
+      act(() => ref.current!.setGateway({ type: 'create-new' }));
+
+      expect(lastFrame()).toContain('step:agent');
+    });
+
+    it('setAgent advances to variants', () => {
+      const ref = React.createRef<HarnessHandle>();
+      const { lastFrame } = render(<ImperativeHarness ref={ref} />);
+
+      act(() => ref.current!.setName('T'));
+      act(() => ref.current!.setDescription(''));
+      act(() => ref.current!.setGateway({ type: 'create-new' }));
+      act(() => ref.current!.setAgent('my-agent'));
 
       expect(lastFrame()).toContain('step:variants');
-      expect(lastFrame()).toContain('gateway:arn:gateway');
+      expect(lastFrame()).toContain('agent:my-agent');
     });
 
     it('setVariants advances to onlineEval', () => {
@@ -129,7 +149,8 @@ describe('useAddABTestWizard', () => {
 
       act(() => ref.current!.setName('T'));
       act(() => ref.current!.setDescription(''));
-      act(() => ref.current!.setGateway('gw'));
+      act(() => ref.current!.setGateway({ type: 'create-new' }));
+      act(() => ref.current!.setAgent('my-agent'));
       act(() =>
         ref.current!.setVariants({
           controlBundle: 'cb',
@@ -151,7 +172,8 @@ describe('useAddABTestWizard', () => {
 
       act(() => ref.current!.setName('T'));
       act(() => ref.current!.setDescription(''));
-      act(() => ref.current!.setGateway('gw'));
+      act(() => ref.current!.setGateway({ type: 'create-new' }));
+      act(() => ref.current!.setAgent('my-agent'));
       act(() =>
         ref.current!.setVariants({
           controlBundle: 'cb',
@@ -207,6 +229,58 @@ describe('useAddABTestWizard', () => {
       expect(lastFrame()).toContain('step:name');
       expect(lastFrame()).toContain('name:');
       expect(lastFrame()).toContain('treatmentWeight:20');
+    });
+  });
+
+  describe('skip check', () => {
+    it('advance skips over steps marked as skippable', () => {
+      const ref = React.createRef<HarnessHandle>();
+      const { lastFrame } = render(<ImperativeHarness ref={ref} />);
+
+      act(() => ref.current!.setSkipCheck(s => s === 'gateway'));
+      act(() => ref.current!.setName('T'));
+      act(() => ref.current!.setDescription(''));
+      act(() => ref.current!.setAgent('my-agent'));
+
+      expect(lastFrame()).toContain('step:variants');
+    });
+
+    it('goBack skips over steps marked as skippable', () => {
+      const ref = React.createRef<HarnessHandle>();
+      const { lastFrame } = render(<ImperativeHarness ref={ref} />);
+
+      act(() => ref.current!.setName('T'));
+      act(() => ref.current!.setDescription(''));
+      act(() => ref.current!.setGateway({ type: 'create-new' }));
+      act(() => ref.current!.setAgent('my-agent'));
+      expect(lastFrame()).toContain('step:variants');
+
+      act(() => ref.current!.setSkipCheck(s => s === 'agent'));
+      act(() => ref.current!.goBack());
+
+      expect(lastFrame()).toContain('step:gateway');
+    });
+
+    it('advance skips multiple consecutive skippable steps', () => {
+      const ref = React.createRef<HarnessHandle>();
+      const { lastFrame } = render(<ImperativeHarness ref={ref} />);
+
+      act(() => ref.current!.setSkipCheck(s => s === 'agent' || s === 'variants'));
+      act(() => ref.current!.setName('T'));
+      act(() => ref.current!.setDescription(''));
+      act(() => ref.current!.setGateway({ type: 'create-new' }));
+
+      expect(lastFrame()).toContain('step:onlineEval');
+    });
+
+    it('skip check does not affect non-skippable steps', () => {
+      const ref = React.createRef<HarnessHandle>();
+      const { lastFrame } = render(<ImperativeHarness ref={ref} />);
+
+      act(() => ref.current!.setSkipCheck(() => false));
+      act(() => ref.current!.setName('T'));
+
+      expect(lastFrame()).toContain('step:description');
     });
   });
 });

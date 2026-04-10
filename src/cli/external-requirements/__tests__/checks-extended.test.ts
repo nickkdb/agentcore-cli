@@ -55,6 +55,7 @@ describe('requiresUv', () => {
       policyEngines: [],
       configBundles: [],
       abTests: [],
+      httpGateways: [],
     };
     expect(requiresUv(project)).toBe(true);
   });
@@ -82,6 +83,7 @@ describe('requiresUv', () => {
       policyEngines: [],
       configBundles: [],
       abTests: [],
+      httpGateways: [],
     };
     expect(requiresUv(project)).toBe(false);
   });
@@ -100,6 +102,7 @@ describe('requiresUv', () => {
       policyEngines: [],
       configBundles: [],
       abTests: [],
+      httpGateways: [],
     };
     expect(requiresUv(project)).toBe(false);
   });
@@ -129,6 +132,7 @@ describe('requiresContainerRuntime', () => {
       policyEngines: [],
       configBundles: [],
       abTests: [],
+      httpGateways: [],
     };
     expect(requiresContainerRuntime(project)).toBe(true);
   });
@@ -156,6 +160,7 @@ describe('requiresContainerRuntime', () => {
       policyEngines: [],
       configBundles: [],
       abTests: [],
+      httpGateways: [],
     };
     expect(requiresContainerRuntime(project)).toBe(false);
   });
@@ -174,6 +179,7 @@ describe('requiresContainerRuntime', () => {
       policyEngines: [],
       configBundles: [],
       abTests: [],
+      httpGateways: [],
     };
     expect(requiresContainerRuntime(project)).toBe(false);
   });
@@ -209,6 +215,7 @@ describe('requiresContainerRuntime', () => {
       policyEngines: [],
       configBundles: [],
       abTests: [],
+      httpGateways: [],
     };
     expect(requiresContainerRuntime(project)).toBe(true);
   });
@@ -278,6 +285,7 @@ describe('checkDependencyVersions', () => {
       policyEngines: [],
       configBundles: [],
       abTests: [],
+      httpGateways: [],
     };
 
     const result = await checkDependencyVersions(project);
@@ -300,6 +308,7 @@ describe('checkDependencyVersions', () => {
       policyEngines: [],
       configBundles: [],
       abTests: [],
+      httpGateways: [],
     };
 
     const result = await checkDependencyVersions(project);
@@ -330,6 +339,7 @@ describe('checkDependencyVersions', () => {
       policyEngines: [],
       configBundles: [],
       abTests: [],
+      httpGateways: [],
     };
 
     const result = await checkDependencyVersions(project);

@@ -8,12 +8,25 @@ import { VariantConfigForm } from './VariantConfigForm';
 import type { AddABTestConfig } from './types';
 import { AB_TEST_STEP_LABELS } from './types';
 import { useAddABTestWizard } from './useAddABTestWizard';
-import React, { useMemo } from 'react';
+import { Text } from 'ink';
+import React, { useCallback, useEffect, useMemo } from 'react';
+
+function formatVersionDate(value: string): string {
+  const n = Number(value);
+  if (!isNaN(n) && n > 0) {
+    // Epoch seconds (< 1e12) vs milliseconds (>= 1e12)
+    const ms = n < 1e12 ? n * 1000 : n;
+    return new Date(ms).toLocaleString();
+  }
+  return new Date(value).toLocaleString();
+}
 
 interface AddABTestScreenProps {
   onComplete: (config: AddABTestConfig) => void;
   onExit: () => void;
   existingTestNames: string[];
+  agents: { name: string }[];
+  existingHttpGateways: string[];
   deployedBundles: { name: string; bundleId: string }[];
   onlineEvalConfigs: string[];
   fetchBundleVersions: (bundleId: string) => Promise<{ versionId: string; createdAt: string }[]>;
@@ -23,6 +36,8 @@ export function AddABTestScreen({
   onComplete,
   onExit,
   existingTestNames,
+  agents,
+  existingHttpGateways,
   deployedBundles,
   onlineEvalConfigs,
   fetchBundleVersions,
@@ -30,6 +45,11 @@ export function AddABTestScreen({
   const wizard = useAddABTestWizard();
 
   // Build select items
+  const agentItems: SelectableItem[] = useMemo(
+    () => agents.map(a => ({ id: a.name, title: a.name, description: 'Agent' })),
+    [agents]
+  );
+
   const bundleItems: SelectableItem[] = useMemo(
     () => deployedBundles.map(b => ({ id: b.name, title: b.name, description: `ID: ${b.bundleId}` })),
     [deployedBundles]
@@ -39,6 +59,16 @@ export function AddABTestScreen({
     () => onlineEvalConfigs.map(name => ({ id: name, title: name, description: 'Online Eval Config' })),
     [onlineEvalConfigs]
   );
+
+  const gatewayItems: SelectableItem[] = useMemo(() => {
+    const items: SelectableItem[] = [
+      { id: '__create_new__', title: 'Create new HTTP gateway', description: 'Auto-create for this AB test' },
+    ];
+    for (const gwName of existingHttpGateways) {
+      items.push({ id: gwName, title: gwName, description: 'Existing HTTP gateway' });
+    }
+    return items;
+  }, [existingHttpGateways]);
 
   const enableItems: SelectableItem[] = useMemo(
     () => [
@@ -67,7 +97,7 @@ export function AddABTestScreen({
           const items = versions.map(v => ({
             id: v.versionId,
             title: v.versionId.slice(0, 8),
-            description: `Created: ${new Date(v.createdAt).toLocaleString()}`,
+            description: `Created: ${formatVersionDate(v.createdAt)}`,
           }));
           setControlVersionItems(items);
           setTreatmentVersionItems(items);
@@ -79,20 +109,70 @@ export function AddABTestScreen({
           setTreatmentVersionLoadState('error');
         });
     },
-    [deployedBundles, fetchBundleVersions, controlVersionItems.length]
+    [deployedBundles, fetchBundleVersions]
   );
 
   // Step flags
   const isNameStep = wizard.step === 'name';
   const isDescriptionStep = wizard.step === 'description';
+  const isAgentStep = wizard.step === 'agent';
   const isGatewayStep = wizard.step === 'gateway';
   const isVariantsStep = wizard.step === 'variants';
   const isOnlineEvalStep = wizard.step === 'onlineEval';
-  const isMaxDurationStep = wizard.step === 'maxDuration';
+  // TODO(post-preview): Re-enable maxDuration step once configurable duration is launched.
+  // const isMaxDurationStep = wizard.step === 'maxDuration';
   const isEnableStep = wizard.step === 'enableOnCreate';
   const isConfirmStep = wizard.step === 'confirm';
 
+  // Tell the wizard which steps to skip (both forward and backward navigation).
+  // The gateway step is skipped when there are no existing gateways — the default
+  // config already sets gatewayChoice to 'create-new'.
+  // Track gateway choice type in a ref so the skip check always has the latest value,
+  // even before React re-renders after setGateway updates state.
+  const gatewayChoiceTypeRef = React.useRef(wizard.config.gatewayChoice.type);
+
+  const shouldSkipStep = useCallback(
+    (s: string) => {
+      if (s === 'gateway' && existingHttpGateways.length === 0) return true;
+      // Agent selection is only needed when auto-creating a gateway (to set the runtime target).
+      // When using an existing gateway, the runtime is already configured.
+      if (s === 'agent' && gatewayChoiceTypeRef.current !== 'create-new') return true;
+      // TODO(post-preview): Re-enable maxDuration step once configurable duration is launched.
+      // For public preview, a 14-day default is enforced server-side.
+      if (s === 'maxDuration') return true;
+      return false;
+    },
+    [existingHttpGateways.length]
+  );
+
+  useEffect(() => {
+    wizard.setSkipCheck(shouldSkipStep);
+  }, [shouldSkipStep]); // wizard.setSkipCheck is stable (useCallback with no deps)
+
   // Navigation hooks for select steps
+  const agentNav = useListNavigation({
+    items: agentItems,
+    onSelect: item => wizard.setAgent(item.id),
+    onExit: () => wizard.goBack(),
+    isActive: isAgentStep,
+  });
+
+  const gatewayNav = useListNavigation({
+    items: gatewayItems,
+    onSelect: item => {
+      const choice =
+        item.id === '__create_new__'
+          ? ({ type: 'create-new' } as const)
+          : ({ type: 'existing-http', name: item.id } as const);
+      // Update ref before setGateway so the skip check sees the new choice
+      // when advance() runs synchronously in the same call.
+      gatewayChoiceTypeRef.current = choice.type;
+      wizard.setGateway(choice);
+    },
+    onExit: () => wizard.goBack(),
+    isActive: isGatewayStep,
+  });
+
   const onlineEvalNav = useListNavigation({
     items: onlineEvalItems,
     onSelect: item => wizard.setOnlineEval(item.id),
@@ -115,13 +195,13 @@ export function AddABTestScreen({
   });
 
   // Help text
-  const isSelectStep = isOnlineEvalStep || isEnableStep;
+  const isSelectStep = isAgentStep || isGatewayStep || isOnlineEvalStep || isEnableStep;
   const helpText = isSelectStep
     ? HELP_TEXT.NAVIGATE_SELECT
     : isConfirmStep
       ? HELP_TEXT.CONFIRM_CANCEL
       : isVariantsStep
-        ? 'Enter to select · Esc back'
+        ? HELP_TEXT.VARIANTS_FORM
         : HELP_TEXT.TEXT_INPUT;
 
   const headerContent = <StepIndicator steps={wizard.steps} currentStep={wizard.step} labels={AB_TEST_STEP_LABELS} />;
@@ -154,15 +234,10 @@ export function AddABTestScreen({
           />
         )}
 
+        {isAgentStep && <WizardSelect title="Select agent" items={agentItems} selectedIndex={agentNav.selectedIndex} />}
+
         {isGatewayStep && (
-          <TextInput
-            key="gateway"
-            prompt="Gateway ARN"
-            initialValue=""
-            onSubmit={wizard.setGateway}
-            onCancel={() => wizard.goBack()}
-            customValidation={(value: string) => (value.trim().length > 0 ? true : 'Gateway ARN is required')}
-          />
+          <WizardSelect title="Select gateway" items={gatewayItems} selectedIndex={gatewayNav.selectedIndex} />
         )}
 
         {isVariantsStep && (
@@ -178,38 +253,21 @@ export function AddABTestScreen({
           />
         )}
 
-        {isOnlineEvalStep && (
-          <WizardSelect
-            title="Select online evaluation config"
-            items={onlineEvalItems}
-            selectedIndex={onlineEvalNav.selectedIndex}
-          />
-        )}
+        {isOnlineEvalStep &&
+          (onlineEvalItems.length > 0 ? (
+            <WizardSelect
+              title="Select online evaluation config"
+              items={onlineEvalItems}
+              selectedIndex={onlineEvalNav.selectedIndex}
+            />
+          ) : (
+            <Text color="red">
+              No online eval configs found. An online eval is required for AB tests. Add one with `agentcore add
+              online-eval`, then retry. Press Esc to go back.
+            </Text>
+          ))}
 
-        {isMaxDurationStep && (
-          <TextInput
-            key="maxDuration"
-            prompt="Max duration in days (1-90, press Enter to skip)"
-            initialValue=""
-            allowEmpty
-            onSubmit={value => {
-              if (!value.trim()) {
-                wizard.setMaxDuration(undefined);
-                return;
-              }
-              const n = parseInt(value, 10);
-              if (!isNaN(n) && n >= 1 && n <= 90) wizard.setMaxDuration(n);
-            }}
-            onCancel={() => wizard.goBack()}
-            customValidation={(value: string) => {
-              if (!value.trim()) return true;
-              const n = parseInt(value, 10);
-              if (isNaN(n)) return 'Must be a number';
-              if (n < 1 || n > 90) return 'Must be between 1 and 90';
-              return true;
-            }}
-          />
-        )}
+        {/* TODO(post-preview): Re-enable maxDuration TextInput once configurable duration is launched. */}
 
         {isEnableStep && (
           <WizardSelect
@@ -224,7 +282,13 @@ export function AddABTestScreen({
             fields={[
               { label: 'Name', value: wizard.config.name },
               ...(wizard.config.description ? [{ label: 'Description', value: wizard.config.description }] : []),
-              { label: 'Gateway', value: wizard.config.gateway },
+              {
+                label: 'Gateway',
+                value:
+                  wizard.config.gatewayChoice.type === 'create-new'
+                    ? `Create new for ${wizard.config.agent} (auto)`
+                    : wizard.config.gatewayChoice.name,
+              },
               { label: 'Control bundle', value: wizard.config.controlBundle },
               { label: 'Control version', value: wizard.config.controlVersion.slice(0, 8) },
               { label: 'Treatment bundle', value: wizard.config.treatmentBundle },
@@ -234,9 +298,7 @@ export function AddABTestScreen({
                 value: `Control ${controlWeight}% / Treatment ${wizard.config.treatmentWeight}%`,
               },
               { label: 'Online eval', value: wizard.config.onlineEval },
-              ...(wizard.config.maxDuration
-                ? [{ label: 'Max duration', value: `${wizard.config.maxDuration} days` }]
-                : []),
+              // TODO(post-preview): Re-enable max duration display once configurable duration is launched.
               { label: 'Enable on create', value: wizard.config.enableOnCreate ? 'Yes' : 'No' },
             ]}
           />
