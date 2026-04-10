@@ -131,19 +131,15 @@ export function AddABTestScreen({
   // even before React re-renders after setGateway updates state.
   const gatewayChoiceTypeRef = React.useRef(wizard.config.gatewayChoice.type);
 
-  const shouldSkipStep = useCallback(
-    (s: string) => {
-      if (s === 'gateway' && existingHttpGateways.length === 0) return true;
-      // Agent selection is only needed when auto-creating a gateway (to set the runtime target).
-      // When using an existing gateway, the runtime is already configured.
-      if (s === 'agent' && gatewayChoiceTypeRef.current !== 'create-new') return true;
-      // TODO(post-preview): Re-enable maxDuration step once configurable duration is launched.
-      // For public preview, a 14-day default is enforced server-side.
-      if (s === 'maxDuration') return true;
-      return false;
-    },
-    [existingHttpGateways.length]
-  );
+  const shouldSkipStep = useCallback((s: string) => {
+    // Agent selection is only needed when auto-creating a gateway (to set the runtime target).
+    // When using an existing gateway, the runtime is already configured.
+    if (s === 'agent' && gatewayChoiceTypeRef.current !== 'create-new') return true;
+    // TODO(post-preview): Re-enable maxDuration step once configurable duration is launched.
+    // For public preview, a 14-day default is enforced server-side.
+    if (s === 'maxDuration') return true;
+    return false;
+  }, []);
 
   useEffect(() => {
     wizard.setSkipCheck(shouldSkipStep);
