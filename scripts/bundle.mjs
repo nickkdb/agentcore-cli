@@ -144,6 +144,20 @@ const bundledTarballDest = path.join(cliRoot, 'dist', 'assets', 'bundled-agentco
 fs.copyFileSync(cdkTarballSrc, bundledTarballDest);
 log(`Placed CDK tarball at ${bundledTarballDest}`);
 
+// Step 4b: Copy Python SDK wheel into dist/assets/wheels/ if present in src/assets/wheels/
+const srcWheelsDir = path.join(cliRoot, 'src', 'assets', 'wheels');
+const distWheelsDir = path.join(cliRoot, 'dist', 'assets', 'wheels');
+if (fs.existsSync(srcWheelsDir)) {
+  const wheels = fs.readdirSync(srcWheelsDir).filter(f => f.endsWith('.whl'));
+  if (wheels.length > 0) {
+    fs.mkdirSync(distWheelsDir, { recursive: true });
+    for (const whl of wheels) {
+      fs.copyFileSync(path.join(srcWheelsDir, whl), path.join(distWheelsDir, whl));
+      log(`Placed Python wheel at dist/assets/wheels/${whl}`);
+    }
+  }
+}
+
 // Step 5: Bump CLI version and pack into final tarball (includes the bundled CDK tarball)
 const cliVersionInfo = bumpVersion(cliRoot);
 try {
