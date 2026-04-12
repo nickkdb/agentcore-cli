@@ -251,7 +251,7 @@ export const registerStatus = (program: Command) => {
                     <ResourceEntry entry={entry} />
                     {entry.invocationUrl && (
                       <Text dimColor>
-                        {'  '}Gateway URL: {entry.invocationUrl}
+                        {'  '}Invocation URL: {entry.invocationUrl}
                       </Text>
                     )}
                   </Box>

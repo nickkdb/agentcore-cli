@@ -104,7 +104,7 @@ function ResourceRow({
       )}
       {invocationUrl && (
         <Text dimColor>
-          {'      '}Gateway URL: {invocationUrl}
+          {'      '}Invocation URL: {invocationUrl}
         </Text>
       )}
     </Box>
@@ -193,7 +193,6 @@ export function ResourceGraph({ project, mcp, agentName, resourceStatuses }: Res
                 statusColor={runtimeStatusColor}
                 deploymentState={rsEntry?.deploymentState}
                 identifier={rsEntry?.identifier}
-                invocationUrl={rsEntry?.invocationUrl}
               />
             );
           })}

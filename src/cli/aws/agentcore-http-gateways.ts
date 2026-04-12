@@ -335,9 +335,9 @@ export async function listHttpGatewayTargets(
     path: `/gateways/${options.gatewayId}/targets${query ? `?${query}` : ''}`,
   });
 
-  const result = data as ListHttpGatewayTargetsResult;
+  const result = data as Record<string, unknown>;
   return {
-    targets: result.targets ?? [],
+    targets: (result.items ?? result.targets ?? []) as HttpGatewayTargetSummary[],
   };
 }
 

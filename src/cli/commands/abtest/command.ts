@@ -62,7 +62,7 @@ function formatABTestDetails(test: GetABTestResult): string {
   lines.push(`AB Test: ${test.name}`);
   lines.push(`  Status: ${test.status}`);
   lines.push(`  Execution: ${test.executionStatus}`);
-  lines.push(`  Gateway URL: ${gatewayUrlFromArn(test.gatewayArn)}`);
+  lines.push(`  Invocation URL: ${gatewayUrlFromArn(test.gatewayArn)}/<target>/invocations`);
   lines.push(`  Online Eval: ${test.evaluationConfig.onlineEvaluationConfigArn}`);
   if (test.description) lines.push(`  Description: ${test.description}`);
 

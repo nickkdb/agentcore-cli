@@ -2,7 +2,7 @@ import { getCredentialProvider } from '../../../aws/account';
 import { getABTest, updateABTest } from '../../../aws/agentcore-ab-tests';
 import type { GetABTestResult } from '../../../aws/agentcore-ab-tests';
 import { getOnlineEvaluationConfig } from '../../../aws/agentcore-control';
-import { getHttpGateway } from '../../../aws/agentcore-http-gateways';
+import { getHttpGateway, listHttpGatewayTargets } from '../../../aws/agentcore-http-gateways';
 import { getErrorMessage } from '../../../errors';
 import { GradientText, Screen } from '../../components';
 import {
@@ -252,6 +252,7 @@ export function ABTestDetailScreen({ abTestId, region, onExit }: ABTestDetailScr
   const [confirmingStop, setConfirmingStop] = useState(false);
   const [debugResults, setDebugResults] = useState<DebugCheckResult[] | null>(null);
   const [debugLoading, setDebugLoading] = useState(false);
+  const [targetName, setTargetName] = useState<string>('');
 
   const hasFetched = useRef(false);
   useEffect(() => {
@@ -261,6 +262,16 @@ export function ABTestDetailScreen({ abTestId, region, onExit }: ABTestDetailScr
       try {
         const result = await getABTest({ region, abTestId });
         setTest(result);
+
+        // Fetch gateway target name for invocation URL
+        const gwId = extractId(result.gatewayArn);
+        try {
+          const targets = await listHttpGatewayTargets({ region, gatewayId: gwId, maxResults: 1 });
+          const firstTarget = targets.targets[0];
+          if (firstTarget) setTargetName(firstTarget.name);
+        } catch {
+          // Best-effort — URL will show without target path
+        }
       } catch (err) {
         setError(getErrorMessage(err));
       }
@@ -378,10 +389,16 @@ export function ABTestDetailScreen({ abTestId, region, onExit }: ABTestDetailScr
           {durationText && <Text dimColor>{durationText}</Text>}
         </Box>
 
-        {/* ── Header: Line 2 — gateway URL ─────────────────────── */}
-        <Box>
-          <Text dimColor>{`Gateway URL: ${gatewayUrlFromArn(test.gatewayArn)}`}</Text>
-        </Box>
+        {/* ── Header: Line 2 — invocation URL ────────────────────── */}
+        {targetName ? (
+          <Box>
+            <Text dimColor>{`Invocation URL: ${gatewayUrlFromArn(test.gatewayArn)}/${targetName}/invocations`}</Text>
+          </Box>
+        ) : (
+          <Box>
+            <Text dimColor>Invocation URL: loading...</Text>
+          </Box>
+        )}
 
         {/* ── Header: Line 3 — online eval ────────────────────── */}
         <Box>
