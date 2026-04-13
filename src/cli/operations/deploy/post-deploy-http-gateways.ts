@@ -5,6 +5,7 @@ import {
   createHttpGatewayTarget,
   deleteHttpGateway,
   deleteHttpGatewayTarget,
+  getHttpGatewayTarget,
   listAllHttpGateways,
   listHttpGatewayTargets,
   waitForGatewayReady,
@@ -13,6 +14,7 @@ import {
 import {
   CloudWatchLogsClient,
   CreateDeliveryCommand,
+  DescribeDeliverySourcesCommand,
   PutDeliveryDestinationCommand,
   PutDeliverySourceCommand,
 } from '@aws-sdk/client-cloudwatch-logs';
@@ -89,8 +91,8 @@ export async function setupHttpGateways(options: SetupHttpGatewaysOptions): Prom
       const existingGateway = existingHttpGateways?.[gwSpec.name];
 
       if (existingGateway) {
-        // Already deployed -- skip
-        // Gateway already deployed — skip silently
+        // Already deployed — ensure trace delivery is enabled (may have failed on initial deploy)
+        await ensureTraceDelivery({ region, gatewayName: gwSpec.name, gatewayArn: existingGateway.gatewayArn });
         httpGateways[gwSpec.name] = existingGateway;
         results.push({
           gatewayName: gwSpec.name,
@@ -107,6 +109,8 @@ export async function setupHttpGateways(options: SetupHttpGatewaysOptions): Prom
         console.warn(
           `Warning: HTTP gateway "${gwSpec.name}" found by name but local state was lost. Target and role state may be incomplete — consider re-deploying.`
         );
+        // Ensure trace delivery is enabled (may have failed on initial deploy)
+        await ensureTraceDelivery({ region, gatewayName: gwSpec.name, gatewayArn: existingByName.gatewayArn });
         httpGateways[gwSpec.name] = {
           gatewayId: existingByName.gatewayId,
           gatewayArn: existingByName.gatewayArn,
@@ -177,7 +181,15 @@ export async function setupHttpGateways(options: SetupHttpGatewaysOptions): Prom
           targetId: targetResult.targetId,
         });
       } catch (targetErr) {
-        // Rollback: delete the gateway if target creation/readiness fails
+        // Rollback: delete target (if created), wait for deletion, then delete gateway
+        try {
+          if (targetId) {
+            await deleteHttpGatewayTarget({ region, gatewayId: createResult.gatewayId, targetId });
+            await waitForTargetDeletion({ region, gatewayId: createResult.gatewayId, targetId });
+          }
+        } catch {
+          // Best-effort target cleanup
+        }
         try {
           await deleteHttpGateway({ region, gatewayId: createResult.gatewayId });
         } catch {
@@ -210,9 +222,12 @@ export async function setupHttpGateways(options: SetupHttpGatewaysOptions): Prom
           gatewayArn: createResult.gatewayArn,
         });
       } catch (traceErr) {
-        // Rollback: delete target, gateway, and role
+        // Rollback: delete target (and wait for deletion), then gateway, then role
         try {
-          if (targetId) await deleteHttpGatewayTarget({ region, gatewayId: createResult.gatewayId, targetId });
+          if (targetId) {
+            await deleteHttpGatewayTarget({ region, gatewayId: createResult.gatewayId, targetId });
+            await waitForTargetDeletion({ region, gatewayId: createResult.gatewayId, targetId });
+          }
         } catch {
           // Best-effort target cleanup
         }
@@ -404,6 +419,72 @@ async function enableGatewayTraceDelivery(options: {
   }
 
   // Gateway trace delivery enabled
+}
+
+/**
+ * Check if trace delivery is already enabled for a gateway.
+ * If not, enable it. Failures are logged as warnings (non-fatal for existing gateways).
+ */
+async function ensureTraceDelivery(options: {
+  region: string;
+  gatewayName: string;
+  gatewayArn: string;
+}): Promise<void> {
+  const { region, gatewayName, gatewayArn } = options;
+  const credentials = getCredentialProvider();
+  const logsClient = new CloudWatchLogsClient({ region, credentials });
+
+  try {
+    const sources = await logsClient.send(new DescribeDeliverySourcesCommand({}));
+    const hasSource = (sources.deliverySources ?? []).some(
+      s => s.resourceArns?.some(a => a.endsWith(`/${gatewayArn.split('/').pop()!}`)) && s.logType === 'TRACES'
+    );
+
+    if (!hasSource) {
+      await enableGatewayTraceDelivery({ region, gatewayName, gatewayArn });
+    }
+  } catch (err) {
+    console.warn(
+      `Warning: Could not verify/enable trace delivery for gateway "${gatewayName}": ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
+}
+
+/**
+ * Wait for a gateway target to be fully deleted before deleting the gateway.
+ * Polls getHttpGatewayTarget until it returns 404 or timeout is reached.
+ */
+async function waitForTargetDeletion(options: {
+  region: string;
+  gatewayId: string;
+  targetId: string;
+  timeoutMs?: number;
+}): Promise<void> {
+  const timeoutMs = options.timeoutMs ?? 60_000;
+  const startTime = Date.now();
+  let delayMs = 2_000;
+
+  while (Date.now() - startTime < timeoutMs) {
+    try {
+      await getHttpGatewayTarget({
+        region: options.region,
+        gatewayId: options.gatewayId,
+        targetId: options.targetId,
+      });
+      // Target still exists — keep waiting
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('(404)') || msg.includes('not found')) {
+        return; // Target confirmed deleted
+      }
+      // Transient error — keep polling rather than assuming deleted
+    }
+
+    const remaining = timeoutMs - (Date.now() - startTime);
+    if (remaining <= 0) break;
+    await new Promise(resolve => setTimeout(resolve, Math.min(delayMs, remaining)));
+    delayMs = Math.min(delayMs * 2, 8_000);
+  }
 }
 
 // ============================================================================
