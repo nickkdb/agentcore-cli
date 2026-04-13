@@ -382,7 +382,6 @@ test('AgentCoreStack synthesizes with empty spec', () => {
       credentials: [],
       evaluators: [],
       onlineEvalConfigs: [],
-      configBundles: [],
       policyEngines: [],
       agentCoreGateways: [],
       mcpRuntimeTools: [],
@@ -523,6 +522,8 @@ exports[`Assets Directory Snapshots > File listing > should match the expected f
   "python/mcp/standalone/base/main.py",
   "python/mcp/standalone/base/pyproject.toml",
   "typescript/.gitkeep",
+  "wheels/.gitkeep",
+  "wheels/bedrock_agentcore-1.6.0.dev20260413-py3-none-any.whl",
 ]
 `;
 
