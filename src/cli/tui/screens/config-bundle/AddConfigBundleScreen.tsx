@@ -264,7 +264,7 @@ export function AddConfigBundleScreen({
                 label: `  ${arn.split('/').pop() ?? arn}`,
                 value: Object.keys(comp.configuration).join(', '),
               })),
-              { label: 'Branch', value: wizard.config.branchName || 'main' },
+              { label: 'Branch', value: wizard.config.branchName || 'mainline' },
               { label: 'Message', value: wizard.config.commitMessage || `Create ${wizard.config.name}` },
             ]}
           />

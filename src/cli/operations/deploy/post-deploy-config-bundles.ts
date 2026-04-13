@@ -94,7 +94,7 @@ export async function setupConfigBundles(options: SetupConfigBundlesOptions): Pr
             updated = true;
           } else {
             // Use the branch from the spec, or fall back to whatever branch the API has
-            const effectiveBranch = bundleSpec.branchName ?? current.lineageMetadata?.branchName ?? 'main';
+            const effectiveBranch = bundleSpec.branchName ?? current.lineageMetadata?.branchName ?? 'mainline';
             const result = await updateConfigurationBundle({
               region,
               bundleId: existingBundle.bundleId,
@@ -162,7 +162,7 @@ export async function setupConfigBundles(options: SetupConfigBundlesOptions): Pr
               versionId: current.versionId,
             });
           } else {
-            const effectiveBranch = bundleSpec.branchName ?? current.lineageMetadata?.branchName ?? 'main';
+            const effectiveBranch = bundleSpec.branchName ?? current.lineageMetadata?.branchName ?? 'mainline';
             const result = await updateConfigurationBundle({
               region,
               bundleId: existingByName.bundleId,
