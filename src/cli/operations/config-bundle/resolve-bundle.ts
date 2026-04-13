@@ -5,7 +5,7 @@
  * Fallback: calls listConfigurationBundles API to find by name.
  */
 import { ConfigIO } from '../../../lib';
-import { getConfigurationBundle, listConfigurationBundles } from '../../aws/agentcore-config-bundles';
+import { listConfigurationBundleVersions, listConfigurationBundles } from '../../aws/agentcore-config-bundles';
 
 export interface ResolvedBundle {
   bundleId: string;
@@ -25,19 +25,23 @@ export async function resolveBundleByName(
 ): Promise<ResolvedBundle> {
   // Fast path: check deployed state
   const deployedState = await configIO.readDeployedState();
-  let projectName: string | undefined;
   for (const targetName of Object.keys(deployedState.targets ?? {})) {
     const target = deployedState.targets?.[targetName];
     const bundles = target?.resources?.configBundles;
     const bundle = bundles?.[bundleName];
     if (bundle) {
-      // Verify the deployed-state ID is still valid (bundles may have been recreated)
+      // Verify the bundle still exists by listing versions (branch-agnostic)
       try {
-        const verified = await getConfigurationBundle({ region, bundleId: bundle.bundleId });
+        const versions = await listConfigurationBundleVersions({
+          region,
+          bundleId: bundle.bundleId,
+          maxResults: 1,
+        });
+        const latestVersion = versions.versions[0];
         return {
           bundleId: bundle.bundleId,
           bundleArn: bundle.bundleArn,
-          versionId: verified.versionId,
+          versionId: latestVersion?.versionId ?? bundle.versionId,
           region,
         };
       } catch {
@@ -46,7 +50,9 @@ export async function resolveBundleByName(
     }
   }
 
-  // Read project name for prefixed API-side bundle name lookup
+  // Fallback: search via API
+  // The API stores bundles with a prefixed name: {projectName}_{bundleName}
+  let projectName: string | undefined;
   try {
     const projectSpec = await configIO.readProjectSpec();
     projectName = projectSpec.name;
@@ -54,8 +60,6 @@ export async function resolveBundleByName(
     // Project spec may not be available
   }
 
-  // Fallback: search via API
-  // The API stores bundles with a prefixed name: {projectName}_{bundleName}
   const result = await listConfigurationBundles({ region, maxResults: 100 });
   const prefixedName = projectName ? `${projectName}_${bundleName}` : undefined;
   const match = result.bundles.find(
@@ -65,13 +69,18 @@ export async function resolveBundleByName(
     throw new Error(`Configuration bundle "${bundleName}" not found. Has it been deployed?`);
   }
 
-  // Fetch the bundle to get the latest versionId (required by Recommendation API)
-  const bundle = await getConfigurationBundle({ region, bundleId: match.bundleId });
+  // Get the latest version ID (branch-agnostic)
+  const versions = await listConfigurationBundleVersions({
+    region,
+    bundleId: match.bundleId,
+    maxResults: 1,
+  });
+  const latestVersion = versions.versions[0];
 
   return {
     bundleId: match.bundleId,
     bundleArn: match.bundleArn,
-    versionId: bundle.versionId,
+    versionId: latestVersion?.versionId,
     region,
   };
 }
