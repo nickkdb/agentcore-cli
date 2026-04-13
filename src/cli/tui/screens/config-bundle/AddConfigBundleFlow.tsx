@@ -108,7 +108,7 @@ export function AddConfigBundleFlow({
         name: config.name,
         description: config.description || undefined,
         components: config.components,
-        branchName: config.branchName || 'mainline',
+        branchName: config.branchName || 'main',
         commitMessage: config.commitMessage || `Create ${config.name}`,
       }).then(result => {
         if (result.ok) {

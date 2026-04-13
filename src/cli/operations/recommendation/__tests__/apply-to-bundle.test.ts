@@ -74,7 +74,7 @@ function makeSpec(systemPrompt = 'old prompt') {
             },
           },
         },
-        branchName: 'mainline',
+        branchName: 'main',
         commitMessage: 'Initial',
       },
     ],

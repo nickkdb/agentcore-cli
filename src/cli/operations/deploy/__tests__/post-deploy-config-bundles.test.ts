@@ -29,7 +29,7 @@ vi.mock('../../../aws/agentcore-config-bundles', () => ({
 const REGION = 'us-west-2';
 
 function makeProjectSpec(configBundles: Record<string, unknown>[]) {
-  return { name: 'TestProject', configBundles } as any;
+  return { configBundles } as any;
 }
 
 describe('setupConfigBundles', () => {
@@ -56,7 +56,7 @@ describe('setupConfigBundles', () => {
       expect(mockCreateConfigurationBundle).toHaveBeenCalledWith(
         expect.objectContaining({
           region: REGION,
-          bundleName: 'TestProject_MyBundle',
+          bundleName: 'MyBundle',
           components: { foo: { type: 'inline', value: 'bar' } },
           commitMessage: 'Create MyBundle',
         })
@@ -88,7 +88,7 @@ describe('setupConfigBundles', () => {
         versionId: 'v-1',
         components: { foo: { type: 'inline', value: 'old' } },
         description: undefined,
-        lineageMetadata: { branchName: 'mainline' },
+        lineageMetadata: { branchName: 'main' },
       });
 
       mockUpdateConfigurationBundle.mockResolvedValue({
@@ -111,7 +111,7 @@ describe('setupConfigBundles', () => {
           bundleId: 'b-123',
           components: { foo: { type: 'inline', value: 'new' } },
           parentVersionIds: ['v-1'],
-          branchName: 'mainline',
+          branchName: 'main',
           commitMessage: 'Update MyBundle',
         })
       );
@@ -137,7 +137,7 @@ describe('setupConfigBundles', () => {
         versionId: 'v-1',
         components,
         description: 'My desc',
-        lineageMetadata: { branchName: 'mainline' },
+        lineageMetadata: { branchName: 'main' },
       });
 
       const result = await setupConfigBundles({
@@ -172,7 +172,7 @@ describe('setupConfigBundles', () => {
         versionId: 'v-1',
         components: { a: { type: 'inline', value: '1' }, b: { type: 'inline', value: '2' } },
         description: undefined,
-        lineageMetadata: { branchName: 'mainline' },
+        lineageMetadata: { branchName: 'main' },
       });
 
       // Spec has same keys in different order
@@ -345,11 +345,11 @@ describe('setupConfigBundles', () => {
         versionId: 'v-latest',
         components: { old: { type: 'inline', value: 'data' } },
         description: undefined,
-        lineageMetadata: { branchName: 'mainline' },
+        lineageMetadata: { branchName: 'main' },
       });
 
       mockListConfigurationBundles.mockResolvedValue({
-        bundles: [{ bundleId: 'b-found', bundleName: 'TestProject_MyBundle' }],
+        bundles: [{ bundleId: 'b-found', bundleName: 'MyBundle' }],
       });
 
       mockListConfigurationBundleVersions.mockResolvedValue({

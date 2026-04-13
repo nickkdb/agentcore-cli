@@ -20,7 +20,7 @@ function getDefaultConfig(): AddConfigBundleConfig {
     description: '',
     components: {},
     componentsRaw: '',
-    branchName: 'mainline',
+    branchName: 'main',
     commitMessage: '',
   };
 }
