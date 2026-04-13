@@ -58,8 +58,8 @@ export async function setupConfigBundles(options: SetupConfigBundlesOptions): Pr
 
   // Create or update bundles from the spec
   for (const bundleSpec of projectSpec.configBundles) {
-    // Prepend project name to the API-side bundle name (like runtimes use projectName_agentName)
-    const apiBundleName = `${projectName}_${bundleSpec.name}`;
+    // Prepend project name to the API-side bundle name (no separator for config bundles)
+    const apiBundleName = `${projectName}${bundleSpec.name}`;
 
     try {
       // Try to update if we have an existing bundle ID

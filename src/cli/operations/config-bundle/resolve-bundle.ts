@@ -51,7 +51,7 @@ export async function resolveBundleByName(
   }
 
   // Fallback: search via API
-  // The API stores bundles with a prefixed name: {projectName}_{bundleName}
+  // The API stores bundles with a prefixed name: {projectName}{bundleName}
   let projectName: string | undefined;
   try {
     const projectSpec = await configIO.readProjectSpec();
@@ -61,7 +61,7 @@ export async function resolveBundleByName(
   }
 
   const result = await listConfigurationBundles({ region, maxResults: 100 });
-  const prefixedName = projectName ? `${projectName}_${bundleName}` : undefined;
+  const prefixedName = projectName ? `${projectName}${bundleName}` : undefined;
   const match = result.bundles.find(
     b => b.bundleName === bundleName || (prefixedName && b.bundleName === prefixedName)
   );
