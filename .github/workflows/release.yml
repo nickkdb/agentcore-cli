@@ -134,6 +134,11 @@ jobs:
           echo "branch=release/v$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "New version: $NEW_VERSION"
 
+      - name: Update snapshots after CDK sync
+        run: |
+          npm run test:update-snapshots
+          echo "✓ Snapshots updated"
+
       - name: Regenerate JSON schema
         run: |
           npm run build
