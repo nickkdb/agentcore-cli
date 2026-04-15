@@ -27,7 +27,10 @@ export function ABTestPickerScreen({ onExit }: ABTestPickerScreenProps) {
     const load = async () => {
       try {
         const configIO = new ConfigIO();
-        const deployedState = await configIO.readDeployedState();
+        const [deployedState, targets] = await Promise.all([
+          configIO.readDeployedState(),
+          configIO.resolveAWSDeploymentTargets(),
+        ]);
         const found: DeployedABTest[] = [];
         for (const target of Object.values(deployedState.targets ?? {})) {
           const abTests = target.resources?.abTests;
@@ -38,7 +41,7 @@ export function ABTestPickerScreen({ onExit }: ABTestPickerScreenProps) {
           }
         }
         setTests(found);
-        setRegion(process.env.AWS_DEFAULT_REGION ?? process.env.AWS_REGION ?? 'us-east-1');
+        if (targets.length > 0) setRegion(targets[0]!.region);
       } catch {
         setTests([]);
       }

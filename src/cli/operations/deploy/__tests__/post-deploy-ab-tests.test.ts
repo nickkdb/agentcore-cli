@@ -4,19 +4,29 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ── Hoisted mocks ──────────────────────────────────────────────────────────
 
-const { mockCreateABTest, mockDeleteABTest, mockListABTests, mockGetCredentialProvider, mockIAMSend } = vi.hoisted(
-  () => ({
-    mockCreateABTest: vi.fn(),
-    mockDeleteABTest: vi.fn(),
-    mockListABTests: vi.fn(),
-    mockGetCredentialProvider: vi.fn().mockReturnValue(undefined),
-    mockIAMSend: vi.fn(),
-  })
-);
+const {
+  mockCreateABTest,
+  mockDeleteABTest,
+  mockGetABTest,
+  mockUpdateABTest,
+  mockListABTests,
+  mockGetCredentialProvider,
+  mockIAMSend,
+} = vi.hoisted(() => ({
+  mockCreateABTest: vi.fn(),
+  mockDeleteABTest: vi.fn(),
+  mockGetABTest: vi.fn(),
+  mockUpdateABTest: vi.fn(),
+  mockListABTests: vi.fn(),
+  mockGetCredentialProvider: vi.fn().mockReturnValue(undefined),
+  mockIAMSend: vi.fn(),
+}));
 
 vi.mock('../../../aws/agentcore-ab-tests', () => ({
   createABTest: mockCreateABTest,
   deleteABTest: mockDeleteABTest,
+  getABTest: mockGetABTest,
+  updateABTest: mockUpdateABTest,
   listABTests: mockListABTests,
 }));
 
@@ -87,6 +97,8 @@ describe('setupABTests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockListABTests.mockResolvedValue({ abTests: [] });
+    mockUpdateABTest.mockResolvedValue({});
+    mockGetABTest.mockResolvedValue({ status: 'ACTIVE', executionStatus: 'STOPPED' });
   });
 
   describe('creation', () => {
@@ -283,8 +295,25 @@ describe('setupABTests', () => {
   });
 
   describe('deletion (reconciliation)', () => {
-    it('deletes orphaned AB test not in project spec', async () => {
-      mockDeleteABTest.mockResolvedValue({ success: true });
+    it('stops, polls until executionStatus is STOPPED, then deletes orphaned AB test', async () => {
+      const callOrder: string[] = [];
+      mockUpdateABTest.mockImplementation(() => {
+        callOrder.push('stop');
+        return Promise.resolve({});
+      });
+      let getCallCount = 0;
+      mockGetABTest.mockImplementation(() => {
+        getCallCount++;
+        callOrder.push(`poll(${getCallCount})`);
+        // First poll: executionStatus not yet STOPPED (still transitioning)
+        if (getCallCount === 1) return Promise.resolve({ status: 'ACTIVE', executionStatus: 'RUNNING' });
+        // Second poll: executionStatus is STOPPED — done
+        return Promise.resolve({ status: 'ACTIVE', executionStatus: 'STOPPED' });
+      });
+      mockDeleteABTest.mockImplementation(() => {
+        callOrder.push('delete');
+        return Promise.resolve({ success: true });
+      });
 
       const result = await deleteOrphanedABTests({
         region: 'us-east-1',
@@ -294,7 +323,30 @@ describe('setupABTests', () => {
         },
       });
 
-      expect(mockDeleteABTest).toHaveBeenCalledWith({ region: 'us-east-1', abTestId: 'abt-old' });
+      // Verify: stop → poll (RUNNING) → poll (STOPPED) → delete
+      expect(callOrder).toEqual(['stop', 'poll(1)', 'poll(2)', 'delete']);
+      expect(mockUpdateABTest).toHaveBeenCalledWith({
+        region: 'us-east-1',
+        abTestId: 'abt-old',
+        executionStatus: 'STOPPED',
+      });
+      expect(result.results[0]!.status).toBe('deleted');
+    });
+
+    it('proceeds with delete when stop fails (already stopped)', async () => {
+      mockUpdateABTest.mockRejectedValue(new Error('Cannot update in current state'));
+      mockDeleteABTest.mockResolvedValue({ success: true });
+
+      const result = await deleteOrphanedABTests({
+        region: 'us-east-1',
+        projectSpec: makeProjectSpec([]),
+        existingABTests: {
+          RemovedTest: { abTestId: 'abt-stopped', abTestArn: 'arn:abt:stopped' },
+        },
+      });
+
+      expect(mockUpdateABTest).toHaveBeenCalled();
+      expect(mockDeleteABTest).toHaveBeenCalled();
       expect(result.results[0]!.status).toBe('deleted');
     });
 
@@ -362,6 +414,83 @@ describe('setupABTests', () => {
       expect(result.hasErrors).toBe(true);
       expect(result.results[0]!.status).toBe('error');
       expect(result.results[0]!.error).toBe('delete failed');
+    });
+
+    it('sets warning when AB test was stopped before deletion', async () => {
+      mockUpdateABTest.mockResolvedValue({});
+      mockGetABTest.mockResolvedValue({ status: 'ACTIVE', executionStatus: 'STOPPED' });
+      mockDeleteABTest.mockResolvedValue({ success: true });
+
+      const result = await deleteOrphanedABTests({
+        region: 'us-east-1',
+        projectSpec: makeProjectSpec([]),
+        existingABTests: {
+          StoppedTest: { abTestId: 'abt-warn', abTestArn: 'arn:abt:warn' },
+        },
+      });
+
+      expect(result.results[0]!.status).toBe('deleted');
+      expect(result.results[0]!.warning).toBe('AB test "StoppedTest" was stopped before deletion');
+    });
+
+    it('does not set warning when stop fails (already stopped)', async () => {
+      mockUpdateABTest.mockRejectedValue(new Error('Cannot update'));
+      mockDeleteABTest.mockResolvedValue({ success: true });
+
+      const result = await deleteOrphanedABTests({
+        region: 'us-east-1',
+        projectSpec: makeProjectSpec([]),
+        existingABTests: {
+          AlreadyStopped: { abTestId: 'abt-no-warn', abTestArn: 'arn:abt:no-warn' },
+        },
+      });
+
+      expect(result.results[0]!.status).toBe('deleted');
+      expect(result.results[0]!.warning).toBeUndefined();
+    });
+
+    it('proceeds with delete even when poll never reaches STOPPED (timeout)', async () => {
+      mockUpdateABTest.mockResolvedValue({});
+      // executionStatus never becomes STOPPED — always RUNNING
+      mockGetABTest.mockResolvedValue({ status: 'ACTIVE', executionStatus: 'RUNNING' });
+      mockDeleteABTest.mockResolvedValue({ success: true });
+
+      const result = await deleteOrphanedABTests({
+        region: 'us-east-1',
+        projectSpec: makeProjectSpec([]),
+        existingABTests: {
+          StuckTest: { abTestId: 'abt-stuck', abTestArn: 'arn:abt:stuck' },
+        },
+      });
+
+      // Should still attempt delete after exhausting poll loop
+      expect(mockDeleteABTest).toHaveBeenCalledWith({ region: 'us-east-1', abTestId: 'abt-stuck' });
+      expect(result.results[0]!.status).toBe('deleted');
+      // Poll was called 20 times (the loop limit)
+      expect(mockGetABTest).toHaveBeenCalledTimes(20);
+      // Should warn that polling timed out
+      expect(result.results[0]!.warning).toBe(
+        'AB test "StuckTest" did not reach STOPPED status within the polling window — proceeding with delete'
+      );
+    }, 120_000);
+
+    it('sets warning even when deleteABTest returns success: false', async () => {
+      mockUpdateABTest.mockResolvedValue({});
+      mockGetABTest.mockResolvedValue({ status: 'ACTIVE', executionStatus: 'STOPPED' });
+      mockDeleteABTest.mockResolvedValue({ success: false, error: 'still running' });
+
+      const result = await deleteOrphanedABTests({
+        region: 'us-east-1',
+        projectSpec: makeProjectSpec([]),
+        existingABTests: {
+          FailAfterStop: { abTestId: 'abt-fail-stop', abTestArn: 'arn:abt:fail-stop' },
+        },
+      });
+
+      expect(result.results[0]!.status).toBe('error');
+      expect(result.results[0]!.error).toBe('still running');
+      // Warning should still be set because stop succeeded
+      expect(result.results[0]!.warning).toBe('AB test "FailAfterStop" was stopped before deletion');
     });
   });
 

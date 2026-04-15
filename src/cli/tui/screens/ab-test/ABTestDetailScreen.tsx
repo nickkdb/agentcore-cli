@@ -5,6 +5,7 @@ import { getOnlineEvaluationConfig } from '../../../aws/agentcore-control';
 import { getHttpGateway, listHttpGatewayTargets } from '../../../aws/agentcore-http-gateways';
 import { getErrorMessage } from '../../../errors';
 import { GradientText, Screen } from '../../components';
+import type { Delivery, DeliverySource } from '@aws-sdk/client-cloudwatch-logs';
 import {
   CloudWatchLogsClient,
   DescribeDeliveriesCommand,
@@ -119,14 +120,14 @@ async function runDebugChecks(test: GetABTestResult, region: string): Promise<De
   // 3. Gateway Trace Delivery (source + destination + delivery)
   try {
     const [sources, deliveries] = await Promise.all([
-      logsClient.send(new DescribeDeliverySourcesCommand({})),
-      logsClient.send(new DescribeDeliveriesCommand({})),
+      paginateDeliverySources(logsClient),
+      paginateDeliveries(logsClient),
     ]);
 
-    const source = (sources.deliverySources ?? []).find(
-      s => s.resourceArns?.some(a => a.includes(gatewayId)) && s.logType === 'TRACES'
-    );
-    const delivery = source ? (deliveries.deliveries ?? []).find(d => d.deliverySourceName === source.name) : undefined;
+    const traceSources = sources.filter(s => s.logType === 'TRACES');
+
+    const source = traceSources.find(s => s.resourceArns?.some(a => a.includes(gatewayId)));
+    const delivery = source ? deliveries.find(d => d.deliverySourceName === source.name) : undefined;
 
     const hasSource = !!source;
     const hasDelivery = !!delivery;
@@ -536,4 +537,26 @@ export function ABTestDetailScreen({ abTestId, region, onExit }: ABTestDetailScr
       </Box>
     </Screen>
   );
+}
+
+async function paginateDeliverySources(client: CloudWatchLogsClient): Promise<DeliverySource[]> {
+  const all: DeliverySource[] = [];
+  let nextToken: string | undefined;
+  do {
+    const resp = await client.send(new DescribeDeliverySourcesCommand({ nextToken }));
+    all.push(...(resp.deliverySources ?? []));
+    nextToken = resp.nextToken;
+  } while (nextToken);
+  return all;
+}
+
+async function paginateDeliveries(client: CloudWatchLogsClient): Promise<Delivery[]> {
+  const all: Delivery[] = [];
+  let nextToken: string | undefined;
+  do {
+    const resp = await client.send(new DescribeDeliveriesCommand({ nextToken }));
+    all.push(...(resp.deliveries ?? []));
+    nextToken = resp.nextToken;
+  } while (nextToken);
+  return all;
 }

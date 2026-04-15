@@ -159,7 +159,7 @@ export class ABTestPrimitive extends BasePrimitive<AddABTestOptions, RemovableAB
       .description('Add an A/B test to the project')
       .option('--name <name>', 'AB test name')
       .option('--description <text>', 'AB test description')
-      .option('--agent <name>', 'Agent to A/B test')
+      .option('--runtime <name>', 'Runtime agent to A/B test')
       .option('--role-arn <arn>', 'IAM role ARN for the AB test (auto-created if not provided)')
       .option('--control-bundle <name>', 'Control variant config bundle name or ARN')
       .option('--control-version <id>', 'Control variant config bundle version')
@@ -167,8 +167,8 @@ export class ABTestPrimitive extends BasePrimitive<AddABTestOptions, RemovableAB
       .option('--treatment-version <id>', 'Treatment variant config bundle version')
       .option('--control-weight <n>', 'Traffic weight for control (1-100)', parseInt)
       .option('--treatment-weight <n>', 'Traffic weight for treatment (1-100)', parseInt)
-      .option('--gateway <name>', 'Use an existing HTTP gateway (skips auto-creation and --agent)')
-      .option('--online-eval <name>', 'Online evaluation config name or ARN')
+      .option('--gateway <name>', 'Use an existing HTTP gateway (skips auto-creation and --runtime)')
+      .option('--online-eval <name>', 'Online evaluation config name (resolved from project)')
       .option('--traffic-header <name>', 'Header name for traffic routing')
       // TODO(post-preview): Re-enable --max-duration once configurable duration is launched.
       // .option('--max-duration <days>', 'Maximum duration in days (1-90)', parseInt)
@@ -178,7 +178,7 @@ export class ABTestPrimitive extends BasePrimitive<AddABTestOptions, RemovableAB
         async (cliOptions: {
           name?: string;
           description?: string;
-          agent?: string;
+          runtime?: string;
           gateway?: string;
           roleArn?: string;
           controlBundle?: string;
@@ -210,7 +210,8 @@ export class ABTestPrimitive extends BasePrimitive<AddABTestOptions, RemovableAB
               };
 
               if (!cliOptions.name) fail('--name is required');
-              if (!cliOptions.gateway && !cliOptions.agent) fail('--agent is required (unless --gateway is provided)');
+              if (!cliOptions.gateway && !cliOptions.runtime)
+                fail('--runtime is required (unless --gateway is provided)');
               if (!cliOptions.controlBundle) fail('--control-bundle is required');
               if (!cliOptions.controlVersion) fail('--control-version is required');
               if (!cliOptions.treatmentBundle) fail('--treatment-bundle is required');
@@ -222,7 +223,7 @@ export class ABTestPrimitive extends BasePrimitive<AddABTestOptions, RemovableAB
               const result = await this.add({
                 name: cliOptions.name!,
                 description: cliOptions.description,
-                agent: cliOptions.agent ?? '',
+                agent: cliOptions.runtime ?? '',
                 gatewayChoice: cliOptions.gateway
                   ? { type: 'existing-http', name: cliOptions.gateway }
                   : { type: 'create-new' },

@@ -1,5 +1,5 @@
 import { ConfigIO, SecureCredentials } from '../../../lib';
-import type { AgentCoreMcpSpec, AgentCoreProjectSpec, DeployedState } from '../../../schema';
+import type { AgentCoreMcpSpec, DeployedState } from '../../../schema';
 import { validateAwsCredentials } from '../../aws/account';
 import { createSwitchableIoHost } from '../../cdk/toolkit-lib';
 import {
@@ -32,7 +32,10 @@ import {
 } from '../../operations/deploy';
 import { formatTargetStatus, getGatewayTargetStatuses } from '../../operations/deploy/gateway-status';
 import { deleteOrphanedABTests, setupABTests } from '../../operations/deploy/post-deploy-ab-tests';
-import { setupConfigBundles } from '../../operations/deploy/post-deploy-config-bundles';
+import {
+  resolveConfigBundleComponentKeys,
+  setupConfigBundles,
+} from '../../operations/deploy/post-deploy-config-bundles';
 import { setupHttpGateways } from '../../operations/deploy/post-deploy-http-gateways';
 import { enableOnlineEvalConfigs } from '../../operations/deploy/post-deploy-online-evals';
 import type { DeployResult } from './types';
@@ -484,6 +487,11 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
         logger.log(`AB test orphan cleanup warnings: ${errorMessages}`, 'warn');
       }
 
+      // Surface warnings (e.g., "AB test was stopped before deletion")
+      for (const r of deleteResult.results) {
+        if (r.warning) logger.log(r.warning, 'warn');
+      }
+
       // Update deployed state to remove deleted AB tests
       if (deleteResult.results.some(r => r.status === 'deleted')) {
         const updatedState = await configIO.readDeployedState().catch(() => deployedState);
@@ -640,55 +648,5 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
  * with the actual ARNs from deployed state. Keys that are already ARNs or
  * don't match a placeholder pattern are left unchanged.
  */
-function resolveConfigBundleComponentKeys(
-  projectSpec: AgentCoreProjectSpec,
-  deployedState: DeployedState,
-  targetName: string
-): AgentCoreProjectSpec {
-  const resources = deployedState.targets?.[targetName]?.resources;
-  if (!resources) return projectSpec;
-
-  const resolvedBundles = (projectSpec.configBundles ?? []).map(bundle => {
-    const resolvedComponents: Record<string, { configuration: Record<string, unknown> }> = {};
-
-    for (const [key, value] of Object.entries(bundle.components ?? {})) {
-      const resolvedKey = resolveComponentKey(key, resources);
-      resolvedComponents[resolvedKey] = value;
-    }
-
-    return { ...bundle, components: resolvedComponents };
-  });
-
-  return { ...projectSpec, configBundles: resolvedBundles };
-}
-
-function resolveComponentKey(
-  key: string,
-  resources: NonNullable<DeployedState['targets'][string]['resources']>
-): string {
-  if (key.startsWith('arn:')) return key;
-
-  const gwMatch = /^\{\{gateway:(.+)\}\}$/.exec(key);
-  if (gwMatch) {
-    const gwName = gwMatch[1]!;
-    const httpGw = resources.httpGateways?.[gwName];
-    if (httpGw) return httpGw.gatewayArn;
-    const mcpGw = resources.mcp?.gateways?.[gwName];
-    if (mcpGw) return mcpGw.gatewayArn;
-    throw new Error(
-      `Config bundle references gateway "${gwName}" but it was not found in deployed resources. Ensure the gateway is defined in agentcore.json and deploys successfully.`
-    );
-  }
-
-  const rtMatch = /^\{\{runtime:(.+)\}\}$/.exec(key);
-  if (rtMatch) {
-    const rtName = rtMatch[1]!;
-    const rt = resources.runtimes?.[rtName];
-    if (rt) return rt.runtimeArn;
-    throw new Error(
-      `Config bundle references runtime "${rtName}" but it was not found in deployed resources. Ensure the runtime is defined in agentcore.json and deploys successfully.`
-    );
-  }
-
-  return key;
-}
+// resolveConfigBundleComponentKeys and resolveComponentKey moved to
+// src/cli/operations/deploy/post-deploy-config-bundles.ts

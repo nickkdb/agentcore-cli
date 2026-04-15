@@ -1,6 +1,6 @@
 import type { ABTestDeployedState, AgentCoreProjectSpec, DeployedResourceState } from '../../../schema';
 import { getCredentialProvider } from '../../aws/account';
-import { createABTest, deleteABTest, listABTests } from '../../aws/agentcore-ab-tests';
+import { createABTest, deleteABTest, getABTest, listABTests, updateABTest } from '../../aws/agentcore-ab-tests';
 import type { ABTestEvaluationConfig, ABTestVariant, TrafficAllocationConfig } from '../../aws/agentcore-ab-tests';
 import {
   CreateRoleCommand,
@@ -30,6 +30,7 @@ export interface ABTestSetupResult {
   abTestId?: string;
   abTestArn?: string;
   error?: string;
+  warning?: string;
 }
 
 export interface SetupABTestsResult {
@@ -191,6 +192,30 @@ export async function deleteOrphanedABTests(options: {
   for (const [testName, testState] of Object.entries(existingABTests)) {
     if (!specTestNames.has(testName)) {
       try {
+        // Stop the AB test first — running tests cannot be deleted
+        let wasStopped = false;
+        let stopTimedOut = false;
+        try {
+          await updateABTest({ region, abTestId: testState.abTestId, executionStatus: 'STOPPED' });
+          wasStopped = true;
+
+          // Poll until executionStatus is STOPPED (stop is async)
+          let stopped = false;
+          for (let i = 0; i < 20; i++) {
+            const test = await getABTest({ region, abTestId: testState.abTestId });
+            if (test.executionStatus === 'STOPPED') {
+              stopped = true;
+              break;
+            }
+            await new Promise(resolve => setTimeout(resolve, 3_000));
+          }
+          if (!stopped) {
+            stopTimedOut = true;
+          }
+        } catch {
+          // May already be stopped or in a state that doesn't need stopping — proceed with delete
+        }
+
         const deleteResult = await deleteABTest({
           region,
           abTestId: testState.abTestId,
@@ -204,6 +229,11 @@ export async function deleteOrphanedABTests(options: {
           testName,
           status: deleteResult.success ? 'deleted' : 'error',
           error: deleteResult.error,
+          warning: stopTimedOut
+            ? `AB test "${testName}" did not reach STOPPED status within the polling window — proceeding with delete`
+            : wasStopped
+              ? `AB test "${testName}" was stopped before deletion`
+              : undefined,
         });
       } catch (err) {
         results.push({
@@ -412,7 +442,7 @@ async function getOrCreateABTestRole(options: CreateABTestRoleOptions): Promise<
     // Handle retry after a previous failed deploy left the role behind
     const errName = (err as { name?: string }).name;
     if (errName === 'EntityAlreadyExistsException') {
-      console.log(`IAM role "${roleName}" already exists — reusing it`);
+      // IAM role already exists — reuse it
       const existing = await iamClient.send(new GetRoleCommand({ RoleName: roleName }));
       roleArn = existing.Role?.Arn ?? '';
       if (!roleArn) {
@@ -501,7 +531,7 @@ async function getOrCreateABTestRole(options: CreateABTestRoleOptions): Promise<
   );
 
   if (needsPropagationWait) {
-    console.log('Waiting for IAM role propagation (~15s)...');
+    // Wait for IAM role propagation before creating the AB test
     await new Promise(resolve => setTimeout(resolve, 15_000));
   }
 

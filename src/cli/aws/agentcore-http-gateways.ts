@@ -350,7 +350,37 @@ export async function deleteHttpGatewayTarget(
       method: 'DELETE',
       path: `/gateways/${options.gatewayId}/targets/${options.targetId}`,
     });
-    return { success: true };
+
+    // Wait for target to be fully deleted before returning.
+    // Gateway deletion fails if targets still exist in DELETING state.
+    const timeoutMs = 60_000;
+    const startTime = Date.now();
+    let delayMs = 2_000;
+
+    while (Date.now() - startTime < timeoutMs) {
+      try {
+        await getHttpGatewayTarget({
+          region: options.region,
+          gatewayId: options.gatewayId,
+          targetId: options.targetId,
+        });
+        // Target still exists — keep waiting
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes('(404)') || msg.includes('not found')) {
+          return { success: true }; // Target confirmed deleted
+        }
+        // Transient error — keep polling
+      }
+
+      const remaining = timeoutMs - (Date.now() - startTime);
+      if (remaining <= 0) break;
+      await new Promise(resolve => setTimeout(resolve, Math.min(delayMs, remaining)));
+      delayMs = Math.min(delayMs * 2, 8_000);
+    }
+
+    // Polling timed out — target may still be deleting
+    return { success: false, error: `Timed out waiting for target ${options.targetId} to be fully deleted` };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }

@@ -1,4 +1,5 @@
-import { setupConfigBundles } from '../post-deploy-config-bundles.js';
+import type { AgentCoreProjectSpec, DeployedState } from '../../../../schema';
+import { resolveConfigBundleComponentKeys, setupConfigBundles } from '../post-deploy-config-bundles.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
@@ -485,5 +486,166 @@ describe('setupConfigBundles', () => {
       });
       expect(result.hasErrors).toBe(true);
     });
+  });
+});
+
+// ── resolveConfigBundleComponentKeys ───────────────────────────────────────
+
+describe('resolveConfigBundleComponentKeys', () => {
+  function makeFullProjectSpec(configBundles: AgentCoreProjectSpec['configBundles'] = []): AgentCoreProjectSpec {
+    return {
+      name: 'TestProject',
+      version: 1,
+      managedBy: 'CDK' as const,
+      runtimes: [],
+      memories: [],
+      credentials: [],
+      evaluators: [],
+      onlineEvalConfigs: [],
+      agentCoreGateways: [],
+      policyEngines: [],
+      configBundles,
+      httpGateways: [],
+      abTests: [],
+    };
+  }
+
+  function makeDeployedState(targetName: string, resources: Record<string, unknown>): DeployedState {
+    return {
+      targets: {
+        [targetName]: { resources },
+      },
+    } as unknown as DeployedState;
+  }
+
+  it('returns projectSpec unchanged when target has no resources', () => {
+    const spec = makeFullProjectSpec([
+      { name: 'b1', components: { '{{runtime:my-rt}}': { configuration: { k: 'v' } } } } as any,
+    ]);
+    const deployedState = { targets: {} } as unknown as DeployedState;
+
+    const result = resolveConfigBundleComponentKeys(spec, deployedState, 'missing-target');
+    expect(result).toBe(spec); // same reference — no transformation
+  });
+
+  it('resolves {{runtime:name}} placeholder to runtime ARN', () => {
+    const spec = makeFullProjectSpec([
+      { name: 'b1', components: { '{{runtime:my-agent}}': { configuration: { k: 'v' } } } } as any,
+    ]);
+    const deployedState = makeDeployedState('target1', {
+      runtimes: { 'my-agent': { runtimeArn: 'arn:aws:bedrock-agentcore:us-east-1:123:runtime/rt-1' } },
+    });
+
+    const result = resolveConfigBundleComponentKeys(spec, deployedState, 'target1');
+    const keys = Object.keys(result.configBundles[0]!.components);
+    expect(keys).toEqual(['arn:aws:bedrock-agentcore:us-east-1:123:runtime/rt-1']);
+  });
+
+  it('resolves {{gateway:name}} placeholder to HTTP gateway ARN', () => {
+    const spec = makeFullProjectSpec([
+      { name: 'b1', components: { '{{gateway:my-gw}}': { configuration: { k: 'v' } } } } as any,
+    ]);
+    const deployedState = makeDeployedState('target1', {
+      httpGateways: { 'my-gw': { gatewayArn: 'arn:aws:bedrock-agentcore:us-east-1:123:gateway/gw-1' } },
+    });
+
+    const result = resolveConfigBundleComponentKeys(spec, deployedState, 'target1');
+    const keys = Object.keys(result.configBundles[0]!.components);
+    expect(keys).toEqual(['arn:aws:bedrock-agentcore:us-east-1:123:gateway/gw-1']);
+  });
+
+  it('resolves {{gateway:name}} placeholder to MCP gateway ARN', () => {
+    const spec = makeFullProjectSpec([
+      { name: 'b1', components: { '{{gateway:my-mcp-gw}}': { configuration: { k: 'v' } } } } as any,
+    ]);
+    const deployedState = makeDeployedState('target1', {
+      mcp: { gateways: { 'my-mcp-gw': { gatewayArn: 'arn:mcp:gw:resolved' } } },
+    });
+
+    const result = resolveConfigBundleComponentKeys(spec, deployedState, 'target1');
+    const keys = Object.keys(result.configBundles[0]!.components);
+    expect(keys).toEqual(['arn:mcp:gw:resolved']);
+  });
+
+  it('passes through keys that are already ARNs', () => {
+    const spec = makeFullProjectSpec([
+      { name: 'b1', components: { 'arn:existing:key': { configuration: { k: 'v' } } } } as any,
+    ]);
+    const deployedState = makeDeployedState('target1', { runtimes: {} });
+
+    const result = resolveConfigBundleComponentKeys(spec, deployedState, 'target1');
+    const keys = Object.keys(result.configBundles[0]!.components);
+    expect(keys).toEqual(['arn:existing:key']);
+  });
+
+  it('passes through plain string keys that are not placeholders or ARNs', () => {
+    const spec = makeFullProjectSpec([
+      { name: 'b1', components: { 'some-plain-key': { configuration: { k: 'v' } } } } as any,
+    ]);
+    const deployedState = makeDeployedState('target1', { runtimes: {} });
+
+    const result = resolveConfigBundleComponentKeys(spec, deployedState, 'target1');
+    const keys = Object.keys(result.configBundles[0]!.components);
+    expect(keys).toEqual(['some-plain-key']);
+  });
+
+  it('throws when gateway placeholder references non-existent gateway', () => {
+    const spec = makeFullProjectSpec([
+      { name: 'b1', components: { '{{gateway:missing}}': { configuration: {} } } } as any,
+    ]);
+    const deployedState = makeDeployedState('target1', { httpGateways: {}, mcp: { gateways: {} } });
+
+    expect(() => resolveConfigBundleComponentKeys(spec, deployedState, 'target1')).toThrow(
+      'Config bundle references gateway "missing" but it was not found in deployed resources'
+    );
+  });
+
+  it('throws when runtime placeholder references non-existent runtime', () => {
+    const spec = makeFullProjectSpec([
+      { name: 'b1', components: { '{{runtime:missing}}': { configuration: {} } } } as any,
+    ]);
+    const deployedState = makeDeployedState('target1', { runtimes: {} });
+
+    expect(() => resolveConfigBundleComponentKeys(spec, deployedState, 'target1')).toThrow(
+      'Config bundle references runtime "missing" but it was not found in deployed resources'
+    );
+  });
+
+  it('handles projectSpec with no configBundles', () => {
+    const spec = makeFullProjectSpec([]);
+    const deployedState = makeDeployedState('target1', { runtimes: {} });
+
+    const result = resolveConfigBundleComponentKeys(spec, deployedState, 'target1');
+    expect(result.configBundles).toEqual([]);
+  });
+
+  it('does not mutate the original projectSpec', () => {
+    const spec = makeFullProjectSpec([
+      { name: 'b1', components: { '{{runtime:my-rt}}': { configuration: { k: 'v' } } } } as any,
+    ]);
+    const deployedState = makeDeployedState('target1', {
+      runtimes: { 'my-rt': { runtimeArn: 'arn:resolved' } },
+    });
+
+    const result = resolveConfigBundleComponentKeys(spec, deployedState, 'target1');
+    // Original should still have the placeholder
+    expect(Object.keys(spec.configBundles[0]!.components)).toEqual(['{{runtime:my-rt}}']);
+    // Result should have the resolved key
+    expect(Object.keys(result.configBundles[0]!.components)).toEqual(['arn:resolved']);
+  });
+
+  it('prefers HTTP gateway over MCP gateway when both exist with same name', () => {
+    const spec = makeFullProjectSpec([
+      { name: 'b1', components: { '{{gateway:dupe-gw}}': { configuration: {} } } } as any,
+    ]);
+    const deployedState = makeDeployedState('target1', {
+      httpGateways: { 'dupe-gw': { gatewayArn: 'arn:http:gw' } },
+      mcp: { gateways: { 'dupe-gw': { gatewayArn: 'arn:mcp:gw' } } },
+    });
+
+    const result = resolveConfigBundleComponentKeys(spec, deployedState, 'target1');
+    const keys = Object.keys(result.configBundles[0]!.components);
+    // HTTP gateway should take precedence (checked first in code)
+    expect(keys).toEqual(['arn:http:gw']);
   });
 });

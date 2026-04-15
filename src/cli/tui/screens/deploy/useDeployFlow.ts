@@ -16,7 +16,10 @@ import { ExecLogger } from '../../../logging';
 import { performStackTeardown, setupTransactionSearch } from '../../../operations/deploy';
 import { getGatewayTargetStatuses } from '../../../operations/deploy/gateway-status';
 import { deleteOrphanedABTests, setupABTests } from '../../../operations/deploy/post-deploy-ab-tests';
-import { setupConfigBundles } from '../../../operations/deploy/post-deploy-config-bundles';
+import {
+  resolveConfigBundleComponentKeys,
+  setupConfigBundles,
+} from '../../../operations/deploy/post-deploy-config-bundles';
 import { setupHttpGateways } from '../../../operations/deploy/post-deploy-http-gateways';
 import { enableOnlineEvalConfigs } from '../../../operations/deploy/post-deploy-online-evals';
 import {
@@ -346,10 +349,12 @@ export function useDeployFlow(options: DeployFlowOptions = {}): DeployFlowState 
     const configBundleSpecs = ctx.projectSpec.configBundles ?? [];
     if (configBundleSpecs.length > 0) {
       try {
+        // Resolve component key placeholders (e.g., {{runtime:name}} → real ARN)
+        const resolvedProjectSpec = resolveConfigBundleComponentKeys(ctx.projectSpec, deployedState, target.name);
         const existingConfigBundles = deployedState.targets?.[target.name]?.resources?.configBundles;
         const configBundleResult = await setupConfigBundles({
           region: target.region,
-          projectSpec: ctx.projectSpec,
+          projectSpec: resolvedProjectSpec,
           existingBundles: existingConfigBundles,
         });
 
@@ -397,6 +402,14 @@ export function useDeployFlow(options: DeployFlowOptions = {}): DeployFlowState 
             logger.log(`AB test delete "${err.testName}" error: ${err.error}`, 'warn');
           }
           setPostDeployWarnings(prev => [...prev, ...errors.map(err => `AB test "${err.testName}": ${err.error}`)]);
+        }
+
+        // Surface warnings (e.g., "AB test was stopped before deletion")
+        for (const r of deleteResult.results) {
+          if (r.warning) {
+            logger.log(r.warning, 'warn');
+            setPostDeployWarnings(prev => [...prev, r.warning!]);
+          }
         }
 
         // Update deployed state to remove deleted AB tests

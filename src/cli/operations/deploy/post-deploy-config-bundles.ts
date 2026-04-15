@@ -1,4 +1,4 @@
-import type { AgentCoreProjectSpec, ConfigBundleDeployedState } from '../../../schema';
+import type { AgentCoreProjectSpec, ConfigBundleDeployedState, DeployedState } from '../../../schema';
 import {
   createConfigurationBundle,
   deleteConfigurationBundle,
@@ -284,4 +284,65 @@ function deepEqual(a: unknown, b: unknown): boolean {
   const bKeys = Object.keys(bObj);
   if (aKeys.length !== bKeys.length) return false;
   return aKeys.every(key => key in bObj && deepEqual(aObj[key], bObj[key]));
+}
+
+// ============================================================================
+// Component Key Resolution
+// ============================================================================
+
+/**
+ * Resolve placeholder component keys (e.g., {{runtime:name}}, {{gateway:name}})
+ * to actual ARNs from deployed state.
+ */
+export function resolveConfigBundleComponentKeys(
+  projectSpec: AgentCoreProjectSpec,
+  deployedState: DeployedState,
+  targetName: string
+): AgentCoreProjectSpec {
+  const resources = deployedState.targets?.[targetName]?.resources;
+  if (!resources) return projectSpec;
+
+  const resolvedBundles = (projectSpec.configBundles ?? []).map(bundle => {
+    const resolvedComponents: Record<string, { configuration: Record<string, unknown> }> = {};
+
+    for (const [key, value] of Object.entries(bundle.components ?? {})) {
+      const resolvedKey = resolveComponentKey(key, resources);
+      resolvedComponents[resolvedKey] = value;
+    }
+
+    return { ...bundle, components: resolvedComponents };
+  });
+
+  return { ...projectSpec, configBundles: resolvedBundles };
+}
+
+function resolveComponentKey(
+  key: string,
+  resources: NonNullable<DeployedState['targets'][string]['resources']>
+): string {
+  if (key.startsWith('arn:')) return key;
+
+  const gwMatch = /^\{\{gateway:(.+)\}\}$/.exec(key);
+  if (gwMatch) {
+    const gwName = gwMatch[1]!;
+    const httpGw = resources.httpGateways?.[gwName];
+    if (httpGw) return httpGw.gatewayArn;
+    const mcpGw = resources.mcp?.gateways?.[gwName];
+    if (mcpGw) return mcpGw.gatewayArn;
+    throw new Error(
+      `Config bundle references gateway "${gwName}" but it was not found in deployed resources. Ensure the gateway is defined in agentcore.json and deploys successfully.`
+    );
+  }
+
+  const rtMatch = /^\{\{runtime:(.+)\}\}$/.exec(key);
+  if (rtMatch) {
+    const rtName = rtMatch[1]!;
+    const rt = resources.runtimes?.[rtName];
+    if (rt) return rt.runtimeArn;
+    throw new Error(
+      `Config bundle references runtime "${rtName}" but it was not found in deployed resources. Ensure the runtime is defined in agentcore.json and deploys successfully.`
+    );
+  }
+
+  return key;
 }

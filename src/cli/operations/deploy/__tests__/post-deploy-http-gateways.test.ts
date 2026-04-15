@@ -9,7 +9,6 @@ const {
   mockCreateHttpGatewayTarget,
   mockDeleteHttpGateway,
   mockDeleteHttpGatewayTarget,
-  mockGetHttpGatewayTarget,
   mockListAllHttpGateways,
   mockListHttpGatewayTargets,
   mockWaitForGatewayReady,
@@ -22,7 +21,6 @@ const {
   mockCreateHttpGatewayTarget: vi.fn(),
   mockDeleteHttpGateway: vi.fn(),
   mockDeleteHttpGatewayTarget: vi.fn(),
-  mockGetHttpGatewayTarget: vi.fn(),
   mockListAllHttpGateways: vi.fn(),
   mockListHttpGatewayTargets: vi.fn(),
   mockWaitForGatewayReady: vi.fn(),
@@ -37,7 +35,6 @@ vi.mock('../../../aws/agentcore-http-gateways', () => ({
   createHttpGatewayTarget: mockCreateHttpGatewayTarget,
   deleteHttpGateway: mockDeleteHttpGateway,
   deleteHttpGatewayTarget: mockDeleteHttpGatewayTarget,
-  getHttpGatewayTarget: mockGetHttpGatewayTarget,
   listAllHttpGateways: mockListAllHttpGateways,
   listHttpGatewayTargets: mockListHttpGatewayTargets,
   waitForGatewayReady: mockWaitForGatewayReady,
@@ -131,7 +128,6 @@ describe('setupHttpGateways', () => {
     mockListHttpGatewayTargets.mockResolvedValue({ targets: [] });
     mockWaitForGatewayReady.mockResolvedValue({ gatewayId: 'gw-001', status: 'READY' });
     mockWaitForTargetReady.mockResolvedValue({});
-    mockGetHttpGatewayTarget.mockRejectedValue(new Error('(404) Not Found'));
     // Default: no existing delivery sources, and PutDeliveryDestination returns an ARN
     mockCWLogsSend.mockImplementation((cmd: { constructor: { name: string } }) => {
       if (cmd.constructor.name === 'DescribeDeliverySourcesCommand') {
@@ -452,7 +448,7 @@ describe('setupHttpGateways', () => {
   });
 
   describe('trace delivery rollback (Problem 1)', () => {
-    it('waits for target deletion before deleting gateway on trace delivery failure', async () => {
+    it('deletes target before gateway on trace delivery failure', async () => {
       mockCreateHttpGateway.mockResolvedValue({
         gatewayId: 'gw-trace-fail',
         gatewayArn: 'arn:aws:bedrock-agentcore:us-east-1:123:gateway/gw-trace-fail',
@@ -470,20 +466,10 @@ describe('setupHttpGateways', () => {
         return Promise.resolve({ deliveryDestination: { arn: 'arn:logs:dest' } });
       });
 
-      // Target still exists on first poll, gone on second — exercises the retry loop
       const callOrder: string[] = [];
-      let getTargetCallCount = 0;
       mockDeleteHttpGatewayTarget.mockImplementation(() => {
         callOrder.push('deleteTarget');
         return Promise.resolve({ success: true });
-      });
-      mockGetHttpGatewayTarget.mockImplementation(() => {
-        getTargetCallCount++;
-        callOrder.push(`getTarget(${getTargetCallCount})`);
-        if (getTargetCallCount === 1) {
-          return Promise.resolve({ targetId: 'tgt-trace-fail', status: 'DELETING' });
-        }
-        return Promise.reject(new Error('(404) Not Found'));
       });
       mockDeleteHttpGateway.mockImplementation(() => {
         callOrder.push('deleteGateway');
@@ -501,44 +487,9 @@ describe('setupHttpGateways', () => {
       expect(result.results[0]!.error).toContain('Trace delivery failed');
       expect(result.results[0]!.error).toContain('AccessDenied');
 
-      // Verify: delete target → poll (still exists) → poll (404) → delete gateway
-      expect(callOrder).toEqual(['deleteTarget', 'getTarget(1)', 'getTarget(2)', 'deleteGateway']);
+      // deleteHttpGatewayTarget now waits internally, so just verify ordering
+      expect(callOrder).toEqual(['deleteTarget', 'deleteGateway']);
     });
-
-    it('proceeds to delete gateway even when target deletion poll times out', async () => {
-      mockCreateHttpGateway.mockResolvedValue({
-        gatewayId: 'gw-timeout',
-        gatewayArn: 'arn:aws:bedrock-agentcore:us-east-1:123:gateway/gw-timeout',
-      });
-      mockCreateHttpGatewayTarget.mockResolvedValue({ targetId: 'tgt-timeout' });
-
-      // Make trace delivery fail
-      mockCWLogsSend.mockImplementation((cmd: { constructor: { name: string } }) => {
-        if (cmd.constructor.name === 'DescribeDeliverySourcesCommand') {
-          return Promise.resolve({ deliverySources: [] });
-        }
-        if (cmd.constructor.name === 'PutDeliverySourceCommand') {
-          return Promise.reject(new Error('AccessDenied'));
-        }
-        return Promise.resolve({ deliveryDestination: { arn: 'arn:logs:dest' } });
-      });
-
-      // Target always exists (never deletes) — will trigger timeout
-      mockDeleteHttpGatewayTarget.mockResolvedValue({ success: true });
-      mockGetHttpGatewayTarget.mockResolvedValue({ targetId: 'tgt-timeout', status: 'DELETING' });
-      mockDeleteHttpGateway.mockResolvedValue({ success: true });
-
-      const result = await setupHttpGateways({
-        region: 'us-east-1',
-        projectName: 'TestProject',
-        projectSpec: makeProjectSpec([sampleHttpGateway]),
-        deployedResources: sampleDeployedResources,
-      });
-
-      // Should still attempt gateway delete after timeout (best-effort)
-      expect(result.hasErrors).toBe(true);
-      expect(mockDeleteHttpGateway).toHaveBeenCalled();
-    }, 120_000);
 
     it('rollback cleans up auto-created role on trace delivery failure', async () => {
       const gwWithoutRole = { ...sampleHttpGateway, roleArn: undefined };

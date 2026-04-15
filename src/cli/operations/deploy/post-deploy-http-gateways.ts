@@ -5,7 +5,6 @@ import {
   createHttpGatewayTarget,
   deleteHttpGateway,
   deleteHttpGatewayTarget,
-  getHttpGatewayTarget,
   listAllHttpGateways,
   listHttpGatewayTargets,
   waitForGatewayReady,
@@ -185,7 +184,6 @@ export async function setupHttpGateways(options: SetupHttpGatewaysOptions): Prom
         try {
           if (targetId) {
             await deleteHttpGatewayTarget({ region, gatewayId: createResult.gatewayId, targetId });
-            await waitForTargetDeletion({ region, gatewayId: createResult.gatewayId, targetId });
           }
         } catch {
           // Best-effort target cleanup
@@ -222,11 +220,10 @@ export async function setupHttpGateways(options: SetupHttpGatewaysOptions): Prom
           gatewayArn: createResult.gatewayArn,
         });
       } catch (traceErr) {
-        // Rollback: delete target (and wait for deletion), then gateway, then role
+        // Rollback: delete target, then gateway, then role
         try {
           if (targetId) {
             await deleteHttpGatewayTarget({ region, gatewayId: createResult.gatewayId, targetId });
-            await waitForTargetDeletion({ region, gatewayId: createResult.gatewayId, targetId });
           }
         } catch {
           // Best-effort target cleanup
@@ -310,19 +307,14 @@ export async function setupHttpGateways(options: SetupHttpGatewaysOptions): Prom
           }
 
           for (const targetId of targetIds) {
-            const targetDeleteResult = await deleteHttpGatewayTarget({
+            await deleteHttpGatewayTarget({
               region,
               gatewayId: gwState.gatewayId,
               targetId,
             });
-            if (!targetDeleteResult.success) {
-              console.warn(
-                `Warning: Failed to delete target "${targetId}" for orphaned gateway "${gwName}": ${targetDeleteResult.error}. Proceeding with best-effort gateway deletion.`
-              );
-            }
           }
 
-          // Delete gateway (best-effort even if target deletion failed)
+          // Delete gateway after all targets are fully deleted
           const deleteResult = await deleteHttpGateway({
             region,
             gatewayId: gwState.gatewayId,
@@ -447,43 +439,6 @@ async function ensureTraceDelivery(options: {
     console.warn(
       `Warning: Could not verify/enable trace delivery for gateway "${gatewayName}": ${err instanceof Error ? err.message : String(err)}`
     );
-  }
-}
-
-/**
- * Wait for a gateway target to be fully deleted before deleting the gateway.
- * Polls getHttpGatewayTarget until it returns 404 or timeout is reached.
- */
-async function waitForTargetDeletion(options: {
-  region: string;
-  gatewayId: string;
-  targetId: string;
-  timeoutMs?: number;
-}): Promise<void> {
-  const timeoutMs = options.timeoutMs ?? 60_000;
-  const startTime = Date.now();
-  let delayMs = 2_000;
-
-  while (Date.now() - startTime < timeoutMs) {
-    try {
-      await getHttpGatewayTarget({
-        region: options.region,
-        gatewayId: options.gatewayId,
-        targetId: options.targetId,
-      });
-      // Target still exists — keep waiting
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('(404)') || msg.includes('not found')) {
-        return; // Target confirmed deleted
-      }
-      // Transient error — keep polling rather than assuming deleted
-    }
-
-    const remaining = timeoutMs - (Date.now() - startTime);
-    if (remaining <= 0) break;
-    await new Promise(resolve => setTimeout(resolve, Math.min(delayMs, remaining)));
-    delayMs = Math.min(delayMs * 2, 8_000);
   }
 }
 
