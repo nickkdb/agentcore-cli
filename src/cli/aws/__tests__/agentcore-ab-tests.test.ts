@@ -45,7 +45,7 @@ describe('agentcore-ab-tests', () => {
   });
 
   describe('createABTest', () => {
-    it('sends POST to /abtests with correct body', async () => {
+    it('sends POST to /ab-tests with correct body', async () => {
       mockFetch.mockResolvedValue(
         mockJsonResponse({
           abTestId: 'abt-001',
@@ -79,7 +79,7 @@ describe('agentcore-ab-tests', () => {
 
       expect(result.abTestId).toBe('abt-001');
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/abtests'),
+        expect.stringContaining('/ab-tests'),
         expect.objectContaining({ method: 'POST' })
       );
 
@@ -170,7 +170,7 @@ describe('agentcore-ab-tests', () => {
   });
 
   describe('getABTest', () => {
-    it('sends GET to /abtests/{id}', async () => {
+    it('sends GET to /ab-tests/{id}', async () => {
       mockFetch.mockResolvedValue(
         mockJsonResponse({
           abTestId: 'abt-123',
@@ -196,14 +196,14 @@ describe('agentcore-ab-tests', () => {
       expect(result.abTestId).toBe('abt-123');
       expect(result.results).toBeDefined();
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/abtests/abt-123'),
+        expect.stringContaining('/ab-tests/abt-123'),
         expect.objectContaining({ method: 'GET' })
       );
     });
   });
 
   describe('updateABTest', () => {
-    it('sends PUT to /abtests/{id} with only defined fields', async () => {
+    it('sends PUT to /ab-tests/{id} with only defined fields', async () => {
       mockFetch.mockResolvedValue(
         mockJsonResponse({
           abTestId: 'abt-123',
@@ -221,7 +221,7 @@ describe('agentcore-ab-tests', () => {
       });
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/abtests/abt-123'),
+        expect.stringContaining('/ab-tests/abt-123'),
         expect.objectContaining({ method: 'PUT' })
       );
 
@@ -262,19 +262,19 @@ describe('agentcore-ab-tests', () => {
   });
 
   describe('deleteABTest', () => {
-    it('sends DELETE to /abtests/{id} and returns success', async () => {
+    it('sends DELETE to /ab-tests/{id} and returns success', async () => {
       mockFetch.mockResolvedValue(mockJsonResponse({}, 204));
 
       const result = await deleteABTest({ region: 'us-east-1', abTestId: 'abt-123' });
 
       expect(result.success).toBe(true);
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/abtests/abt-123'),
+        expect.stringContaining('/ab-tests/abt-123'),
         expect.objectContaining({ method: 'DELETE' })
       );
     });
 
-    it('returns error on failure instead of throwing', async () => {
+    it('falls back to legacy path on 404 then returns error if both fail', async () => {
       mockFetch.mockResolvedValue({
         ok: false,
         status: 404,
@@ -284,6 +284,10 @@ describe('agentcore-ab-tests', () => {
 
       const result = await deleteABTest({ region: 'us-east-1', abTestId: 'abt-999' });
 
+      // First call: /ab-tests/abt-999 (new path), second call: /abtests/abt-999 (legacy fallback)
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch.mock.calls[0]![0]).toContain('/ab-tests/abt-999');
+      expect(mockFetch.mock.calls[1]![0]).toContain('/abtests/abt-999');
       expect(result.success).toBe(false);
       expect(result.error).toContain('ABTest API error (404)');
     });
@@ -299,7 +303,7 @@ describe('agentcore-ab-tests', () => {
   });
 
   describe('listABTests', () => {
-    it('sends GET to /abtests', async () => {
+    it('sends GET to /ab-tests', async () => {
       mockFetch.mockResolvedValue(
         mockJsonResponse({
           abTests: [
