@@ -1,0 +1,20 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "tsx src/generate.tsx",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "20.17.57",
+    "chart.js": "4.5.1",
+    "esbuild": "0.28.0",
+    "tsx": "4.19.4",
+    "typescript": "5.8.3",
+    "vitest": "3.2.1"
+  },
+  "dependencies": {
+    "@kitajs/html": "4.2.7"
+  }
+}
