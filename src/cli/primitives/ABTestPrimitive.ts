@@ -156,7 +156,7 @@ export class ABTestPrimitive extends BasePrimitive<AddABTestOptions, RemovableAB
   registerCommands(addCmd: Command, removeCmd: Command): void {
     addCmd
       .command('ab-test')
-      .description('Add an A/B test to the project')
+      .description('[preview] Add an A/B test to the project')
       .option('--name <name>', 'AB test name')
       .option('--description <text>', 'AB test description')
       .option('--runtime <name>', 'Runtime agent to A/B test')

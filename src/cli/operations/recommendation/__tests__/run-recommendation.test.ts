@@ -27,6 +27,7 @@ vi.mock('../../../../lib', () => ({
   ConfigIO: class {
     readProjectSpec = mockReadProjectSpec;
     readDeployedState = mockReadDeployedState;
+    resolveAWSDeploymentTargets = vi.fn().mockResolvedValue([{ region: 'us-east-1' }]);
   },
 }));
 

@@ -15,6 +15,7 @@ import type {
   SessionSpan,
 } from '../../aws/agentcore-recommendation';
 import { getRecommendation, startRecommendation } from '../../aws/agentcore-recommendation';
+import { arnPrefix } from '../../aws/partition';
 import { detectRegion } from '../../aws/region';
 import { ExecLogger } from '../../logging/exec-logger';
 import { DEFAULT_POLL_INTERVAL_MS, MAX_POLL_DURATION_MS, MAX_POLL_RETRIES, TERMINAL_STATUSES } from './constants';
@@ -37,10 +38,15 @@ export async function runRecommendationCommand(
     logger?.startStep('Load project config');
     // 1. Read project config and deployed state
     const configIO = new ConfigIO();
-    const [projectSpec, deployedState] = await Promise.all([configIO.readProjectSpec(), configIO.readDeployedState()]);
+    const [projectSpec, deployedState, awsTargets] = await Promise.all([
+      configIO.readProjectSpec(),
+      configIO.readDeployedState(),
+      configIO.resolveAWSDeploymentTargets(),
+    ]);
 
+    const targetRegion = awsTargets.length > 0 ? awsTargets[0]!.region : undefined;
     const { region: detectedRegion } = await detectRegion();
-    const region = options.region ?? detectedRegion;
+    const region = options.region ?? targetRegion ?? detectedRegion;
     const stage = process.env.AGENTCORE_STAGE?.toLowerCase() ?? 'prod';
     logger?.log(`Region: ${region}, Stage: ${stage}`);
     logger?.endStep('success');
@@ -63,7 +69,7 @@ export async function runRecommendationCommand(
     // 3. Resolve evaluator ID/ARN (API accepts exactly one for system-prompt, none for tool-desc)
     const evaluatorIds: string[] = [];
     for (const evaluator of options.evaluators) {
-      const evaluatorId = resolveEvaluatorId(deployedState, evaluator);
+      const evaluatorId = resolveEvaluatorId(deployedState, evaluator, region);
       if (!evaluatorId) {
         return {
           success: false,
@@ -350,14 +356,14 @@ function resolveAgentState(
  * Resolve an evaluator name to a full ARN.
  * Returns undefined if the evaluator cannot be resolved.
  */
-function resolveEvaluatorId(deployedState: DeployedState, evaluator: string): string | undefined {
+function resolveEvaluatorId(deployedState: DeployedState, evaluator: string, region: string): string | undefined {
   // Already a full ARN — use as-is
   if (evaluator.startsWith('arn:')) {
     return evaluator;
   }
   // Builtin shorthand → expand to full ARN
   if (evaluator.startsWith('Builtin.')) {
-    return `arn:aws:bedrock-agentcore:::evaluator/${evaluator}`;
+    return `${arnPrefix(region)}:bedrock-agentcore:::evaluator/${evaluator}`;
   }
   // Look up custom evaluator from deployed state
   for (const target of Object.values(deployedState.targets)) {
@@ -443,8 +449,8 @@ async function buildRecommendationConfig(opts: BuildConfigOptions): Promise<Reco
     agentTraces = { sessionSpans: allSpans };
   } else {
     // Lookback-based path — use cloudwatchLogs with time range
-    const runtimeLogGroupArn = `arn:aws:logs:${opts.region}:${opts.accountId}:log-group:/aws/bedrock-agentcore/runtimes/${opts.runtimeId}-DEFAULT`;
-    const spansLogGroupArn = `arn:aws:logs:${opts.region}:${opts.accountId}:log-group:aws/spans`;
+    const runtimeLogGroupArn = `${arnPrefix(opts.region)}:logs:${opts.region}:${opts.accountId}:log-group:/aws/bedrock-agentcore/runtimes/${opts.runtimeId}-DEFAULT`;
+    const spansLogGroupArn = `${arnPrefix(opts.region)}:logs:${opts.region}:${opts.accountId}:log-group:aws/spans`;
 
     // Derive service name: strip the random hash suffix from runtimeId
     // runtimeId format: {project}_{agent}-{hash} → serviceName: {project}_{agent}.DEFAULT

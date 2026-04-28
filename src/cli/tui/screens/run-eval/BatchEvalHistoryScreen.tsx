@@ -258,7 +258,7 @@ export function BatchEvalHistoryScreen({ onExit }: BatchEvalHistoryScreenProps) 
 
   if (!loaded) {
     return (
-      <Screen title="Batch Evaluation History" onExit={onExit}>
+      <Screen title="Batch Evaluation History [preview]" onExit={onExit}>
         <Text dimColor>Loading...</Text>
       </Screen>
     );
@@ -266,7 +266,7 @@ export function BatchEvalHistoryScreen({ onExit }: BatchEvalHistoryScreenProps) 
 
   if (error) {
     return (
-      <Screen title="Batch Evaluation History" onExit={onExit}>
+      <Screen title="Batch Evaluation History [preview]" onExit={onExit}>
         <Text color="red">{error}</Text>
       </Screen>
     );
@@ -274,7 +274,7 @@ export function BatchEvalHistoryScreen({ onExit }: BatchEvalHistoryScreenProps) 
 
   if (records.length === 0) {
     return (
-      <Screen title="Batch Evaluation History" onExit={onExit}>
+      <Screen title="Batch Evaluation History [preview]" onExit={onExit}>
         <Box flexDirection="column">
           <Text dimColor>No batch evaluation runs found.</Text>
           <Text dimColor>Run a batch evaluation from the TUI or CLI to see results here.</Text>
@@ -286,7 +286,7 @@ export function BatchEvalHistoryScreen({ onExit }: BatchEvalHistoryScreenProps) 
   const helpText = selectedRecord ? 'Esc/B back to list' : HELP_TEXT.NAVIGATE_SELECT;
 
   return (
-    <Screen title="Batch Evaluation History" onExit={onExit} helpText={helpText} exitEnabled={!selectedRecord}>
+    <Screen title="Batch Evaluation History [preview]" onExit={onExit} helpText={helpText} exitEnabled={!selectedRecord}>
       {selectedRecord ? (
         <BatchEvalDetailView record={selectedRecord} onBack={() => setSelectedRecord(null)} />
       ) : (

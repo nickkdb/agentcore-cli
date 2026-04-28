@@ -168,7 +168,7 @@ export const registerRun = (program: Command) => {
 
   runCmd
     .command('batch-evaluation')
-    .description('Run evaluators in batch across all agent sessions in CloudWatch')
+    .description('[preview] Run evaluators in batch across all agent sessions in CloudWatch')
     .requiredOption('-r, --runtime <name>', 'Runtime name from project config')
     .requiredOption('-e, --evaluator <ids...>', 'Evaluator name(s) — Builtin.* IDs')
     .option('-n, --name <name>', 'Name for the batch evaluation (auto-generated if omitted)')
@@ -267,7 +267,7 @@ export const registerRun = (program: Command) => {
 
   runCmd
     .command('recommendation')
-    .description('Optimize a system prompt or tool descriptions using agent traces as signal')
+    .description('[preview] Optimize a system prompt or tool descriptions using agent traces as signal')
     .option('-t, --type <type>', 'What to optimize: system-prompt or tool-description (default: system-prompt)')
     .option('-r, --runtime <name>', 'Runtime name from project config')
     .option('-e, --evaluator <name>', 'Evaluator name — required for system-prompt (exactly one)')

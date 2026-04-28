@@ -12,7 +12,7 @@ export const PACKAGE_VERSION: string = packageJson.version;
  */
 export type DistroMode = 'PROD_DISTRO' | 'PRIVATE_DEV_DISTRO';
 
-export const DISTRO_MODE: DistroMode = 'PRIVATE_DEV_DISTRO';
+export const DISTRO_MODE: DistroMode = 'PROD_DISTRO';
 
 /**
  * Configuration for each distribution mode.

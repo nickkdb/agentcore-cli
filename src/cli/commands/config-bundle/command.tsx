@@ -107,7 +107,7 @@ export const registerConfigBundle = (program: Command) => {
   const cmd = program
     .command('config-bundle')
     .alias('cb')
-    .description('Manage configuration bundles (use bundle name from agentcore.json, not the ID)');
+    .description('[preview] Manage configuration bundles (use bundle name from agentcore.json, not the ID)');
 
   // --- versions ---
   cmd

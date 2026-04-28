@@ -284,7 +284,7 @@ export function RecommendationFlow({ onExit }: RecommendationFlowProps) {
 
   if (flow.name === 'loading') {
     return (
-      <Screen title="Run Recommendation" onExit={onExit}>
+      <Screen title="Run Recommendation [preview]" onExit={onExit}>
         <GradientText text="Loading agents and evaluators..." />
       </Screen>
     );
@@ -312,7 +312,7 @@ export function RecommendationFlow({ onExit }: RecommendationFlowProps) {
     const timeStr = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
 
     return (
-      <Screen title="Run Recommendation" onExit={onExit}>
+      <Screen title="Run Recommendation [preview]" onExit={onExit}>
         <Panel>
           <Box flexDirection="column" gap={1}>
             <Text>
@@ -416,7 +416,7 @@ function ResultsView({ result, config, filePath, onRunAnother, onExit }: Results
   const toolResult = result.result?.toolDescriptionRecommendationResult;
 
   return (
-    <Screen title="Recommendation Complete" onExit={onExit} helpText={HELP_TEXT.NAVIGATE_SELECT} exitEnabled={false}>
+    <Screen title="Recommendation Complete [preview]" onExit={onExit} helpText={HELP_TEXT.NAVIGATE_SELECT} exitEnabled={false}>
       <Panel fullWidth>
         <Box flexDirection="column">
           <Text color="green">✓ Recommendation complete</Text>

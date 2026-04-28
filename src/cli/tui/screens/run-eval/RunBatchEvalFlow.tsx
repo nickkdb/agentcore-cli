@@ -307,7 +307,7 @@ export function RunBatchEvalFlow({ onExit }: RunBatchEvalFlowProps) {
 
   if (flow.name === 'loading') {
     return (
-      <Screen title="Run Batch Evaluation" onExit={onExit}>
+      <Screen title="Run Batch Evaluation [preview]" onExit={onExit}>
         <GradientText text="Loading agents and evaluators..." />
       </Screen>
     );
@@ -334,7 +334,7 @@ export function RunBatchEvalFlow({ onExit }: RunBatchEvalFlowProps) {
     const timeStr = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
 
     return (
-      <Screen title="Run Batch Evaluation" onExit={onExit}>
+      <Screen title="Run Batch Evaluation [preview]" onExit={onExit}>
         <Panel>
           <Box flexDirection="column" gap={1}>
             <Text>
@@ -635,7 +635,7 @@ function BatchEvalWizard({ agents, evaluators: rawEvaluators, onComplete, onExit
   const headerContent = <StepIndicator steps={allSteps} currentStep={step} labels={STEP_LABELS} />;
 
   return (
-    <Screen title="Run Batch Evaluation" onExit={goBack} helpText={helpText} headerContent={headerContent}>
+    <Screen title="Run Batch Evaluation [preview]" onExit={goBack} helpText={helpText} headerContent={headerContent}>
       <Panel>
         {isAgentStep && (
           <WizardSelect
@@ -862,7 +862,7 @@ function ResultsView({ result, savedFilePath, onRunAnother, onExit }: ResultsVie
   }, [result.results, summaries]);
 
   return (
-    <Screen title="Batch Evaluation Complete" onExit={onExit} helpText={HELP_TEXT.NAVIGATE_SELECT} exitEnabled={false}>
+    <Screen title="Batch Evaluation Complete [preview]" onExit={onExit} helpText={HELP_TEXT.NAVIGATE_SELECT} exitEnabled={false}>
       <Panel fullWidth>
         <Box flexDirection="column">
           <Text color="green">✓ Batch evaluation complete</Text>

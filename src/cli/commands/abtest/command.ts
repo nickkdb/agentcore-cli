@@ -7,6 +7,7 @@
 import { ConfigIO } from '../../../lib';
 import { getABTest, listABTests } from '../../aws/agentcore-ab-tests';
 import type { GetABTestResult } from '../../aws/agentcore-ab-tests';
+import { dnsSuffix } from '../../aws/partition';
 import { getErrorMessage } from '../../errors';
 import type { Command } from '@commander-js/extra-typings';
 
@@ -14,8 +15,15 @@ import type { Command } from '@commander-js/extra-typings';
 // Helpers
 // ============================================================================
 
-function getRegion(cliRegion?: string): string {
+async function getRegion(cliRegion?: string): Promise<string> {
   if (cliRegion) return cliRegion;
+  try {
+    const configIO = new ConfigIO();
+    const targets = await configIO.resolveAWSDeploymentTargets();
+    if (targets.length > 0) return targets[0]!.region;
+  } catch {
+    // Fall through to env vars
+  }
   return process.env.AWS_DEFAULT_REGION ?? process.env.AWS_REGION ?? 'us-east-1';
 }
 
@@ -52,7 +60,7 @@ function gatewayUrlFromArn(arn: string): string {
   const region = parts[3];
   const gatewayId = parts[5]?.split('/')[1];
   if (region && gatewayId) {
-    return `https://${gatewayId}.gateway.bedrock-agentcore.${region}.amazonaws.com`;
+    return `https://${gatewayId}.gateway.bedrock-agentcore.${region}.${dnsSuffix(region)}`;
   }
   return arn;
 }
@@ -115,13 +123,13 @@ function formatABTestDetails(test: GetABTestResult): string {
 export function registerABTestCommand(program: Command): void {
   program
     .command('ab-test')
-    .description('View A/B test details and results')
+    .description('[preview] View A/B test details and results')
     .argument('<name>', 'AB test name')
     .option('--region <region>', 'AWS region')
     .option('--json', 'Output as JSON')
     .action(async (name: string, cliOptions: { region?: string; json?: boolean }) => {
       try {
-        const region = getRegion(cliOptions.region);
+        const region = await getRegion(cliOptions.region);
         const { abTestId, error } = await resolveABTestId(name, region);
         if (error) {
           if (cliOptions.json) {

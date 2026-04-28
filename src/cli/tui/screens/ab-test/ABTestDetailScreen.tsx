@@ -347,7 +347,7 @@ export function ABTestDetailScreen({ abTestId, region, onExit }: ABTestDetailScr
 
   if (error) {
     return (
-      <Screen title="AB Test" onExit={onExit} helpText="Esc exit">
+      <Screen title="AB Test [preview]" onExit={onExit} helpText="Esc exit">
         <Text color="red">{`Error: ${error}`}</Text>
       </Screen>
     );
@@ -355,7 +355,7 @@ export function ABTestDetailScreen({ abTestId, region, onExit }: ABTestDetailScr
 
   if (!test) {
     return (
-      <Screen title="AB Test" onExit={onExit} helpText="Esc exit">
+      <Screen title="AB Test [preview]" onExit={onExit} helpText="Esc exit">
         <Text dimColor>Loading...</Text>
       </Screen>
     );
@@ -379,7 +379,7 @@ export function ABTestDetailScreen({ abTestId, region, onExit }: ABTestDetailScr
   const colW = 28;
 
   return (
-    <Screen title={`AB Test: ${test.name}`} onExit={onExit} helpText={helpKeys}>
+    <Screen title={`AB Test [preview]: ${test.name}`} onExit={onExit} helpText={helpKeys}>
       <Box flexDirection="column" paddingX={1}>
         {/* ── Header: Line 1 — status ─────────────────────────── */}
         <Box>

@@ -72,8 +72,13 @@ export function AddABTestFlow({ isInteractive = true, onExit, onBack, onDev, onD
         const evalConfigs = projectSpec.onlineEvalConfigs ?? [];
         setOnlineEvalConfigs(evalConfigs.map(c => c.name));
 
-        // Region from env
-        setRegion(process.env.AWS_DEFAULT_REGION ?? process.env.AWS_REGION ?? 'us-east-1');
+        // Region from aws-targets, falling back to env
+        const targets = await configIO.resolveAWSDeploymentTargets();
+        if (targets.length > 0) {
+          setRegion(targets[0]!.region);
+        } else {
+          setRegion(process.env.AWS_DEFAULT_REGION ?? process.env.AWS_REGION ?? 'us-east-1');
+        }
       } catch {
         // No deployed state — lists will be empty
       }

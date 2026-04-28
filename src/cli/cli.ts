@@ -140,7 +140,7 @@ export function createProgram(): Command {
   const program = new Command();
 
   program
-    .name('agentcore-dev')
+    .name('agentcore')
     .description(COMMAND_DESCRIPTIONS.program)
     .version(PACKAGE_VERSION)
     .showHelpAfterError()

@@ -2,7 +2,6 @@ import { ConfigIO } from '../../../lib';
 import { listABTests, updateABTest } from '../../aws/agentcore-ab-tests';
 import { stopBatchEvaluation } from '../../aws/agentcore-batch-evaluation';
 import { deleteRecommendation } from '../../aws/agentcore-recommendation';
-import { detectRegion } from '../../aws/region';
 import { getErrorMessage } from '../../errors';
 import { handlePauseResume } from '../../operations/eval';
 import type { OnlineEvalActionOptions } from '../../operations/eval';
@@ -72,8 +71,15 @@ function registerOnlineEvalSubcommand(parent: Command, action: 'pause' | 'resume
     });
 }
 
-function getRegion(cliRegion?: string): string {
+async function getRegion(cliRegion?: string): Promise<string> {
   if (cliRegion) return cliRegion;
+  try {
+    const configIO = new ConfigIO();
+    const targets = await configIO.resolveAWSDeploymentTargets();
+    if (targets.length > 0) return targets[0]!.region;
+  } catch {
+    // Fall through to env vars
+  }
   return process.env.AWS_DEFAULT_REGION ?? process.env.AWS_REGION ?? 'us-east-1';
 }
 
@@ -108,13 +114,13 @@ function registerABTestSubcommand(parent: Command, action: 'pause' | 'resume') {
 
   parent
     .command('ab-test')
-    .description(`${action === 'pause' ? 'Pause' : 'Resume'} a deployed A/B test`)
+    .description(`[preview] ${action === 'pause' ? 'Pause' : 'Resume'} a deployed A/B test`)
     .argument('<name>', 'AB test name')
     .option('--region <region>', 'AWS region')
     .option('--json', 'Output as JSON')
     .action(async (name: string, cliOptions: { region?: string; json?: boolean }) => {
       try {
-        const region = getRegion(cliOptions.region);
+        const region = await getRegion(cliOptions.region);
         const { abTestId, error } = await resolveABTestId(name, region);
         if (error) {
           if (cliOptions.json) {
@@ -165,13 +171,13 @@ export const registerStop = (program: Command) => {
 
   stopCmd
     .command('ab-test')
-    .description('Stop a deployed A/B test permanently')
+    .description('[preview] Stop a deployed A/B test permanently')
     .argument('<name>', 'AB test name')
     .option('--region <region>', 'AWS region')
     .option('--json', 'Output as JSON')
     .action(async (name: string, cliOptions: { region?: string; json?: boolean }) => {
       try {
-        const region = getRegion(cliOptions.region);
+        const region = await getRegion(cliOptions.region);
         const { abTestId, error } = await resolveABTestId(name, region);
         if (error) {
           if (cliOptions.json) {
@@ -206,14 +212,13 @@ export const registerStop = (program: Command) => {
 
   stopCmd
     .command('batch-evaluation')
-    .description('Stop a running batch evaluation')
+    .description('[preview] Stop a running batch evaluation')
     .requiredOption('-i, --id <id>', 'Batch evaluation ID to stop')
     .option('--region <region>', 'AWS region (auto-detected if omitted)')
     .option('--json', 'Output as JSON')
     .action(async (cliOptions: { id: string; region?: string; json?: boolean }) => {
       try {
-        const { region: detectedRegion } = await detectRegion();
-        const region = cliOptions.region ?? detectedRegion;
+        const region = await getRegion(cliOptions.region);
 
         const result = await stopBatchEvaluation({
           region,
@@ -241,14 +246,13 @@ export const registerStop = (program: Command) => {
 
   stopCmd
     .command('recommendation')
-    .description('Stop a running recommendation (deletes the recommendation resource)')
+    .description('[preview] Stop a running recommendation (deletes the recommendation resource)')
     .requiredOption('-i, --id <id>', 'Recommendation ID to stop')
     .option('--region <region>', 'AWS region (auto-detected if omitted)')
     .option('--json', 'Output as JSON')
     .action(async (cliOptions: { id: string; region?: string; json?: boolean }) => {
       try {
-        const { region: detectedRegion } = await detectRegion();
-        const region = cliOptions.region ?? detectedRegion;
+        const region = await getRegion(cliOptions.region);
 
         const result = await deleteRecommendation({
           region,

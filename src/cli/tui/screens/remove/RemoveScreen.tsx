@@ -12,8 +12,8 @@ const REMOVE_RESOURCES = [
   { id: 'policy', title: 'Policy', description: 'Remove a policy from a policy engine' },
   { id: 'gateway', title: 'Gateway', description: 'Remove a gateway' },
   { id: 'gateway-target', title: 'Gateway Target', description: 'Remove a gateway target' },
-  { id: 'config-bundle', title: 'Configuration Bundle', description: 'Remove a configuration bundle' },
-  { id: 'ab-test', title: 'AB Test', description: 'Remove an A/B test' },
+  { id: 'config-bundle', title: 'Configuration Bundle [preview]', description: 'Remove a configuration bundle' },
+  { id: 'ab-test', title: 'AB Test [preview]', description: 'Remove an A/B test' },
   { id: 'runtime-endpoint', title: 'Runtime Endpoint', description: 'Remove a runtime endpoint' },
   { id: 'all', title: 'All', description: 'Reset entire agentcore project' },
 ] as const;

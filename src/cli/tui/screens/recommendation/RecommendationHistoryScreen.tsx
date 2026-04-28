@@ -206,7 +206,7 @@ export function RecommendationHistoryScreen({ onExit }: RecommendationHistoryScr
 
   if (!loaded) {
     return (
-      <Screen title="Recommendation History" onExit={onExit}>
+      <Screen title="Recommendation History [preview]" onExit={onExit}>
         <Text dimColor>Loading...</Text>
       </Screen>
     );
@@ -214,7 +214,7 @@ export function RecommendationHistoryScreen({ onExit }: RecommendationHistoryScr
 
   if (error) {
     return (
-      <Screen title="Recommendation History" onExit={onExit}>
+      <Screen title="Recommendation History [preview]" onExit={onExit}>
         <Text color="red">{error}</Text>
       </Screen>
     );
@@ -222,7 +222,7 @@ export function RecommendationHistoryScreen({ onExit }: RecommendationHistoryScr
 
   if (records.length === 0) {
     return (
-      <Screen title="Recommendation History" onExit={onExit}>
+      <Screen title="Recommendation History [preview]" onExit={onExit}>
         <Box flexDirection="column">
           <Text dimColor>No recommendation runs found.</Text>
           <Text dimColor>Run `agentcore run recommendation` to create one.</Text>
@@ -234,7 +234,7 @@ export function RecommendationHistoryScreen({ onExit }: RecommendationHistoryScr
   const helpText = selectedRecord ? 'Esc/B back to list' : HELP_TEXT.NAVIGATE_SELECT;
 
   return (
-    <Screen title="Recommendation History" onExit={onExit} helpText={helpText} exitEnabled={!selectedRecord}>
+    <Screen title="Recommendation History [preview]" onExit={onExit} helpText={helpText} exitEnabled={!selectedRecord}>
       {selectedRecord ? (
         <RecommendationDetailView record={selectedRecord} onBack={() => setSelectedRecord(null)} />
       ) : (

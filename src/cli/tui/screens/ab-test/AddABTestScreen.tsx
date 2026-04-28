@@ -207,7 +207,7 @@ export function AddABTestScreen({
   const controlWeight = 100 - wizard.config.treatmentWeight;
 
   return (
-    <Screen title="Add AB Test" onExit={onExit} helpText={helpText} headerContent={headerContent} exitEnabled={false}>
+    <Screen title="Add AB Test [preview]" onExit={onExit} helpText={helpText} headerContent={headerContent} exitEnabled={false}>
       <Panel fullWidth>
         {isNameStep && (
           <TextInput

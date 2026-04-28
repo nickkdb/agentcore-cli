@@ -105,7 +105,7 @@ export class ConfigBundlePrimitive extends BasePrimitive<AddConfigBundleOptions,
   registerCommands(addCmd: Command, removeCmd: Command): void {
     addCmd
       .command(this.kind)
-      .description('Add a configuration bundle to the project')
+      .description('[preview] Add a configuration bundle to the project')
       .option('--name <name>', 'Bundle name')
       .option('--description <text>', 'Bundle description')
       .option(
