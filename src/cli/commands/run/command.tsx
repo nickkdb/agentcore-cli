@@ -179,7 +179,6 @@ export const registerRun = (program: Command) => {
       'JSON file with session metadata and ground truth (assertions, expected trajectory, turns)'
     )
     .option('--region <region>', 'AWS region (auto-detected if omitted)')
-    .option('--execution-role <arn>', 'IAM execution role ARN for batch evaluation')
     .option('--json', 'Output as JSON')
     .action(
       async (cliOptions: {
@@ -190,7 +189,6 @@ export const registerRun = (program: Command) => {
         sessionIds?: string[];
         groundTruth?: string;
         region?: string;
-        executionRole?: string;
         json?: boolean;
       }) => {
         requireProject();
@@ -219,7 +217,6 @@ export const registerRun = (program: Command) => {
             evaluators: cliOptions.evaluator,
             name: cliOptions.name,
             region: cliOptions.region,
-            executionRoleArn: cliOptions.executionRole,
             sessionIds: cliOptions.sessionIds,
             lookbackDays: lookbackDays && !isNaN(lookbackDays) ? lookbackDays : undefined,
             sessionMetadata,

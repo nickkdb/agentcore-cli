@@ -102,8 +102,6 @@ export interface StartBatchEvaluationOptions {
   dataSourceConfig: DataSourceConfig;
   evaluationMetadata?: EvaluationMetadata;
   description?: string;
-  tags?: Record<string, string>;
-  executionRoleArn?: string;
   clientToken?: string;
 }
 
@@ -329,7 +327,6 @@ function toLegacyStartBody(options: StartBatchEvaluationOptions): string {
   if (sessionMetadata && sessionMetadata.length > 0) {
     body.sessionMetadata = sessionMetadata;
   }
-  if (options.executionRoleArn) body.executionRoleArn = options.executionRoleArn;
   if (options.clientToken) body.clientToken = options.clientToken;
 
   return JSON.stringify(body);
@@ -339,7 +336,7 @@ function normalizeStartResult(raw: Record<string, unknown>): StartBatchEvaluatio
   return {
     batchEvaluationId: (raw.batchEvaluationId ?? raw.batchEvaluateId ?? '') as string,
     batchEvaluationArn: (raw.batchEvaluationArn ?? raw.bundleArn ?? '') as string,
-    name: (raw.name ?? '') as string,
+    name: (raw.batchEvaluationName ?? raw.name ?? '') as string,
     status: (raw.status ?? '') as string,
     createdAt: raw.createdAt as string | undefined,
   };
@@ -375,7 +372,7 @@ function normalizeGetResult(raw: Record<string, unknown>): GetBatchEvaluationRes
   return {
     batchEvaluationId: id,
     batchEvaluationArn: (raw.batchEvaluationArn ?? '') as string,
-    name: (raw.name ?? '') as string,
+    name: (raw.batchEvaluationName ?? raw.name ?? '') as string,
     status: (raw.status ?? '') as string,
     createdAt: raw.createdAt as string | undefined,
     updatedAt: raw.updatedAt as string | undefined,
@@ -403,7 +400,7 @@ function normalizeSummary(raw: Record<string, unknown>): BatchEvaluationSummary 
   return {
     batchEvaluationId: (raw.batchEvaluationId ?? raw.batchEvaluateId ?? '') as string,
     batchEvaluationArn: (raw.batchEvaluationArn ?? '') as string,
-    name: (raw.name ?? '') as string,
+    name: (raw.batchEvaluationName ?? raw.name ?? '') as string,
     status: (raw.status ?? '') as string,
     createdAt: raw.createdAt as string | undefined,
     description: raw.description as string | undefined,
@@ -423,7 +420,7 @@ function normalizeSummary(raw: Record<string, unknown>): BatchEvaluationSummary 
  */
 export async function startBatchEvaluation(options: StartBatchEvaluationOptions): Promise<StartBatchEvaluationResult> {
   const body: Record<string, unknown> = {
-    name: options.name,
+    batchEvaluationName: options.name,
     evaluators: options.evaluators,
     dataSourceConfig: options.dataSourceConfig,
   };
@@ -432,12 +429,6 @@ export async function startBatchEvaluation(options: StartBatchEvaluationOptions)
   }
   if (options.description) {
     body.description = options.description;
-  }
-  if (options.tags) {
-    body.tags = options.tags;
-  }
-  if (options.executionRoleArn) {
-    body.executionRoleArn = options.executionRoleArn;
   }
   if (options.clientToken) {
     body.clientToken = options.clientToken;

@@ -32,8 +32,6 @@ export interface RunBatchEvaluationOptions {
   name?: string;
   /** Region override */
   region?: string;
-  /** Explicit execution role ARN (falls back to agent's deployed role) */
-  executionRoleArn?: string;
   /** Specific session IDs to evaluate (optional — filters CloudWatch source) */
   sessionIds?: string[];
   /** Lookback window in days (optional — filters CloudWatch source by time range) */
@@ -187,7 +185,6 @@ export async function runBatchEvaluationCommand(
       ...(options.sessionMetadata && options.sessionMetadata.length > 0
         ? { evaluationMetadata: { sessionMetadata: options.sessionMetadata } }
         : {}),
-      ...(options.executionRoleArn ? { executionRoleArn: options.executionRoleArn } : {}),
       clientToken: generateClientToken(),
     };
 
