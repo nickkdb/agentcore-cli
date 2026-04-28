@@ -1,0 +1,1 @@
+export { registerArt } from './command';

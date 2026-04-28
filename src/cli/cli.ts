@@ -1,3 +1,4 @@
+import { registerArt } from './commands/art';
 import { registerAdd } from './commands/add';
 import { registerCreate } from './commands/create';
 import { registerDeploy } from './commands/deploy';
@@ -189,6 +190,7 @@ export function registerCommands(program: Command) {
   registerTraces(program);
   registerUpdate(program);
   registerValidate(program);
+  registerArt(program);
 
   // Register primitive subcommands (add agent, remove agent, add memory, etc.)
   for (const primitive of ALL_PRIMITIVES) {
