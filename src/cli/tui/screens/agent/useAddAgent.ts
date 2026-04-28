@@ -8,6 +8,7 @@ import {
   mapModelProviderToIdentityProviders,
   writeAgentToProject,
 } from '../../../operations/agent/generate';
+import { createConfigBundleForAgent } from '../../../operations/agent/config-bundle-defaults';
 import { executeImportAgent } from '../../../operations/agent/import';
 import { buildAuthorizerConfigFromJwtConfig, createManagedOAuthCredential } from '../../../primitives/auth-utils';
 import { computeDefaultCredentialEnvVarName } from '../../../primitives/credential-utils';
@@ -118,6 +119,7 @@ function mapAddAgentConfigToGenerateConfig(config: AddAgentConfig): GenerateConf
     idleRuntimeSessionTimeout: config.idleRuntimeSessionTimeout,
     maxLifetime: config.maxLifetime,
     sessionStorageMountPath: config.sessionStorageMountPath,
+    withConfigBundle: config.withConfigBundle,
   };
 }
 
@@ -257,6 +259,11 @@ async function handleCreatePath(
   let pythonSetupResult: PythonSetupResult | undefined;
   if (config.language === 'Python') {
     pythonSetupResult = await setupPythonProject({ projectDir: agentPath });
+  }
+
+  // Auto-create config bundle when opted in
+  if (config.withConfigBundle) {
+    await createConfigBundleForAgent(config.name, configBaseDir);
   }
 
   return {
