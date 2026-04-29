@@ -2,7 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+<<<<<<< HEAD
 ## [1.0.0-preview.4] - 2026-04-29
+=======
+## [0.12.1] - 2026-04-29
+>>>>>>> origin/main
 
 ### Added
 - feat: add CloudWatch traces API for web UI (#997) (76b07aa)
@@ -11,6 +15,7 @@ All notable changes to this project will be documented in this file.
 - fix: remove CONFIG_DIR exclusion from zip stage to preserve dependency agentcore/ packages (#1015) (d1e5241)
 
 ### Other Changes
+<<<<<<< HEAD
 - Merge pull request #1040 from aws/sync-preview/merge-main-20260429-v5 (dd76d17)
 - chore: merge main into preview (ecda10c)
 - fix(ci): install uv in release workflow prepare steps (#1038) (#1039) (01b3b7d)
@@ -22,6 +27,11 @@ All notable changes to this project will be documented in this file.
 - chore: merge main into preview (c44d8c1)
 - fix(ci): enable coverage collection in sharded unit test runs (#1034) (061b6b3)
 - ci: run all PR and merge workflows on preview branch (#1023) (fc1cd56)
+=======
+- fix(ci): install uv in release workflow prepare steps (#1038) (29ae8e5)
+- fix(ci): move snapshot update after build in release workflow (#1036) (227c840)
+- fix(ci): enable coverage collection in sharded unit test runs (#1034) (061b6b3)
+>>>>>>> origin/main
 - fix(ci): update snapshots after CDK version sync in release workflow (#1033) (d3b412f)
 - chore(deps): bump @opentelemetry/sdk-metrics from 2.6.1 to 2.7.0 (#1030) (ad59fc0)
 - chore(deps-dev): bump secretlint from 12.2.0 to 12.3.1 (#1029) (36755e9)
@@ -29,6 +39,7 @@ All notable changes to this project will be documented in this file.
 - chore(deps): bump @opentelemetry/resources from 2.6.1 to 2.7.0 (#1026) (ad482cf)
 - chore(deps): bump the aws-cdk group with 2 updates (#1025) (1686e4d)
 - chore(deps): bump the aws-sdk group with 14 updates (#1024) (1fc366c)
+<<<<<<< HEAD
 - Merge pull request #1018 from aws/sync-preview/real-merge-main-20260429 (8c4d6eb)
 - chore: merge main into preview (553a520)
 - sync-preview: merge main into preview (#1017) (1c726d8)
@@ -39,6 +50,13 @@ All notable changes to this project will be documented in this file.
 - chore: bump version to 0.12.0 (#1002) (dd9270d)
 
 ## [1.0.0-preview.3] - 2026-04-28
+=======
+- ci: add coordinated main + preview release workflow (#995) (7e8cae4)
+- fix(import): use GatewayNameSchema for gateway import name validation (#1011) (29b6522)
+- test: remove 44 render-only and framework-testing tests (#998) (13b34a3)
+
+## [0.12.0] - 2026-04-28
+>>>>>>> origin/main
 
 ### Added
 - feat: add gateway import command with executionRoleArn support (#855) (2df1387)
