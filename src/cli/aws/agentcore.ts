@@ -66,6 +66,8 @@ export interface InvokeAgentRuntimeOptions {
   headers?: Record<string, string>;
   /** Bearer token for CUSTOM_JWT auth. When provided, uses raw HTTP with Authorization header instead of SigV4. */
   bearerToken?: string;
+  /** W3C baggage header value (e.g. config bundle ref for runtime) */
+  baggage?: string;
 }
 
 export interface InvokeAgentRuntimeResult {
@@ -172,6 +174,9 @@ async function invokeWithBearerTokenStreaming(options: InvokeAgentRuntimeOptions
     headers['X-Amzn-Bedrock-AgentCore-Runtime-Session-Id'] = options.sessionId;
   }
   headers['X-Amzn-Bedrock-AgentCore-Runtime-User-Id'] = options.userId ?? DEFAULT_RUNTIME_USER_ID;
+  if (options.baggage) {
+    headers['baggage'] = options.baggage;
+  }
 
   const res = await fetch(url, {
     method: 'POST',
@@ -266,6 +271,9 @@ async function invokeWithBearerToken(options: InvokeAgentRuntimeOptions): Promis
     headers['X-Amzn-Bedrock-AgentCore-Runtime-Session-Id'] = options.sessionId;
   }
   headers['X-Amzn-Bedrock-AgentCore-Runtime-User-Id'] = options.userId ?? DEFAULT_RUNTIME_USER_ID;
+  if (options.baggage) {
+    headers['baggage'] = options.baggage;
+  }
 
   const res = await fetch(url, {
     method: 'POST',
@@ -307,6 +315,7 @@ export async function invokeAgentRuntimeStreaming(options: InvokeAgentRuntimeOpt
     accept: 'application/json',
     runtimeSessionId: options.sessionId,
     runtimeUserId: options.userId ?? DEFAULT_RUNTIME_USER_ID,
+    ...(options.baggage && { baggage: options.baggage }),
   });
 
   const response = await client.send(command);
@@ -402,6 +411,7 @@ export async function invokeAgentRuntime(options: InvokeAgentRuntimeOptions): Pr
     accept: 'application/json',
     runtimeSessionId: options.sessionId,
     runtimeUserId: options.userId ?? DEFAULT_RUNTIME_USER_ID,
+    ...(options.baggage && { baggage: options.baggage }),
   });
 
   const response = await client.send(command);
