@@ -2,6 +2,7 @@ import type { ABTestDeployedState, AgentCoreProjectSpec, DeployedResourceState }
 import { getCredentialProvider } from '../../aws/account';
 import { createABTest, deleteABTest, getABTest, listABTests, updateABTest } from '../../aws/agentcore-ab-tests';
 import type { ABTestEvaluationConfig, ABTestVariant, TrafficAllocationConfig } from '../../aws/agentcore-ab-tests';
+import { arnPrefix } from '../../aws/partition';
 import {
   CreateRoleCommand,
   DeleteRoleCommand,
@@ -46,6 +47,76 @@ export interface SetupABTestsResult {
 const AB_TEST_ROLE_POLICY_NAME = 'ABTestExecutionPolicy';
 
 // ============================================================================
+// Config Hash
+// ============================================================================
+
+/**
+ * Compute a deterministic SHA-256 hash of the key AB test configuration fields.
+ * Used to detect whether a redeployment actually changed the test config.
+ */
+function computeConfigHash(testSpec: {
+  variants: unknown;
+  evaluationConfig: unknown;
+  gatewayRef: string;
+  gatewayFilter?: unknown;
+  trafficAllocationConfig?: unknown;
+}): string {
+  const payload = JSON.stringify({
+    variants: testSpec.variants,
+    evaluationConfig: testSpec.evaluationConfig,
+    gatewayRef: testSpec.gatewayRef,
+    gatewayFilter: testSpec.gatewayFilter,
+    trafficAllocationConfig: testSpec.trafficAllocationConfig,
+  });
+  return createHash('sha256').update(payload).digest('hex');
+}
+
+// ============================================================================
+// Shared Update Helper
+// ============================================================================
+
+interface ApplyABTestUpdateOptions {
+  region: string;
+  abTestId: string;
+  resolvedVariants: ABTestVariant[];
+  resolvedEvalConfig: ABTestEvaluationConfig;
+  trafficAllocationConfig?: TrafficAllocationConfig;
+  resolvedRoleArn?: string;
+  testName: string;
+  roleCreatedByCli: boolean;
+  currentHash: string;
+}
+
+async function applyABTestUpdate(
+  options: ApplyABTestUpdateOptions
+): Promise<{ state: ABTestDeployedState; result: ABTestSetupResult }> {
+  const updateResult = await updateABTest({
+    region: options.region,
+    abTestId: options.abTestId,
+    variants: options.resolvedVariants,
+    evaluationConfig: options.resolvedEvalConfig,
+    trafficAllocationConfig: options.trafficAllocationConfig,
+    roleArn: options.resolvedRoleArn,
+  });
+
+  return {
+    state: {
+      abTestId: updateResult.abTestId,
+      abTestArn: updateResult.abTestArn,
+      roleArn: options.resolvedRoleArn,
+      roleCreatedByCli: options.roleCreatedByCli,
+      configHash: options.currentHash,
+    },
+    result: {
+      testName: options.testName,
+      status: 'updated',
+      abTestId: updateResult.abTestId,
+      abTestArn: updateResult.abTestArn,
+    },
+  };
+}
+
+// ============================================================================
 // Implementation
 // ============================================================================
 
@@ -64,36 +135,11 @@ export async function setupABTests(options: SetupABTestsOptions): Promise<SetupA
 
   // Create or skip tests from the spec
   for (const testSpec of projectSpec.abTests) {
+    let resolvedRoleArn: string | undefined;
+    let roleCreatedByCli = false;
     try {
+      const currentHash = computeConfigHash(testSpec);
       const existingTest = existingABTests?.[testSpec.name];
-
-      if (existingTest) {
-        // Already deployed — skip (AB tests are updated via lifecycle commands, not deploy)
-        abTests[testSpec.name] = existingTest;
-        results.push({
-          testName: testSpec.name,
-          status: 'skipped',
-          abTestId: existingTest.abTestId,
-          abTestArn: existingTest.abTestArn,
-        });
-        continue;
-      }
-
-      // Try to find by name via list (handles re-creation after state loss)
-      const existingByName = await findABTestByName(region, testSpec.name);
-      if (existingByName) {
-        abTests[testSpec.name] = {
-          abTestId: existingByName.abTestId,
-          abTestArn: existingByName.abTestArn,
-        };
-        results.push({
-          testName: testSpec.name,
-          status: 'skipped',
-          abTestId: existingByName.abTestId,
-          abTestArn: existingByName.abTestArn,
-        });
-        continue;
-      }
 
       // Resolve ARN references from deployed state
       const resolvedVariants = resolveVariants(testSpec.variants, deployedResources);
@@ -107,10 +153,10 @@ export async function setupABTests(options: SetupABTestsOptions): Promise<SetupA
         continue;
       }
       const resolvedEvalConfig = resolveEvalConfig(testSpec.evaluationConfig, deployedResources);
-
-      // Resolve or auto-create role
-      let resolvedRoleArn: string;
-      let roleCreatedByCli = false;
+      const evalConfigArns: string[] =
+        'onlineEvaluationConfigArn' in resolvedEvalConfig
+          ? [resolvedEvalConfig.onlineEvaluationConfigArn]
+          : resolvedEvalConfig.perVariantOnlineEvaluationConfig.map(pv => pv.onlineEvaluationConfigArn);
       if (testSpec.roleArn) {
         resolvedRoleArn = testSpec.roleArn;
       } else {
@@ -119,29 +165,110 @@ export async function setupABTests(options: SetupABTestsOptions): Promise<SetupA
           projectName: projectSpec.name,
           testName: testSpec.name,
           gatewayArn: resolvedGatewayArn,
-          onlineEvalConfigArn: resolvedEvalConfig.onlineEvaluationConfigArn,
+          onlineEvalConfigArns: evalConfigArns,
         });
         roleCreatedByCli = true;
       }
 
-      const result = await createABTest({
+      if (existingTest) {
+        // Config unchanged — skip to preserve running state
+        if (existingTest.configHash === currentHash) {
+          abTests[testSpec.name] = existingTest;
+          results.push({
+            testName: testSpec.name,
+            status: 'skipped',
+            abTestId: existingTest.abTestId,
+            abTestArn: existingTest.abTestArn,
+          });
+          continue;
+        }
+
+        // Config changed — update in-place instead of delete+recreate
+        const applied = await applyABTestUpdate({
+          region,
+          abTestId: existingTest.abTestId,
+          resolvedVariants,
+          resolvedEvalConfig,
+          trafficAllocationConfig: testSpec.trafficAllocationConfig as TrafficAllocationConfig | undefined,
+          resolvedRoleArn,
+          testName: testSpec.name,
+          roleCreatedByCli: existingTest.roleCreatedByCli ?? roleCreatedByCli,
+          currentHash,
+        });
+        abTests[testSpec.name] = applied.state;
+        results.push(applied.result);
+        continue;
+      }
+
+      // Try to find by name via list (handles re-creation after state loss)
+      const existingByName = await findABTestByName(region, projectSpec.name, testSpec.name);
+      if (existingByName) {
+        // Found by name — update in-place with fresh config
+        const applied = await applyABTestUpdate({
+          region,
+          abTestId: existingByName.abTestId,
+          resolvedVariants,
+          resolvedEvalConfig,
+          trafficAllocationConfig: testSpec.trafficAllocationConfig as TrafficAllocationConfig | undefined,
+          resolvedRoleArn,
+          testName: testSpec.name,
+          roleCreatedByCli,
+          currentHash,
+        });
+        abTests[testSpec.name] = applied.state;
+        results.push(applied.result);
+        continue;
+      }
+
+      const createOptions = {
         region,
-        name: testSpec.name,
+        name: `${projectSpec.name}_${testSpec.name}`,
         description: testSpec.description,
         gatewayArn: resolvedGatewayArn,
         roleArn: resolvedRoleArn,
         variants: resolvedVariants,
         evaluationConfig: resolvedEvalConfig,
+        gatewayFilter: testSpec.gatewayFilter,
         trafficAllocationConfig: testSpec.trafficAllocationConfig as TrafficAllocationConfig | undefined,
         maxDurationDays: testSpec.maxDurationDays,
         enableOnCreate: testSpec.enableOnCreate,
-      });
+      };
+
+      // Retry on gateway/eval access denied — IAM policy propagation can take time
+      let result;
+      const MAX_RETRIES = 5;
+      const BASE_DELAY_MS = 5_000;
+      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        try {
+          result = await createABTest(createOptions);
+          break;
+        } catch (err: unknown) {
+          const errCode = (err as { name?: string }).name;
+          const errStatus = (err as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
+          const msg = err instanceof Error ? err.message : String(err);
+
+          const isRetryable =
+            errCode === 'AccessDeniedException' ||
+            errStatus === 403 ||
+            msg.includes('Access denied') ||
+            msg.includes('Gateway validation error');
+
+          if (isRetryable && attempt < MAX_RETRIES - 1) {
+            const delay = BASE_DELAY_MS * Math.pow(2, attempt) + Math.random() * 1000;
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
+          }
+          throw err;
+        }
+      }
+      if (!result) throw new Error('AB test creation failed after retries');
 
       abTests[testSpec.name] = {
         abTestId: result.abTestId,
         abTestArn: result.abTestArn,
         roleArn: resolvedRoleArn,
         roleCreatedByCli,
+        configHash: currentHash,
       };
 
       results.push({
@@ -151,6 +278,14 @@ export async function setupABTests(options: SetupABTestsOptions): Promise<SetupA
         abTestArn: result.abTestArn,
       });
     } catch (err) {
+      // Clean up auto-created role on AB test creation failure to avoid orphaned roles
+      if (roleCreatedByCli && resolvedRoleArn) {
+        try {
+          await deleteABTestRole(region, resolvedRoleArn);
+        } catch {
+          // Best-effort role cleanup
+        }
+      }
       results.push({
         testName: testSpec.name,
         status: 'error',
@@ -257,11 +392,15 @@ export async function deleteOrphanedABTests(options: {
 
 async function findABTestByName(
   region: string,
-  name: string
+  projectName: string,
+  testName: string
 ): Promise<{ abTestId: string; abTestArn: string } | undefined> {
   try {
+    const prefixedName = `${projectName}_${testName}`;
     const result = await listABTests({ region, maxResults: 100 });
-    return result.abTests.find(t => t.name.toLowerCase() === name.toLowerCase());
+    return result.abTests.find(
+      t => t.name.toLowerCase() === prefixedName.toLowerCase() || t.name.toLowerCase() === testName.toLowerCase()
+    );
   } catch {
     return undefined;
   }
@@ -270,29 +409,42 @@ async function findABTestByName(
 /**
  * Resolve variant config bundle references.
  * If bundleArn is a name (not an ARN), look it up in deployed config bundles.
+ * Target-based variants are passed through as-is.
  */
 function resolveVariants(
   variants: {
     name: 'C' | 'T1';
     weight: number;
-    variantConfiguration: { configurationBundle: { bundleArn: string; bundleVersion: string } };
+    variantConfiguration: {
+      configurationBundle?: { bundleArn: string; bundleVersion: string };
+      target?: { targetName: string };
+    };
   }[],
   deployedResources?: DeployedResourceState
 ): ABTestVariant[] {
-  return variants.map(v => ({
-    name: v.name,
-    weight: v.weight,
-    variantConfiguration: {
-      configurationBundle: {
-        bundleArn: resolveConfigBundleArn(v.variantConfiguration.configurationBundle.bundleArn, deployedResources),
-        bundleVersion: resolveConfigBundleVersion(
-          v.variantConfiguration.configurationBundle.bundleArn,
-          v.variantConfiguration.configurationBundle.bundleVersion,
-          deployedResources
-        ),
+  return variants.map(v => {
+    const bundle = v.variantConfiguration.configurationBundle;
+    if (bundle) {
+      return {
+        name: v.name,
+        weight: v.weight,
+        variantConfiguration: {
+          configurationBundle: {
+            bundleArn: resolveConfigBundleArn(bundle.bundleArn, deployedResources),
+            bundleVersion: resolveConfigBundleVersion(bundle.bundleArn, bundle.bundleVersion, deployedResources),
+          },
+        },
+      };
+    }
+    // Target-based variant — pass through
+    return {
+      name: v.name,
+      weight: v.weight,
+      variantConfiguration: {
+        ...(v.variantConfiguration.target && { target: { name: v.variantConfiguration.target.targetName } }),
       },
-    },
-  }));
+    };
+  });
 }
 
 function resolveConfigBundleArn(ref: string, deployedResources?: DeployedResourceState): string {
@@ -345,20 +497,34 @@ function resolveGatewayArn(ref: string, deployedResources?: DeployedResourceStat
 }
 
 function resolveEvalConfig(
-  config: { onlineEvaluationConfigArn: string },
+  config:
+    | { onlineEvaluationConfigArn: string }
+    | { perVariantOnlineEvaluationConfig: { treatmentName: 'C' | 'T1'; onlineEvaluationConfigArn: string }[] },
   deployedResources?: DeployedResourceState
 ): ABTestEvaluationConfig {
-  const ref = config.onlineEvaluationConfigArn;
-
-  if (ref.startsWith('arn:')) return { onlineEvaluationConfigArn: ref };
-
-  // Try to resolve from deployed online eval configs
-  const configs = deployedResources?.onlineEvalConfigs;
-  if (configs?.[ref]) {
-    return { onlineEvaluationConfigArn: configs[ref].onlineEvaluationConfigArn };
+  if ('perVariantOnlineEvaluationConfig' in config) {
+    // Per-variant eval config — resolve each ARN
+    return {
+      perVariantOnlineEvaluationConfig: config.perVariantOnlineEvaluationConfig.map(pv => ({
+        name: pv.treatmentName,
+        onlineEvaluationConfigArn: resolveOnlineEvalArn(pv.onlineEvaluationConfigArn, deployedResources),
+      })),
+    };
   }
 
-  return { onlineEvaluationConfigArn: ref };
+  const ref = config.onlineEvaluationConfigArn;
+  return { onlineEvaluationConfigArn: resolveOnlineEvalArn(ref, deployedResources) };
+}
+
+function resolveOnlineEvalArn(ref: string, deployedResources?: DeployedResourceState): string {
+  if (ref.startsWith('arn:')) return ref;
+
+  const configs = deployedResources?.onlineEvalConfigs;
+  if (configs?.[ref]) {
+    return configs[ref].onlineEvaluationConfigArn;
+  }
+
+  return ref;
 }
 
 // ============================================================================
@@ -390,11 +556,11 @@ interface CreateABTestRoleOptions {
   projectName: string;
   testName: string;
   gatewayArn: string;
-  onlineEvalConfigArn: string;
+  onlineEvalConfigArns: string[];
 }
 
 async function getOrCreateABTestRole(options: CreateABTestRoleOptions): Promise<string> {
-  const { region, projectName, testName, gatewayArn, onlineEvalConfigArn } = options;
+  const { region, projectName, testName, gatewayArn, onlineEvalConfigArns } = options;
   const credentials = getCredentialProvider();
   const iamClient = new IAMClient({ region, credentials });
 
@@ -417,7 +583,7 @@ async function getOrCreateABTestRole(options: CreateABTestRoleOptions): Promise<
   });
 
   let roleArn: string;
-  let needsPropagationWait = false;
+  let _needsPropagationWait = false;
 
   try {
     const createResult = await iamClient.send(
@@ -437,7 +603,7 @@ async function getOrCreateABTestRole(options: CreateABTestRoleOptions): Promise<
     if (!roleArn) {
       throw new Error(`IAM CreateRole succeeded but returned no role ARN for "${roleName}"`);
     }
-    needsPropagationWait = true;
+    _needsPropagationWait = true;
   } catch (err: unknown) {
     // Handle retry after a previous failed deploy left the role behind
     const errName = (err as { name?: string }).name;
@@ -464,14 +630,15 @@ async function getOrCreateABTestRole(options: CreateABTestRoleOptions): Promise<
           'bedrock-agentcore:UpdateGatewayRule',
           'bedrock-agentcore:GetGatewayRule',
           'bedrock-agentcore:DeleteGatewayRule',
+          'bedrock-agentcore:ListGatewayRules',
         ],
-        Resource: [`arn:aws:bedrock-agentcore:${region}:${accountId}:gateway/${gatewayId}`],
+        Resource: [`${arnPrefix(region)}:bedrock-agentcore:${region}:${accountId}:gateway/${gatewayId}`],
       },
       {
         Sid: 'GatewayReadStatement',
         Effect: 'Allow',
         Action: ['bedrock-agentcore:GetGateway'],
-        Resource: [`arn:aws:bedrock-agentcore:${region}:${accountId}:gateway/${gatewayId}`],
+        Resource: [`${arnPrefix(region)}:bedrock-agentcore:${region}:${accountId}:gateway/${gatewayId}`],
       },
       {
         Sid: 'GatewayListStatement',
@@ -483,19 +650,24 @@ async function getOrCreateABTestRole(options: CreateABTestRoleOptions): Promise<
         Sid: 'OnlineEvaluationConfigStatement',
         Effect: 'Allow',
         Action: ['bedrock-agentcore:GetOnlineEvaluationConfig', 'bedrock-agentcore:UpdateOnlineEvaluationConfig'],
-        Resource: [onlineEvalConfigArn],
+        Resource: onlineEvalConfigArns,
       },
       {
         Sid: 'ConfigurationBundleReadStatement',
         Effect: 'Allow',
         Action: ['bedrock-agentcore:GetConfigurationBundle', 'bedrock-agentcore:GetConfigurationBundleVersion'],
-        Resource: [`arn:aws:bedrock-agentcore:${region}:${accountId}:configuration-bundle/*`],
+        Resource: [`${arnPrefix(region)}:bedrock-agentcore:${region}:${accountId}:configuration-bundle/*`],
+      },
+      {
+        Sid: 'CloudWatchDescribeLogGroups',
+        Effect: 'Allow',
+        Action: ['logs:DescribeLogGroups'],
+        Resource: ['*'],
       },
       {
         Sid: 'CloudWatchLogReadStatement',
         Effect: 'Allow',
         Action: [
-          'logs:DescribeLogGroups',
           'logs:StartQuery',
           'logs:GetQueryResults',
           'logs:StopQuery',
@@ -503,10 +675,10 @@ async function getOrCreateABTestRole(options: CreateABTestRoleOptions): Promise<
           'logs:GetLogEvents',
         ],
         Resource: [
-          `arn:aws:logs:${region}:${accountId}:log-group:/aws/bedrock-agentcore/evaluations/*`,
-          `arn:aws:logs:${region}:${accountId}:log-group:/aws/bedrock-agentcore/evaluations/*:*`,
-          `arn:aws:logs:${region}:${accountId}:log-group:aws/spans`,
-          `arn:aws:logs:${region}:${accountId}:log-group:aws/spans:*`,
+          `${arnPrefix(region)}:logs:${region}:${accountId}:log-group:/aws/bedrock-agentcore/evaluations/*`,
+          `${arnPrefix(region)}:logs:${region}:${accountId}:log-group:/aws/bedrock-agentcore/evaluations/*:*`,
+          `${arnPrefix(region)}:logs:${region}:${accountId}:log-group:aws/spans`,
+          `${arnPrefix(region)}:logs:${region}:${accountId}:log-group:aws/spans:*`,
         ],
       },
       {
@@ -514,8 +686,8 @@ async function getOrCreateABTestRole(options: CreateABTestRoleOptions): Promise<
         Effect: 'Allow',
         Action: ['logs:DescribeIndexPolicies', 'logs:PutIndexPolicy'],
         Resource: [
-          `arn:aws:logs:${region}:${accountId}:log-group:aws/spans`,
-          `arn:aws:logs:${region}:${accountId}:log-group:aws/spans:*`,
+          `${arnPrefix(region)}:logs:${region}:${accountId}:log-group:aws/spans`,
+          `${arnPrefix(region)}:logs:${region}:${accountId}:log-group:aws/spans:*`,
         ],
       },
     ],
@@ -530,10 +702,8 @@ async function getOrCreateABTestRole(options: CreateABTestRoleOptions): Promise<
     })
   );
 
-  if (needsPropagationWait) {
-    // Wait for IAM role propagation before creating the AB test
-    await new Promise(resolve => setTimeout(resolve, 15_000));
-  }
+  // Always wait for IAM policy propagation — both new roles and policy updates on existing roles
+  await new Promise(resolve => setTimeout(resolve, 15_000));
 
   return roleArn;
 }

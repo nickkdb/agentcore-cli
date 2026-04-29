@@ -11,7 +11,7 @@ import { registerImport } from './commands/import';
 import { registerInvoke } from './commands/invoke';
 import { registerLogs } from './commands/logs';
 import { registerPackage } from './commands/package';
-import { registerPause } from './commands/pause';
+import { registerPause, registerPromote } from './commands/pause';
 import { registerRecommendations } from './commands/recommendations';
 import { registerRemove } from './commands/remove';
 import { registerResume } from './commands/resume';
@@ -191,6 +191,7 @@ export function registerCommands(program: Command) {
   registerRun(program);
   registerStatus(program);
   registerStop(program);
+  registerPromote(program);
   registerTelemetry(program);
   registerTraces(program);
   registerUpdate(program);

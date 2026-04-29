@@ -287,8 +287,14 @@ export function useDeployFlow(options: DeployFlowOptions = {}): DeployFlowState 
     const evaluators = parseEvaluatorOutputs(outputs, evaluatorNames);
 
     // Parse online eval config outputs
-    const onlineEvalNames = (ctx.projectSpec.onlineEvalConfigs ?? []).map((c: { name: string }) => c.name);
-    const onlineEvalConfigs = parseOnlineEvalOutputs(outputs, onlineEvalNames);
+    const onlineEvalSpecs = (ctx.projectSpec.onlineEvalConfigs ?? []).map(
+      (c: { name: string; agent?: string; endpoint?: string }) => ({
+        name: c.name,
+        agent: c.agent,
+        endpoint: c.endpoint,
+      })
+    );
+    const onlineEvalConfigs = parseOnlineEvalOutputs(outputs, onlineEvalSpecs);
 
     // Parse policy engine outputs
     const policyEngineSpecs = ctx.projectSpec.policyEngines ?? [];
@@ -324,15 +330,15 @@ export function useDeployFlow(options: DeployFlowOptions = {}): DeployFlowState 
     // Post-deploy: Enable online eval configs that have enableOnCreate (CFN deploys them as DISABLED).
     // Only enable configs that are newly deployed — skip configs that already existed before this
     // deploy run, so we don't re-enable configs a customer intentionally disabled.
-    const onlineEvalSpecs = ctx.projectSpec.onlineEvalConfigs ?? [];
+    const onlineEvalFullSpecs = ctx.projectSpec.onlineEvalConfigs ?? [];
     const deployedOnlineEvalConfigs = deployedState.targets?.[target.name]?.resources?.onlineEvalConfigs ?? {};
     const previouslyDeployedOnlineEvals = existingState?.targets?.[target.name]?.resources?.onlineEvalConfigs ?? {};
-    const newOnlineEvalSpecs = onlineEvalSpecs.filter(c => !previouslyDeployedOnlineEvals[c.name]);
-    if (newOnlineEvalSpecs.length > 0 && Object.keys(deployedOnlineEvalConfigs).length > 0) {
+    const newOnlineEvalFullSpecs = onlineEvalFullSpecs.filter(c => !previouslyDeployedOnlineEvals[c.name]);
+    if (newOnlineEvalFullSpecs.length > 0 && Object.keys(deployedOnlineEvalConfigs).length > 0) {
       try {
         const enableResult = await enableOnlineEvalConfigs({
           region: target.region,
-          onlineEvalConfigs: newOnlineEvalSpecs,
+          onlineEvalConfigs: newOnlineEvalFullSpecs,
           deployedOnlineEvalConfigs,
         });
 

@@ -286,7 +286,12 @@ export function BatchEvalHistoryScreen({ onExit }: BatchEvalHistoryScreenProps) 
   const helpText = selectedRecord ? 'Esc/B back to list' : HELP_TEXT.NAVIGATE_SELECT;
 
   return (
-    <Screen title="Batch Evaluation History [preview]" onExit={onExit} helpText={helpText} exitEnabled={!selectedRecord}>
+    <Screen
+      title="Batch Evaluation History [preview]"
+      onExit={onExit}
+      helpText={helpText}
+      exitEnabled={!selectedRecord}
+    >
       {selectedRecord ? (
         <BatchEvalDetailView record={selectedRecord} onBack={() => setSelectedRecord(null)} />
       ) : (

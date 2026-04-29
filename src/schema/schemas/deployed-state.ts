@@ -166,6 +166,10 @@ export const OnlineEvalDeployedStateSchema = z.object({
   onlineEvaluationConfigId: z.string().min(1),
   onlineEvaluationConfigArn: z.string().min(1),
   executionStatus: z.enum(['ENABLED', 'DISABLED']).optional(),
+  /** Agent name this online eval config monitors. */
+  agent: z.string().min(1).optional(),
+  /** Runtime endpoint name scoped to this online eval config. */
+  endpoint: z.string().min(1).optional(),
 });
 
 export type OnlineEvalDeployedState = z.infer<typeof OnlineEvalDeployedStateSchema>;
@@ -193,6 +197,8 @@ export const ABTestDeployedStateSchema = z.object({
   roleArn: z.string().min(1).optional(),
   /** Whether the CLI auto-created this role (true = CLI should delete on cleanup). */
   roleCreatedByCli: z.boolean().optional(),
+  /** SHA-256 hash of the AB test configuration for change detection. */
+  configHash: z.string().optional(),
 });
 
 export type ABTestDeployedState = z.infer<typeof ABTestDeployedStateSchema>;

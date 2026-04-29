@@ -250,13 +250,13 @@ export function parseEvaluatorOutputs(
  */
 export function parseOnlineEvalOutputs(
   outputs: StackOutputs,
-  onlineEvalNames: string[]
+  onlineEvalSpecs: { name: string; agent?: string; endpoint?: string }[]
 ): Record<string, OnlineEvalDeployedState> {
   const configs: Record<string, OnlineEvalDeployedState> = {};
   const outputKeys = Object.keys(outputs);
 
-  for (const configName of onlineEvalNames) {
-    const pascal = toPascalId('OnlineEval', configName);
+  for (const spec of onlineEvalSpecs) {
+    const pascal = toPascalId('OnlineEval', spec.name);
     const idPrefix = `Application${pascal}IdOutput`;
     const arnPrefix = `Application${pascal}ArnOutput`;
 
@@ -264,9 +264,11 @@ export function parseOnlineEvalOutputs(
     const arnKey = outputKeys.find(k => k.startsWith(arnPrefix));
 
     if (idKey && arnKey) {
-      configs[configName] = {
+      configs[spec.name] = {
         onlineEvaluationConfigId: outputs[idKey]!,
         onlineEvaluationConfigArn: outputs[arnKey]!,
+        ...(spec.agent && { agent: spec.agent }),
+        ...(spec.endpoint && { endpoint: spec.endpoint }),
       };
     }
   }

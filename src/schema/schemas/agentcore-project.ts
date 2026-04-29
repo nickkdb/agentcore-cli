@@ -54,6 +54,10 @@ export type { Policy, PolicyEngine, ValidationMode } from './primitives/policy';
 export { PolicyEngineNameSchema, PolicyNameSchema, PolicySchema, ValidationModeSchema } from './primitives/policy';
 export { TagsSchema };
 export type { Tags } from './primitives/tags';
+export type { ABTestMode, TargetRef, GatewayFilter, PerVariantOnlineEvaluationConfig } from './primitives/ab-test';
+export { ABTestModeSchema, TargetRefSchema, GatewayFilterSchema } from './primitives/ab-test';
+export type { HttpGatewayTarget } from './primitives/http-gateway';
+export { HttpGatewayTargetSchema } from './primitives/http-gateway';
 
 // ============================================================================
 // ManagedBy Schema
@@ -401,6 +405,41 @@ export const AgentCoreProjectSpecSchema = z
               message: `AB test "${test.name}" references gateway "${gwName}" which does not exist in httpGateways`,
             });
           }
+
+          // For target-based AB tests, validate target names exist in the gateway's targets array
+          if (test.mode === 'target-based') {
+            const gw = spec.httpGateways.find(g => g.name === gwName);
+            if (gw) {
+              const gwTargetNames = new Set((gw.targets ?? []).map(t => t.name));
+              for (const variant of test.variants) {
+                const targetName = variant.variantConfiguration.target?.targetName;
+                if (targetName && !gwTargetNames.has(targetName)) {
+                  ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: `AB test "${test.name}" variant "${variant.name}" references target "${targetName}" which does not exist in gateway "${gwName}" targets`,
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Validate HTTP gateway target runtimeRef and qualifier references
+    for (const gw of spec.httpGateways) {
+      for (const target of gw.targets ?? []) {
+        const runtime = spec.runtimes.find(r => r.name === target.runtimeRef);
+        if (!runtime) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `HTTP gateway "${gw.name}" target "${target.name}" references unknown runtime "${target.runtimeRef}"`,
+          });
+        } else if (target.qualifier && target.qualifier !== 'DEFAULT' && !runtime.endpoints?.[target.qualifier]) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `HTTP gateway "${gw.name}" target "${target.name}" references qualifier "${target.qualifier}" which is not an endpoint on runtime "${target.runtimeRef}"`,
+          });
         }
       }
     }

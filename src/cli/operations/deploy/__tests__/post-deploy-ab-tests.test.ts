@@ -74,6 +74,7 @@ function makeProjectSpec(abTests: AgentCoreProjectSpec['abTests'] = []): AgentCo
 
 const sampleABTest = {
   name: 'TestOne',
+  mode: 'config-bundle' as const,
   gatewayRef: 'arn:aws:bedrock-agentcore:us-east-1:123456789012:gateway/gw-123',
   variants: [
     {

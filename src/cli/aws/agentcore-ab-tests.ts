@@ -19,15 +19,27 @@ export interface ABTestVariant {
   name: 'C' | 'T1';
   weight: number;
   variantConfiguration: {
-    configurationBundle: {
+    configurationBundle?: {
       bundleArn: string;
       bundleVersion: string;
+    };
+    target?: {
+      name: string;
     };
   };
 }
 
-export interface ABTestEvaluationConfig {
-  onlineEvaluationConfigArn: string;
+export type ABTestEvaluationConfig =
+  | { onlineEvaluationConfigArn: string }
+  | {
+      perVariantOnlineEvaluationConfig: {
+        name: 'C' | 'T1';
+        onlineEvaluationConfigArn: string;
+      }[];
+    };
+
+export interface GatewayFilter {
+  targetPaths: string[];
 }
 
 export interface TrafficAllocationConfig {
@@ -79,6 +91,7 @@ export interface CreateABTestOptions {
   roleArn: string;
   variants: ABTestVariant[];
   evaluationConfig: ABTestEvaluationConfig;
+  gatewayFilter?: GatewayFilter;
   trafficAllocationConfig?: TrafficAllocationConfig;
   maxDurationDays?: number;
   enableOnCreate?: boolean;
@@ -301,6 +314,7 @@ export async function createABTest(options: CreateABTestOptions): Promise<Create
     variants: options.variants,
     evaluationConfig: options.evaluationConfig,
     ...(options.description && { description: options.description }),
+    ...(options.gatewayFilter && { gatewayFilter: options.gatewayFilter }),
     ...(options.trafficAllocationConfig && { trafficAllocationConfig: options.trafficAllocationConfig }),
     ...(options.maxDurationDays !== undefined && { maxDurationDays: options.maxDurationDays }),
     ...(options.enableOnCreate !== undefined && { enableOnCreate: options.enableOnCreate }),

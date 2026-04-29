@@ -1,3 +1,4 @@
+import type { AddTargetBasedABTestOptions } from '../../primitives/ABTestPrimitive';
 import { abTestPrimitive } from '../../primitives/registry';
 import type { GatewayChoice } from '../screens/ab-test/types';
 import { useCallback, useEffect, useState } from 'react';
@@ -53,11 +54,27 @@ export function useCreateABTest() {
     }
   }, []);
 
+  const createTargetBased = useCallback(async (config: Omit<AddTargetBasedABTestOptions, 'roleArn'>) => {
+    setStatus({ state: 'loading' });
+    try {
+      const addResult = await abTestPrimitive.addTargetBased(config);
+      if (!addResult.success) {
+        throw new Error(addResult.error ?? 'Failed to create target-based AB test');
+      }
+      setStatus({ state: 'success' });
+      return { ok: true as const, testName: config.name };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to create target-based AB test.';
+      setStatus({ state: 'error', error: message });
+      return { ok: false as const, error: message };
+    }
+  }, []);
+
   const reset = useCallback(() => {
     setStatus({ state: 'idle' });
   }, []);
 
-  return { status, createABTest: create, reset };
+  return { status, createABTest: create, createTargetBasedABTest: createTargetBased, reset };
 }
 
 export function useExistingABTestNames() {

@@ -416,7 +416,12 @@ function ResultsView({ result, config, filePath, onRunAnother, onExit }: Results
   const toolResult = result.result?.toolDescriptionRecommendationResult;
 
   return (
-    <Screen title="Recommendation Complete [preview]" onExit={onExit} helpText={HELP_TEXT.NAVIGATE_SELECT} exitEnabled={false}>
+    <Screen
+      title="Recommendation Complete [preview]"
+      onExit={onExit}
+      helpText={HELP_TEXT.NAVIGATE_SELECT}
+      exitEnabled={false}
+    >
       <Panel fullWidth>
         <Box flexDirection="column">
           <Text color="green">✓ Recommendation complete</Text>

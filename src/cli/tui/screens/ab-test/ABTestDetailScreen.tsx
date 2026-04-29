@@ -3,6 +3,7 @@ import { getABTest, updateABTest } from '../../../aws/agentcore-ab-tests';
 import type { GetABTestResult } from '../../../aws/agentcore-ab-tests';
 import { getOnlineEvaluationConfig } from '../../../aws/agentcore-control';
 import { getHttpGateway, listHttpGatewayTargets } from '../../../aws/agentcore-http-gateways';
+import { dnsSuffix } from '../../../aws/partition';
 import { getErrorMessage } from '../../../errors';
 import { GradientText, Screen } from '../../components';
 import type { Delivery, DeliverySource } from '@aws-sdk/client-cloudwatch-logs';
@@ -27,7 +28,7 @@ function gatewayUrlFromArn(arn: string): string {
   const region = parts[3];
   const gatewayId = parts[5]?.split('/')[1];
   if (region && gatewayId) {
-    return `https://${gatewayId}.gateway.bedrock-agentcore.${region}.amazonaws.com`;
+    return `https://${gatewayId}.gateway.bedrock-agentcore.${region}.${dnsSuffix(region)}`;
   }
   return arn;
 }
@@ -90,18 +91,28 @@ async function runDebugChecks(test: GetABTestResult, region: string): Promise<De
     detail: test.roleArn ?? 'No role ARN',
   });
 
-  // 2. Online Eval Config
-  const evalConfigArn = test.evaluationConfig.onlineEvaluationConfigArn;
-  const evalConfigId = extractId(evalConfigArn);
-  try {
-    const evalConfig = await getOnlineEvaluationConfig({ region, configId: evalConfigId });
-    results.push({
-      label: 'Online Eval Config',
-      status: evalConfig.executionStatus === 'ENABLED' ? 'pass' : 'fail',
-      detail: `${evalConfig.configName} — ${evalConfig.executionStatus}`,
-    });
-  } catch (err) {
-    results.push({ label: 'Online Eval Config', status: 'fail', detail: getErrorMessage(err) });
+  // 2. Online Eval Config(s)
+  const evalConfigArns: { name: string; arn: string }[] =
+    'perVariantOnlineEvaluationConfig' in test.evaluationConfig
+      ? test.evaluationConfig.perVariantOnlineEvaluationConfig.map(v => ({
+          name: v.name,
+          arn: v.onlineEvaluationConfigArn,
+        }))
+      : [{ name: '', arn: test.evaluationConfig.onlineEvaluationConfigArn }];
+
+  for (const { name: variantName, arn: evalArn } of evalConfigArns) {
+    const evalConfigId = extractId(evalArn);
+    const labelSuffix = variantName ? ` (${variantName})` : '';
+    try {
+      const evalConfig = await getOnlineEvaluationConfig({ region, configId: evalConfigId });
+      results.push({
+        label: `Online Eval Config${labelSuffix}`,
+        status: evalConfig.executionStatus === 'ENABLED' ? 'pass' : 'fail',
+        detail: `${evalConfig.configName} — ${evalConfig.executionStatus}`,
+      });
+    } catch (err) {
+      results.push({ label: `Online Eval Config${labelSuffix}`, status: 'fail', detail: getErrorMessage(err) });
+    }
   }
 
   // 2b. Gateway Role
@@ -176,59 +187,53 @@ async function runDebugChecks(test: GetABTestResult, region: string): Promise<De
     results.push({ label: 'Gateway Spans', status: 'fail', detail: getErrorMessage(err) });
   }
 
-  // 5. Eval Results with variant breakdown
-  try {
-    const evalLogGroup = `/aws/bedrock-agentcore/evaluations/results/${evalConfigId}`;
-    const thirtyMinAgo = Date.now() - 30 * 60 * 1000;
+  // 5. Eval Results — check each eval config's log group
+  const thirtyMinAgo = Date.now() - 30 * 60 * 1000;
+  for (const { name: variantName, arn: evalArn } of evalConfigArns) {
+    const configId = extractId(evalArn);
+    const labelSuffix = variantName ? ` (${variantName})` : '';
+    try {
+      const evalLogGroup = `/aws/bedrock-agentcore/evaluations/results/${configId}`;
 
-    const [allEvents, controlEvents, treatmentEvents] = await Promise.all([
-      logsClient.send(new FilterLogEventsCommand({ logGroupName: evalLogGroup, startTime: thirtyMinAgo, limit: 1 })),
-      logsClient.send(
-        new FilterLogEventsCommand({
-          logGroupName: evalLogGroup,
-          startTime: thirtyMinAgo,
-          filterPattern: `"experiment.treatment_name" "C" "${test.abTestArn}"`,
-          limit: 100,
-        })
-      ),
-      logsClient.send(
-        new FilterLogEventsCommand({
-          logGroupName: evalLogGroup,
-          startTime: thirtyMinAgo,
-          filterPattern: `"experiment.treatment_name" "T1" "${test.abTestArn}"`,
-          limit: 100,
-        })
-      ),
-    ]);
+      const [allEvents, taggedEvents] = await Promise.all([
+        logsClient.send(new FilterLogEventsCommand({ logGroupName: evalLogGroup, startTime: thirtyMinAgo, limit: 1 })),
+        logsClient.send(
+          new FilterLogEventsCommand({
+            logGroupName: evalLogGroup,
+            startTime: thirtyMinAgo,
+            filterPattern: `"${test.abTestArn}"`,
+            limit: 100,
+          })
+        ),
+      ]);
 
-    const hasResults = (allEvents.events?.length ?? 0) > 0;
-    const controlCount = controlEvents.events?.length ?? 0;
-    const treatmentCount = treatmentEvents.events?.length ?? 0;
+      const hasResults = (allEvents.events?.length ?? 0) > 0;
+      const taggedCount = taggedEvents.events?.length ?? 0;
 
-    if (!hasResults) {
+      if (!hasResults) {
+        results.push({
+          label: `Eval Results${labelSuffix}`,
+          status: 'warn',
+          detail: 'No eval results yet — wait ~5m after session timeout for evaluator to process',
+        });
+      } else {
+        results.push({
+          label: `Eval Results${labelSuffix}`,
+          status: taggedCount > 0 ? 'pass' : 'warn',
+          detail:
+            taggedCount > 0
+              ? `${taggedCount} results tagged with AB test`
+              : 'Results exist but none tagged with variant — check gateway trace delivery',
+        });
+      }
+    } catch (err) {
+      const msg = getErrorMessage(err);
       results.push({
-        label: 'Eval Results (last 30m)',
-        status: 'warn',
-        detail: 'No eval results yet — wait ~5m after session timeout for evaluator to process',
-      });
-    } else {
-      const tagged = controlCount + treatmentCount;
-      results.push({
-        label: 'Eval Results (last 30m)',
-        status: tagged > 0 ? 'pass' : 'warn',
-        detail:
-          tagged > 0
-            ? `C: ${controlCount}, T1: ${treatmentCount}`
-            : 'Results exist but none tagged with variant — check gateway trace delivery',
+        label: `Eval Results${labelSuffix}`,
+        status: msg.includes('ResourceNotFoundException') ? 'warn' : 'fail',
+        detail: msg.includes('ResourceNotFoundException') ? 'Log group not found — evaluator has not run yet' : msg,
       });
     }
-  } catch (err) {
-    const msg = getErrorMessage(err);
-    results.push({
-      label: 'Eval Results',
-      status: msg.includes('ResourceNotFoundException') ? 'warn' : 'fail',
-      detail: msg.includes('ResourceNotFoundException') ? 'Log group not found — evaluator has not run yet' : msg,
-    });
   }
 
   // 6. Aggregation Results
@@ -251,6 +256,7 @@ export function ABTestDetailScreen({ abTestId, region, onExit }: ABTestDetailScr
   const [error, setError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [confirmingStop, setConfirmingStop] = useState(false);
+  const [confirmingPromote, setConfirmingPromote] = useState(false);
   const [debugResults, setDebugResults] = useState<DebugCheckResult[] | null>(null);
   const [debugLoading, setDebugLoading] = useState(false);
   const [targetName, setTargetName] = useState<string>('');
@@ -317,6 +323,44 @@ export function ABTestDetailScreen({ abTestId, region, onExit }: ABTestDetailScr
       return;
     }
 
+    if (confirmingPromote) {
+      if (input === 'y' || input === 'Y') {
+        setConfirmingPromote(false);
+        setActionMessage('Promoting...');
+        void (async () => {
+          try {
+            // Stop the AB test
+            await updateABTest({ region, abTestId, executionStatus: 'STOPPED' });
+            for (let i = 0; i < 5; i++) {
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              const result = await getABTest({ region, abTestId });
+              setTest(result);
+              if (result.executionStatus === 'STOPPED') break;
+            }
+
+            // Apply promotion to agentcore.json
+            let promotionDetail = '';
+            try {
+              const { promoteABTestConfig } = await import('../../../operations/ab-test/promote');
+              const promoResult = await promoteABTestConfig(abTestId, test.name);
+              promotionDetail = promoResult.promoted
+                ? `${promoResult.promotionDetail} Run \`agentcore deploy\` to apply.`
+                : promoResult.promotionDetail;
+            } catch {
+              // Config update failed — still report the stop
+            }
+
+            setActionMessage(promotionDetail || 'AB test stopped. Run `agentcore deploy` to apply.');
+          } catch (err) {
+            setActionMessage(`Error: ${getErrorMessage(err)}`);
+          }
+        })();
+      } else {
+        setConfirmingPromote(false);
+      }
+      return;
+    }
+
     if (input === 'p' || input === 'P') {
       void performAction('PAUSED', 'Pausing');
     }
@@ -327,6 +371,11 @@ export function ABTestDetailScreen({ abTestId, region, onExit }: ABTestDetailScr
 
     if (input === 's' || input === 'S') {
       setConfirmingStop(true);
+      setActionMessage(null);
+    }
+
+    if (input === 'w' || input === 'W') {
+      setConfirmingPromote(true);
       setActionMessage(null);
     }
 
@@ -367,7 +416,14 @@ export function ABTestDetailScreen({ abTestId, region, onExit }: ABTestDetailScr
   const executionColor =
     test.executionStatus === 'RUNNING' ? 'green' : test.executionStatus === 'PAUSED' ? 'yellow' : 'red';
 
-  const helpKeys = 'P pause · R resume · S stop · D debug · Esc exit';
+  const helpParts: string[] = [];
+  if (test.executionStatus === 'RUNNING') {
+    helpParts.push('P pause', 'S stop', 'W promote');
+  } else if (test.executionStatus === 'PAUSED') {
+    helpParts.push('R resume', 'S stop', 'W promote');
+  }
+  helpParts.push('D debug', 'Esc exit');
+  const helpKeys = helpParts.join(' · ');
 
   // Build status text: only show provisioning status if not ACTIVE
   const statusPrefix = test.status !== 'ACTIVE' ? `${test.status}  ` : '';
@@ -401,10 +457,12 @@ export function ABTestDetailScreen({ abTestId, region, onExit }: ABTestDetailScr
           </Box>
         )}
 
-        {/* ── Header: Line 3 — online eval ────────────────────── */}
-        <Box>
-          <Text dimColor>{`Online Eval: ${extractId(test.evaluationConfig.onlineEvaluationConfigArn)}`}</Text>
-        </Box>
+        {/* ── Header: Line 3 — online eval (only for single-config mode) ── */}
+        {'onlineEvaluationConfigArn' in test.evaluationConfig && (
+          <Box>
+            <Text dimColor>{`Online Eval: ${extractId(test.evaluationConfig.onlineEvaluationConfigArn)}`}</Text>
+          </Box>
+        )}
 
         {/* ── Description (if present) ────────────────────────── */}
         {test.description && (
@@ -418,16 +476,20 @@ export function ABTestDetailScreen({ abTestId, region, onExit }: ABTestDetailScr
           <Box flexDirection="column" minWidth={colW} marginRight={2}>
             <Text bold>{'CONTROL (C)'}</Text>
             <Text color="cyan">{`${String(controlVariant?.weight ?? 'N/A')}% traffic`}</Text>
-            <Text
-              dimColor
-            >{`${extractId(controlVariant?.variantConfiguration.configurationBundle.bundleArn ?? '')} @ ${shortVersion(controlVariant?.variantConfiguration.configurationBundle.bundleVersion ?? '')}`}</Text>
+            <Text dimColor>
+              {controlVariant?.variantConfiguration.target
+                ? `target: ${controlVariant.variantConfiguration.target.name}`
+                : `${extractId(controlVariant?.variantConfiguration.configurationBundle?.bundleArn ?? '')} @ ${shortVersion(controlVariant?.variantConfiguration.configurationBundle?.bundleVersion ?? '')}`}
+            </Text>
           </Box>
           <Box flexDirection="column">
             <Text bold>{'TREATMENT (T1)'}</Text>
             <Text color="cyan">{`${String(treatmentVariant?.weight ?? 'N/A')}% traffic`}</Text>
-            <Text
-              dimColor
-            >{`${extractId(treatmentVariant?.variantConfiguration.configurationBundle.bundleArn ?? '')} @ ${shortVersion(treatmentVariant?.variantConfiguration.configurationBundle.bundleVersion ?? '')}`}</Text>
+            <Text dimColor>
+              {treatmentVariant?.variantConfiguration.target
+                ? `target: ${treatmentVariant.variantConfiguration.target.name}`
+                : `${extractId(treatmentVariant?.variantConfiguration.configurationBundle?.bundleArn ?? '')} @ ${shortVersion(treatmentVariant?.variantConfiguration.configurationBundle?.bundleVersion ?? '')}`}
+            </Text>
           </Box>
         </Box>
 
@@ -523,7 +585,20 @@ export function ABTestDetailScreen({ abTestId, region, onExit }: ABTestDetailScr
         {confirmingStop && (
           <Box marginTop={1}>
             <Text color="yellow" bold>
-              {'Stop this AB test permanently? This cannot be undone. (Y/n)'}
+              {
+                'Stop this AB test permanently? All traffic will shift to the control variant. This cannot be undone. (Y/n)'
+              }
+            </Text>
+          </Box>
+        )}
+
+        {/* ── Promote confirmation ─────────────────────────────── */}
+        {confirmingPromote && (
+          <Box marginTop={1}>
+            <Text color="green" bold>
+              {
+                'Promote treatment as winner? This will stop the AB test and update the control endpoint to the treatment version. Run `agentcore deploy` after to apply. (Y/n)'
+              }
             </Text>
           </Box>
         )}

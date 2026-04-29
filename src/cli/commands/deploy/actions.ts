@@ -397,8 +397,12 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
     const evaluators = parseEvaluatorOutputs(outputs, evaluatorNames);
 
     // Parse online eval config outputs
-    const onlineEvalNames = (context.projectSpec.onlineEvalConfigs ?? []).map(c => c.name);
-    const onlineEvalConfigs = parseOnlineEvalOutputs(outputs, onlineEvalNames);
+    const onlineEvalSpecs = (context.projectSpec.onlineEvalConfigs ?? []).map(c => ({
+      name: c.name,
+      agent: c.agent,
+      endpoint: c.endpoint,
+    }));
+    const onlineEvalConfigs = parseOnlineEvalOutputs(outputs, onlineEvalSpecs);
 
     // Parse policy engine outputs
     const policyEngineSpecs = context.projectSpec.policyEngines ?? [];
@@ -473,14 +477,14 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
     // Only enable configs that are newly deployed — skip configs that already existed before this
     // deploy run, so we don't re-enable configs a customer intentionally disabled.
     const postDeployWarnings: string[] = [];
-    const onlineEvalSpecs = context.projectSpec.onlineEvalConfigs ?? [];
+    const onlineEvalFullSpecs = context.projectSpec.onlineEvalConfigs ?? [];
     const deployedOnlineEvalConfigs = deployedState.targets?.[target.name]?.resources?.onlineEvalConfigs ?? {};
     const previouslyDeployedOnlineEvals = existingState?.targets?.[target.name]?.resources?.onlineEvalConfigs ?? {};
-    const newOnlineEvalSpecs = onlineEvalSpecs.filter(c => !previouslyDeployedOnlineEvals[c.name]);
-    if (newOnlineEvalSpecs.length > 0 && Object.keys(deployedOnlineEvalConfigs).length > 0) {
+    const newOnlineEvalFullSpecs = onlineEvalFullSpecs.filter(c => !previouslyDeployedOnlineEvals[c.name]);
+    if (newOnlineEvalFullSpecs.length > 0 && Object.keys(deployedOnlineEvalConfigs).length > 0) {
       const enableResult = await enableOnlineEvalConfigs({
         region: target.region,
-        onlineEvalConfigs: newOnlineEvalSpecs,
+        onlineEvalConfigs: newOnlineEvalFullSpecs,
         deployedOnlineEvalConfigs,
       });
 

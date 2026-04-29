@@ -25,13 +25,13 @@ import { parseAndNormalizeHeaders } from '../commands/shared/header-utils';
 import type { VpcOptions } from '../commands/shared/vpc-utils';
 import { VPC_ENDPOINT_WARNING, parseCommaSeparatedList } from '../commands/shared/vpc-utils';
 import { getErrorMessage } from '../errors';
+import { createConfigBundleForAgent } from '../operations/agent/config-bundle-defaults';
 import {
   mapGenerateConfigToRenderConfig,
   mapModelProviderToCredentials,
   mapModelProviderToIdentityProviders,
   writeAgentToProject,
 } from '../operations/agent/generate';
-import { createConfigBundleForAgent } from '../operations/agent/config-bundle-defaults';
 import { executeImportAgent } from '../operations/agent/import';
 import { setupPythonProject } from '../operations/python';
 import type { RemovalPreview, RemovalResult, SchemaChange } from '../operations/remove/types';
@@ -255,7 +255,10 @@ export class AgentPrimitive extends BasePrimitive<AddAgentOptions, RemovableReso
         '--session-storage-mount-path <path>',
         'Absolute mount path for session filesystem storage (e.g. /mnt/session-storage) [non-interactive]'
       )
-      .option('--with-config-bundle', 'Create a config bundle wired into the agent template [preview] [non-interactive]')
+      .option(
+        '--with-config-bundle',
+        'Create a config bundle wired into the agent template [preview] [non-interactive]'
+      )
       .option('--json', 'Output as JSON [non-interactive]')
       .action(async options => {
         if (!findConfigRoot()) {
@@ -614,5 +617,4 @@ export class AgentPrimitive extends BasePrimitive<AddAgentOptions, RemovableReso
 
     return { success: true, agentName: options.name };
   }
-
 }

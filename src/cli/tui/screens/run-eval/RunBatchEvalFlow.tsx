@@ -862,7 +862,12 @@ function ResultsView({ result, savedFilePath, onRunAnother, onExit }: ResultsVie
   }, [result.results, summaries]);
 
   return (
-    <Screen title="Batch Evaluation Complete [preview]" onExit={onExit} helpText={HELP_TEXT.NAVIGATE_SELECT} exitEnabled={false}>
+    <Screen
+      title="Batch Evaluation Complete [preview]"
+      onExit={onExit}
+      helpText={HELP_TEXT.NAVIGATE_SELECT}
+      exitEnabled={false}
+    >
       <Panel fullWidth>
         <Box flexDirection="column">
           <Text color="green">✓ Batch evaluation complete</Text>

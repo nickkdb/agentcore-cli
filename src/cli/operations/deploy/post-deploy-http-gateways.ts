@@ -5,6 +5,7 @@ import {
   createHttpGatewayTarget,
   deleteHttpGateway,
   deleteHttpGatewayTarget,
+  getHttpGatewayTarget,
   listAllHttpGateways,
   listHttpGatewayTargets,
   waitForGatewayReady,
@@ -92,6 +93,82 @@ export async function setupHttpGateways(options: SetupHttpGatewaysOptions): Prom
       if (existingGateway) {
         // Already deployed — ensure trace delivery is enabled (may have failed on initial deploy)
         await ensureTraceDelivery({ region, gatewayName: gwSpec.name, gatewayArn: existingGateway.gatewayArn });
+
+        // Create or update targets from httpGateways[].targets (for target-based AB testing)
+        if (gwSpec.targets && gwSpec.targets.length > 0) {
+          // List existing targets to avoid unnecessary create calls
+          const existingTargetsByName = new Map<string, { targetId: string }>();
+          try {
+            const existingTargets = await listHttpGatewayTargets({
+              region,
+              gatewayId: existingGateway.gatewayId,
+            });
+            for (const t of existingTargets.targets) {
+              existingTargetsByName.set(t.name, { targetId: t.targetId });
+            }
+          } catch {
+            // If list fails, fall through and let create handle 409s
+          }
+
+          for (const tgt of gwSpec.targets) {
+            const existingTarget = existingTargetsByName.get(tgt.name);
+            if (existingTarget) {
+              // Target exists by name — check if qualifier matches
+              try {
+                const targetDetails = await getHttpGatewayTarget({
+                  region,
+                  gatewayId: existingGateway.gatewayId,
+                  targetId: existingTarget.targetId,
+                });
+                const httpConfig = (
+                  targetDetails.targetConfiguration as
+                    | {
+                        http?: {
+                          agentcoreRuntime?: { qualifier?: string };
+                          runtimeTargetConfiguration?: { qualifier?: string };
+                        };
+                      }
+                    | undefined
+                )?.http;
+                const existingQualifier =
+                  httpConfig?.agentcoreRuntime?.qualifier ?? httpConfig?.runtimeTargetConfiguration?.qualifier;
+                const specQualifier = tgt.qualifier ?? 'DEFAULT';
+                if (existingQualifier === specQualifier) {
+                  // Qualifier matches — skip
+                  continue;
+                }
+                // Qualifier differs — delete old target and recreate
+                await deleteHttpGatewayTarget({
+                  region,
+                  gatewayId: existingGateway.gatewayId,
+                  targetId: existingTarget.targetId,
+                });
+              } catch {
+                // If get/delete fails, fall through to create which will handle conflicts
+              }
+            }
+            try {
+              const tgtRuntime = deployedResources?.runtimes?.[tgt.runtimeRef];
+              if (!tgtRuntime) continue;
+              const tgtResult = await createHttpGatewayTarget({
+                region,
+                gatewayId: existingGateway.gatewayId,
+                targetName: tgt.name,
+                runtimeArn: tgtRuntime.runtimeArn,
+                qualifier: tgt.qualifier,
+              });
+              await waitForTargetReady({
+                region,
+                gatewayId: existingGateway.gatewayId,
+                targetId: tgtResult.targetId,
+              });
+            } catch (tgtErr) {
+              if (tgtErr instanceof Error && tgtErr.message.includes('409')) continue;
+              // Non-fatal
+            }
+          }
+        }
+
         httpGateways[gwSpec.name] = existingGateway;
         results.push({
           gatewayName: gwSpec.name,
@@ -249,6 +326,35 @@ export async function setupHttpGateways(options: SetupHttpGatewaysOptions): Prom
             `Enable manually with: aws logs put-delivery-source --name gateway-traces-${gwSpec.name} --resource-arn ${createResult.gatewayArn} --log-type TRACES --region ${region}`,
         });
         continue;
+      }
+
+      // Create additional targets from httpGateways[].targets (for target-based AB testing)
+      if (gwSpec.targets && gwSpec.targets.length > 0) {
+        for (const tgt of gwSpec.targets) {
+          try {
+            const tgtRuntime = deployedResources?.runtimes?.[tgt.runtimeRef];
+            if (!tgtRuntime) {
+              // Runtime not deployed, skip this target
+              continue;
+            }
+            const tgtResult = await createHttpGatewayTarget({
+              region,
+              gatewayId: createResult.gatewayId,
+              targetName: tgt.name,
+              runtimeArn: tgtRuntime.runtimeArn,
+              qualifier: tgt.qualifier,
+            });
+            await waitForTargetReady({
+              region,
+              gatewayId: createResult.gatewayId,
+              targetId: tgtResult.targetId,
+            });
+          } catch (tgtErr) {
+            // 409 = already exists, skip
+            if (tgtErr instanceof Error && tgtErr.message.includes('409')) continue;
+            // Non-fatal: log but continue
+          }
+        }
       }
 
       httpGateways[gwSpec.name] = {

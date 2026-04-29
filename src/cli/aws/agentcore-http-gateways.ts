@@ -6,6 +6,7 @@
  * direct HTTP requests with SigV4 signing against the control plane.
  */
 import { getCredentialProvider } from './account';
+import { dnsSuffix } from './partition';
 import { Sha256 } from '@aws-crypto/sha256-js';
 import { defaultProvider } from '@aws-sdk/credential-provider-node';
 import { HttpRequest } from '@smithy/protocol-http';
@@ -38,6 +39,7 @@ export interface CreateHttpGatewayTargetOptions {
   gatewayId: string;
   targetName: string;
   runtimeArn: string;
+  qualifier?: string;
 }
 
 export interface CreateHttpGatewayTargetResult {
@@ -153,7 +155,7 @@ function getControlPlaneEndpoint(region: string): string {
   const stage = process.env.AGENTCORE_STAGE?.toLowerCase();
   if (stage === 'beta') return `https://beta.${region}.elcapcp.genesis-primitives.aws.dev`;
   if (stage === 'gamma') return `https://gamma.${region}.elcapcp.genesis-primitives.aws.dev`;
-  return `https://bedrock-agentcore-control.${region}.amazonaws.com`;
+  return `https://bedrock-agentcore-control.${region}.${dnsSuffix(region)}`;
 }
 
 async function signedRequest(options: {
@@ -244,9 +246,9 @@ export async function createHttpGatewayTarget(
     clientToken: randomUUID(),
     targetConfiguration: {
       http: {
-        runtimeTargetConfiguration: {
+        agentcoreRuntime: {
           arn: options.runtimeArn,
-          qualifier: 'DEFAULT',
+          qualifier: options.qualifier ?? 'DEFAULT',
         },
       },
     },
@@ -261,9 +263,34 @@ export async function createHttpGatewayTarget(
       body,
     })) as CreateHttpGatewayTargetResult;
   } catch (err) {
-    throw new Error(
-      `Failed to create target "${options.targetName}" in gateway ${options.gatewayId}: ${err instanceof Error ? err.message : String(err)}`
-    );
+    // Fallback: retry with legacy field name if the new name is not yet supported
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('ValidationException') || msg.includes('400')) {
+      const legacyBody = JSON.stringify({
+        name: options.targetName,
+        clientToken: randomUUID(),
+        targetConfiguration: {
+          http: {
+            runtimeTargetConfiguration: {
+              arn: options.runtimeArn,
+              qualifier: options.qualifier ?? 'DEFAULT',
+            },
+          },
+        },
+        credentialProviderConfigurations: [{ credentialProviderType: 'GATEWAY_IAM_ROLE' }],
+      });
+      try {
+        return (await signedRequest({
+          region: options.region,
+          method: 'POST',
+          path: `/gateways/${options.gatewayId}/targets`,
+          body: legacyBody,
+        })) as CreateHttpGatewayTargetResult;
+      } catch {
+        // Fall through to original error
+      }
+    }
+    throw new Error(`Failed to create target "${options.targetName}" in gateway ${options.gatewayId}: ${msg}`);
   }
 }
 

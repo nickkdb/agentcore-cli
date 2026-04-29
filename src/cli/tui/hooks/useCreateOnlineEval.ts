@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 interface CreateOnlineEvalConfig {
   name: string;
   agent: string;
+  endpoint?: string;
   evaluators: string[];
   samplingRate: number;
   enableOnCreate: boolean;
@@ -20,6 +21,7 @@ export function useCreateOnlineEval() {
       const addResult = await onlineEvalConfigPrimitive.add({
         name: config.name,
         agent: config.agent,
+        ...(config.endpoint ? { endpoint: config.endpoint } : {}),
         evaluators: config.evaluators,
         samplingRate: config.samplingRate,
         enableOnCreate: config.enableOnCreate,

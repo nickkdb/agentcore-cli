@@ -83,14 +83,29 @@ async function getRegion(cliRegion?: string): Promise<string> {
   return process.env.AWS_DEFAULT_REGION ?? process.env.AWS_REGION ?? 'us-east-1';
 }
 
-async function resolveABTestId(testName: string, region: string): Promise<{ abTestId: string; error?: string }> {
+async function resolveABTestId(
+  testName: string,
+  region: string
+): Promise<{ abTestId: string; region: string; error?: string }> {
+  let projectName: string | undefined;
   try {
     const configIO = new ConfigIO();
     const deployedState = await configIO.readDeployedState();
-    for (const target of Object.values(deployedState.targets ?? {})) {
+    const awsTargets = await configIO.readAWSDeploymentTargets();
+
+    try {
+      const projectSpec = await configIO.readProjectSpec();
+      projectName = projectSpec.name;
+    } catch {
+      // Project spec unavailable
+    }
+
+    for (const [targetName, target] of Object.entries(deployedState.targets ?? {})) {
       const abTests = target.resources?.abTests;
       if (abTests?.[testName]) {
-        return { abTestId: abTests[testName].abTestId };
+        const targetConfig = awsTargets.find(t => t.name === targetName);
+        const resolvedRegion = targetConfig?.region ?? region;
+        return { abTestId: abTests[testName].abTestId, region: resolvedRegion };
       }
     }
   } catch {
@@ -99,13 +114,17 @@ async function resolveABTestId(testName: string, region: string): Promise<{ abTe
 
   try {
     const result = await listABTests({ region, maxResults: 100 });
-    const match = result.abTests.find(t => t.name === testName);
-    if (match) return { abTestId: match.abTestId };
+    // Match against both prefixed name ({projectName}_{testName}) and bare testName (backwards compat)
+    const prefixedName = projectName ? `${projectName}_${testName}` : undefined;
+    const match =
+      result.abTests.find(t => prefixedName != null && t.name === prefixedName) ??
+      result.abTests.find(t => t.name === testName);
+    if (match) return { abTestId: match.abTestId, region };
   } catch {
     // API call failed
   }
 
-  return { abTestId: '', error: `AB test "${testName}" not found in deployed state or API.` };
+  return { abTestId: '', region, error: `AB test "${testName}" not found in deployed state or API.` };
 }
 
 function registerABTestSubcommand(parent: Command, action: 'pause' | 'resume') {
@@ -273,6 +292,78 @@ export const registerStop = (program: Command) => {
           console.log(JSON.stringify({ success: false, error: getErrorMessage(error) }));
         } else {
           render(<Text color="red">Error: {getErrorMessage(error)}</Text>);
+        }
+        process.exit(1);
+      }
+    });
+};
+
+export const registerPromote = (program: Command) => {
+  const promoteCmd = program.command('promote').description('Promote resources');
+
+  promoteCmd
+    .command('ab-test')
+    .description('Promote the winning treatment of an A/B test')
+    .argument('<name>', 'AB test name')
+    .option('--region <region>', 'AWS region')
+    .option('--json', 'Output as JSON')
+    .action(async (name: string, cliOptions: { region?: string; json?: boolean }) => {
+      try {
+        const region = await getRegion(cliOptions.region);
+        const { abTestId, error } = await resolveABTestId(name, region);
+        if (error) {
+          if (cliOptions.json) {
+            console.log(JSON.stringify({ success: false, error }));
+          } else {
+            console.error(error);
+          }
+          process.exit(1);
+        }
+
+        // Stop the AB test
+        const result = await updateABTest({
+          region,
+          abTestId,
+          executionStatus: 'STOPPED',
+        });
+
+        // Apply promotion to agentcore.json
+        const { promoteABTestConfig } = await import('../../operations/ab-test/promote');
+        let promoted = false;
+        let mode: string | undefined;
+        let promotionDetail = '';
+        try {
+          const promoResult = await promoteABTestConfig(abTestId, name);
+          promoted = promoResult.promoted;
+          mode = promoResult.mode;
+          promotionDetail = promoResult.promotionDetail;
+        } catch {
+          // Config read/write failed
+        }
+
+        if (cliOptions.json) {
+          console.log(
+            JSON.stringify({
+              success: true,
+              ...result,
+              ...(mode && { mode }),
+              promoted,
+              ...(promotionDetail && { promotionDetail }),
+            })
+          );
+        } else {
+          console.log(`AB test "${name}" stopped.`);
+          if (promoted) {
+            console.log(`\n${promotionDetail}`);
+            console.log(`\nRun: agentcore deploy`);
+          }
+        }
+        process.exit(0);
+      } catch (error) {
+        if (cliOptions.json) {
+          console.log(JSON.stringify({ success: false, error: getErrorMessage(error) }));
+        } else {
+          console.error(`Error: ${getErrorMessage(error)}`);
         }
         process.exit(1);
       }

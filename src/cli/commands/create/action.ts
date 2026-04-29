@@ -11,12 +11,12 @@ import type {
 import { getErrorMessage } from '../../errors';
 import { checkCreateDependencies } from '../../external-requirements';
 import { initGitRepo, setupPythonProject, writeEnvFile, writeGitignore } from '../../operations';
+import { createConfigBundleForAgent } from '../../operations/agent/config-bundle-defaults';
 import {
   mapGenerateConfigToRenderConfig,
   mapModelProviderToIdentityProviders,
   writeAgentToProject,
 } from '../../operations/agent/generate';
-import { createConfigBundleForAgent } from '../../operations/agent/config-bundle-defaults';
 import { executeImportAgent } from '../../operations/agent/import';
 import { credentialPrimitive } from '../../primitives/registry';
 import { createDefaultProjectSpec } from '../../project';

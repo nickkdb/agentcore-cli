@@ -27,15 +27,29 @@ async function getRegion(cliRegion?: string): Promise<string> {
   return process.env.AWS_DEFAULT_REGION ?? process.env.AWS_REGION ?? 'us-east-1';
 }
 
-async function resolveABTestId(testName: string, region: string): Promise<{ abTestId: string; error?: string }> {
+async function resolveABTestId(
+  testName: string,
+  region: string
+): Promise<{ abTestId: string; region: string; error?: string }> {
+  let projectName: string | undefined;
   try {
     const configIO = new ConfigIO();
     const deployedState = await configIO.readDeployedState();
+    const awsTargets = await configIO.readAWSDeploymentTargets();
 
-    for (const target of Object.values(deployedState.targets ?? {})) {
+    try {
+      const projectSpec = await configIO.readProjectSpec();
+      projectName = projectSpec.name;
+    } catch {
+      // Project spec unavailable
+    }
+
+    for (const [targetName, target] of Object.entries(deployedState.targets ?? {})) {
       const abTests = target.resources?.abTests;
       if (abTests?.[testName]) {
-        return { abTestId: abTests[testName].abTestId };
+        const targetConfig = awsTargets.find(t => t.name === targetName);
+        const resolvedRegion = targetConfig?.region ?? region;
+        return { abTestId: abTests[testName].abTestId, region: resolvedRegion };
       }
     }
   } catch {
@@ -44,15 +58,17 @@ async function resolveABTestId(testName: string, region: string): Promise<{ abTe
 
   try {
     const result = await listABTests({ region, maxResults: 100 });
-    const match = result.abTests.find(t => t.name === testName);
+    // Match against both prefixed name ({projectName}_{testName}) and bare testName (backwards compat)
+    const prefixedName = projectName ? `${projectName}_${testName}` : undefined;
+    const match = result.abTests.find(t => (prefixedName && t.name === prefixedName) || t.name === testName);
     if (match) {
-      return { abTestId: match.abTestId };
+      return { abTestId: match.abTestId, region };
     }
   } catch {
     // API call failed
   }
 
-  return { abTestId: '', error: `AB test "${testName}" not found in deployed state or API.` };
+  return { abTestId: '', region, error: `AB test "${testName}" not found in deployed state or API.` };
 }
 
 function gatewayUrlFromArn(arn: string): string {
@@ -71,14 +87,21 @@ function formatABTestDetails(test: GetABTestResult): string {
   lines.push(`  Status: ${test.status}`);
   lines.push(`  Execution: ${test.executionStatus}`);
   lines.push(`  Invocation URL: ${gatewayUrlFromArn(test.gatewayArn)}/<target>/invocations`);
-  lines.push(`  Online Eval: ${test.evaluationConfig.onlineEvaluationConfigArn}`);
+  lines.push(
+    `  Online Eval: ${'onlineEvaluationConfigArn' in test.evaluationConfig ? test.evaluationConfig.onlineEvaluationConfigArn : 'per-variant'}`
+  );
   if (test.description) lines.push(`  Description: ${test.description}`);
 
   for (const variant of test.variants) {
     const bundleRef = variant.variantConfiguration.configurationBundle;
-    lines.push(
-      `  Variant ${variant.name}: weight=${variant.weight}, bundle=${bundleRef.bundleArn}, version=${bundleRef.bundleVersion}`
-    );
+    const targetRef = variant.variantConfiguration.target;
+    if (targetRef) {
+      lines.push(`  Variant ${variant.name}: weight=${variant.weight}, target=${targetRef.name}`);
+    } else if (bundleRef) {
+      lines.push(
+        `  Variant ${variant.name}: weight=${variant.weight}, bundle=${bundleRef.bundleArn}, version=${bundleRef.bundleVersion}`
+      );
+    }
   }
 
   // TODO(post-preview): Re-enable max duration display once configurable duration is launched.
@@ -139,7 +162,6 @@ export function registerABTestCommand(program: Command): void {
           }
           process.exit(1);
         }
-
         const result = await getABTest({ region, abTestId });
 
         if (cliOptions.json) {

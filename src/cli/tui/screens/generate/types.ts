@@ -160,7 +160,14 @@ export const NETWORK_MODE_OPTIONS = [
   { id: 'VPC', title: 'VPC', description: 'Attach to your VPC' },
 ] as const;
 
-export type AdvancedSettingId = 'dockerfile' | 'network' | 'headers' | 'auth' | 'lifecycle' | 'filesystem' | 'configBundle';
+export type AdvancedSettingId =
+  | 'dockerfile'
+  | 'network'
+  | 'headers'
+  | 'auth'
+  | 'lifecycle'
+  | 'filesystem'
+  | 'configBundle';
 
 export const ADVANCED_SETTING_OPTIONS = [
   { id: 'dockerfile', title: 'Custom Dockerfile', description: 'Specify a custom Dockerfile path' },
@@ -169,7 +176,11 @@ export const ADVANCED_SETTING_OPTIONS = [
   { id: 'auth', title: 'Custom auth (JWT)', description: 'OIDC-based token validation for inbound requests' },
   { id: 'lifecycle', title: 'Lifecycle timeouts', description: 'Idle timeout & max instance lifetime' },
   { id: 'filesystem', title: 'Session filesystem storage', description: 'Persist files across session stop/resume' },
-  { id: 'configBundle', title: 'Config bundle [preview]', description: 'Manage system prompt and tool config without redeploying' },
+  {
+    id: 'configBundle',
+    title: 'Config bundle [preview]',
+    description: 'Manage system prompt and tool config without redeploying',
+  },
 ] as const;
 
 /** Dockerfile filename regex — must match the Zod schema in agent-env.ts */
