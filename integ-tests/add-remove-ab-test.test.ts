@@ -40,9 +40,9 @@ describe('integration: add and remove ab-test', () => {
     expect(json.error).toContain('--name');
   });
 
-  it('requires --gateway-arn when --name is provided', async () => {
+  it('requires --runtime when --name is provided', async () => {
     const json = await runFailure(['add', 'ab-test', '--name', 'Test1', '--json'], project.projectPath);
-    expect(json.error).toContain('--gateway-arn');
+    expect(json.error).toContain('--runtime');
   });
 
   it('adds ab-test with all required flags', async () => {
@@ -52,8 +52,8 @@ describe('integration: add and remove ab-test', () => {
         'ab-test',
         '--name',
         'MyIntegTest',
-        '--gateway-arn',
-        'arn:aws:bedrock-agentcore:us-east-1:123456789012:gateway/gw-abc',
+        '--runtime',
+        'MyAgent',
         '--control-bundle',
         'arn:bundle:control',
         '--control-version',
@@ -93,8 +93,8 @@ describe('integration: add and remove ab-test', () => {
         'ab-test',
         '--name',
         'MyIntegTest',
-        '--gateway-arn',
-        'arn:gw',
+        '--runtime',
+        'MyAgent',
         '--control-bundle',
         'arn:cb',
         '--control-version',
@@ -124,8 +124,8 @@ describe('integration: add and remove ab-test', () => {
         'ab-test',
         '--name',
         'BadWeights',
-        '--gateway-arn',
-        'arn:gw',
+        '--runtime',
+        'MyAgent',
         '--control-bundle',
         'arn:cb',
         '--control-version',
