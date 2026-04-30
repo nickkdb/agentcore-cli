@@ -1,3 +1,4 @@
+import { ConfigIO } from '../../../../lib';
 import { getCredentialProvider } from '../../../aws/account';
 import { getABTest, updateABTest } from '../../../aws/agentcore-ab-tests';
 import type { GetABTestResult } from '../../../aws/agentcore-ab-tests';
@@ -6,13 +7,7 @@ import { getHttpGateway, listHttpGatewayTargets } from '../../../aws/agentcore-h
 import { dnsSuffix } from '../../../aws/partition';
 import { getErrorMessage } from '../../../errors';
 import { GradientText, Screen } from '../../components';
-import type { Delivery, DeliverySource } from '@aws-sdk/client-cloudwatch-logs';
-import {
-  CloudWatchLogsClient,
-  DescribeDeliveriesCommand,
-  DescribeDeliverySourcesCommand,
-  FilterLogEventsCommand,
-} from '@aws-sdk/client-cloudwatch-logs';
+import { CloudWatchLogsClient, FilterLogEventsCommand } from '@aws-sdk/client-cloudwatch-logs';
 import { Box, Text, useInput } from 'ink';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -128,66 +123,79 @@ async function runDebugChecks(test: GetABTestResult, region: string): Promise<De
     results.push({ label: 'Gateway Role', status: 'fail', detail: getErrorMessage(err) });
   }
 
-  // 3. Gateway Trace Delivery (source + destination + delivery)
+  // 5. Runtime spans — check for experiment metadata per variant in aws/spans
+  //    service.name in spans follows the pattern: {projectName}_{agentName}.{endpoint}
+  //    We derive the service name prefix from the deployed state runtimeId (strip random suffix).
+  const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
+  const variantNames = test.variants.map(v => v.name);
+  let serviceNamePrefix: string | undefined;
   try {
-    const [sources, deliveries] = await Promise.all([
-      paginateDeliverySources(logsClient),
-      paginateDeliveries(logsClient),
+    const configIO = new ConfigIO();
+    const deployedState = await configIO.readDeployedState();
+    for (const [, target] of Object.entries(deployedState.targets ?? {})) {
+      const runtimes = target.resources?.runtimes ?? {};
+      const firstRuntime = Object.values(runtimes)[0];
+      if (firstRuntime?.runtimeId) {
+        // runtimeId is "{projectName}_{agentName}-{randomSuffix}", strip the suffix
+        serviceNamePrefix = firstRuntime.runtimeId.replace(/-[^-]+$/, '');
+        break;
+      }
+    }
+  } catch {
+    // Fall back to abTestArn-only filtering if deployed state isn't readable
+  }
+
+  try {
+    const baseFilter = serviceNamePrefix ? `"${serviceNamePrefix}"` : '"gen_ai_agent"';
+    const [allRuntimeSpans, ...variantSpanResults] = await Promise.all([
+      logsClient.send(
+        new FilterLogEventsCommand({
+          logGroupName: 'aws/spans',
+          startTime: twoHoursAgo,
+          filterPattern: baseFilter,
+          limit: 1,
+        })
+      ),
+      ...variantNames.map(name =>
+        logsClient.send(
+          new FilterLogEventsCommand({
+            logGroupName: 'aws/spans',
+            startTime: twoHoursAgo,
+            filterPattern: `"${test.abTestArn}" "${name}"`,
+            limit: 50,
+          })
+        )
+      ),
     ]);
 
-    const traceSources = sources.filter(s => s.logType === 'TRACES');
+    const hasRuntimeSpans = (allRuntimeSpans.events?.length ?? 0) > 0;
+    const totalExperimentSpans = variantSpanResults.reduce((sum, r) => sum + (r.events?.length ?? 0), 0);
 
-    const source = traceSources.find(s => s.resourceArns?.some(a => a.includes(gatewayId)));
-    const delivery = source ? deliveries.find(d => d.deliverySourceName === source.name) : undefined;
+    for (let i = 0; i < variantNames.length; i++) {
+      const name = variantNames[i];
+      const count = variantSpanResults[i]?.events?.length ?? 0;
+      const label = `Runtime Experiment Spans — ${name} (2h)`;
 
-    const hasSource = !!source;
-    const hasDelivery = !!delivery;
-
-    if (hasSource && hasDelivery) {
-      results.push({
-        label: 'Gateway Trace Delivery',
-        status: 'pass',
-        detail: `Source: ${source.name} → Delivery: ${delivery.id}`,
-      });
-    } else if (hasSource) {
-      results.push({
-        label: 'Gateway Trace Delivery',
-        status: 'fail',
-        detail: `Source exists (${source.name}) but no delivery/destination — traces not flowing`,
-      });
-    } else {
-      results.push({
-        label: 'Gateway Trace Delivery',
-        status: 'fail',
-        detail: 'Not enabled — gateway spans will not flow to aws/spans',
-      });
+      if (count > 0) {
+        results.push({ label, status: 'pass', detail: `${count} spans with experiment metadata` });
+      } else if (hasRuntimeSpans) {
+        results.push({
+          label,
+          status: 'warn',
+          detail:
+            totalExperimentSpans > 0
+              ? `No spans for ${name} — traffic may not be reaching this variant`
+              : 'Runtime spans found but no experiment metadata — update bedrock-agentcore SDK to the latest version',
+        });
+      } else {
+        results.push({ label, status: 'warn', detail: 'No runtime spans found — send traffic to the gateway first' });
+      }
     }
   } catch (err) {
-    results.push({ label: 'Gateway Trace Delivery', status: 'fail', detail: getErrorMessage(err) });
+    results.push({ label: 'Runtime Experiment Spans', status: 'fail', detail: getErrorMessage(err) });
   }
 
-  // 4. Gateway Spans in aws/spans
-  const fiveMinAgo = Date.now() - 5 * 60 * 1000;
-  try {
-    const spanEvents = await logsClient.send(
-      new FilterLogEventsCommand({
-        logGroupName: 'aws/spans',
-        startTime: fiveMinAgo,
-        filterPattern: `"${gatewayId}"`,
-        limit: 50,
-      })
-    );
-    const count = spanEvents.events?.length ?? 0;
-    results.push({
-      label: 'Gateway Spans (last 5m)',
-      status: count > 0 ? 'pass' : 'warn',
-      detail: count > 0 ? `${count} spans found` : 'No recent spans — send traffic through the gateway',
-    });
-  } catch (err) {
-    results.push({ label: 'Gateway Spans', status: 'fail', detail: getErrorMessage(err) });
-  }
-
-  // 5. Eval Results — check each eval config's log group
+  // 6. Eval Results — check each eval config's log group
   const thirtyMinAgo = Date.now() - 30 * 60 * 1000;
   for (const { name: variantName, arn: evalArn } of evalConfigArns) {
     const configId = extractId(evalArn);
@@ -612,26 +620,4 @@ export function ABTestDetailScreen({ abTestId, region, onExit }: ABTestDetailScr
       </Box>
     </Screen>
   );
-}
-
-async function paginateDeliverySources(client: CloudWatchLogsClient): Promise<DeliverySource[]> {
-  const all: DeliverySource[] = [];
-  let nextToken: string | undefined;
-  do {
-    const resp = await client.send(new DescribeDeliverySourcesCommand({ nextToken }));
-    all.push(...(resp.deliverySources ?? []));
-    nextToken = resp.nextToken;
-  } while (nextToken);
-  return all;
-}
-
-async function paginateDeliveries(client: CloudWatchLogsClient): Promise<Delivery[]> {
-  const all: Delivery[] = [];
-  let nextToken: string | undefined;
-  do {
-    const resp = await client.send(new DescribeDeliveriesCommand({ nextToken }));
-    all.push(...(resp.deliveries ?? []));
-    nextToken = resp.nextToken;
-  } while (nextToken);
-  return all;
 }

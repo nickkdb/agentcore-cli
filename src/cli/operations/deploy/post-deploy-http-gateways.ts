@@ -12,13 +12,6 @@ import {
   waitForTargetReady,
 } from '../../aws/agentcore-http-gateways';
 import {
-  CloudWatchLogsClient,
-  CreateDeliveryCommand,
-  DescribeDeliverySourcesCommand,
-  PutDeliveryDestinationCommand,
-  PutDeliverySourceCommand,
-} from '@aws-sdk/client-cloudwatch-logs';
-import {
   CreateRoleCommand,
   DeleteRoleCommand,
   DeleteRolePolicyCommand,
@@ -81,8 +74,6 @@ export async function setupHttpGateways(options: SetupHttpGatewaysOptions): Prom
   // If someone has "httpGateways": null in their JSON, it passes through as null.
   const httpGatewaySpecs = projectSpec.httpGateways ?? [];
 
-  const specGatewayNames = new Set(httpGatewaySpecs.map(gw => gw.name));
-
   // Create or skip gateways from the spec
   for (const gwSpec of httpGatewaySpecs) {
     let resolvedRoleArn: string | undefined;
@@ -91,8 +82,7 @@ export async function setupHttpGateways(options: SetupHttpGatewaysOptions): Prom
       const existingGateway = existingHttpGateways?.[gwSpec.name];
 
       if (existingGateway) {
-        // Already deployed — ensure trace delivery is enabled (may have failed on initial deploy)
-        await ensureTraceDelivery({ region, gatewayName: gwSpec.name, gatewayArn: existingGateway.gatewayArn });
+        // Already deployed
 
         // Create or update targets from httpGateways[].targets (for target-based AB testing)
         if (gwSpec.targets && gwSpec.targets.length > 0) {
@@ -185,8 +175,6 @@ export async function setupHttpGateways(options: SetupHttpGatewaysOptions): Prom
         console.warn(
           `Warning: HTTP gateway "${gwSpec.name}" found by name but local state was lost. Target and role state may be incomplete — consider re-deploying.`
         );
-        // Ensure trace delivery is enabled (may have failed on initial deploy)
-        await ensureTraceDelivery({ region, gatewayName: gwSpec.name, gatewayArn: existingByName.gatewayArn });
         httpGateways[gwSpec.name] = {
           gatewayId: existingByName.gatewayId,
           gatewayArn: existingByName.gatewayArn,
@@ -288,46 +276,6 @@ export async function setupHttpGateways(options: SetupHttpGatewaysOptions): Prom
         continue;
       }
 
-      // Enable gateway trace delivery to aws/spans (required for online eval + AB test aggregation).
-      // Without this, the AB test aggregation pipeline won't receive gateway spans.
-      try {
-        await enableGatewayTraceDelivery({
-          region,
-          gatewayName: gwSpec.name,
-          gatewayArn: createResult.gatewayArn,
-        });
-      } catch (traceErr) {
-        // Rollback: delete target, then gateway, then role
-        try {
-          if (targetId) {
-            await deleteHttpGatewayTarget({ region, gatewayId: createResult.gatewayId, targetId });
-          }
-        } catch {
-          // Best-effort target cleanup
-        }
-        try {
-          await deleteHttpGateway({ region, gatewayId: createResult.gatewayId });
-        } catch {
-          // Best-effort gateway cleanup
-        }
-        if (roleCreatedByCli && resolvedRoleArn) {
-          try {
-            await deleteHttpGatewayRole(region, resolvedRoleArn);
-          } catch {
-            // Best-effort role cleanup
-          }
-        }
-
-        results.push({
-          gatewayName: gwSpec.name,
-          status: 'error',
-          error:
-            `Trace delivery failed, gateway rolled back: ${traceErr instanceof Error ? traceErr.message : String(traceErr)}. ` +
-            `Enable manually with: aws logs put-delivery-source --name gateway-traces-${gwSpec.name} --resource-arn ${createResult.gatewayArn} --log-type TRACES --region ${region}`,
-        });
-        continue;
-      }
-
       // Create additional targets from httpGateways[].targets (for target-based AB testing)
       if (gwSpec.targets && gwSpec.targets.length > 0) {
         for (const tgt of gwSpec.targets) {
@@ -389,63 +337,8 @@ export async function setupHttpGateways(options: SetupHttpGatewaysOptions): Prom
     }
   }
 
-  // Delete orphaned HTTP gateways (in deployed-state but removed from spec)
-  if (existingHttpGateways) {
-    for (const [gwName, gwState] of Object.entries(existingHttpGateways)) {
-      if (!specGatewayNames.has(gwName)) {
-        try {
-          // Delete all targets before deleting the gateway.
-          // Use known targetId first; fall back to listing all targets.
-          const targetIds: string[] = [];
-          if (gwState.targetId) {
-            targetIds.push(gwState.targetId);
-          } else {
-            try {
-              const targets = await listHttpGatewayTargets({
-                region,
-                gatewayId: gwState.gatewayId,
-                maxResults: 100,
-              });
-              targetIds.push(...targets.targets.map(t => t.targetId));
-            } catch {
-              // Best-effort — proceed with gateway deletion anyway
-            }
-          }
-
-          for (const targetId of targetIds) {
-            await deleteHttpGatewayTarget({
-              region,
-              gatewayId: gwState.gatewayId,
-              targetId,
-            });
-          }
-
-          // Delete gateway after all targets are fully deleted
-          const deleteResult = await deleteHttpGateway({
-            region,
-            gatewayId: gwState.gatewayId,
-          });
-
-          // Clean up the auto-created IAM role only if gateway deletion succeeded
-          if (deleteResult.success && gwState.roleCreatedByCli && gwState.roleArn) {
-            await deleteHttpGatewayRole(region, gwState.roleArn);
-          }
-
-          results.push({
-            gatewayName: gwName,
-            status: deleteResult.success ? 'deleted' : 'error',
-            error: deleteResult.error,
-          });
-        } catch (err) {
-          results.push({
-            gatewayName: gwName,
-            status: 'error',
-            error: err instanceof Error ? err.message : String(err),
-          });
-        }
-      }
-    }
-  }
+  // Orphaned gateways are deleted by deleteOrphanedHttpGateways() which runs
+  // as a separate pre-pass. No deletion loop here.
 
   return {
     results,
@@ -455,98 +348,117 @@ export async function setupHttpGateways(options: SetupHttpGatewaysOptions): Prom
 }
 
 // ============================================================================
-// Gateway Trace Delivery
+// Shared Gateway Deletion
 // ============================================================================
 
 /**
- * Enable CloudWatch log delivery for gateway traces.
+ * Delete an HTTP gateway and all its targets. Best-effort — target failures
+ * are warned but don't prevent gateway deletion attempt.
  *
- * Sets up the full delivery chain: source → destination → delivery.
- * Required for online eval + AB test aggregation pipeline.
- *
- * 1. PutDeliverySource — register gateway as TRACES source
- * 2. PutDeliveryDestination — create XRAY destination
- * 3. CreateDelivery — connect source to destination
+ * Order: targets → gateway → role
  */
-async function enableGatewayTraceDelivery(options: {
+export async function deleteHttpGatewayWithTargets(options: {
   region: string;
+  gatewayId: string;
   gatewayName: string;
-  gatewayArn: string;
-}): Promise<void> {
-  const { region, gatewayName, gatewayArn } = options;
-  const credentials = getCredentialProvider();
-  const logsClient = new CloudWatchLogsClient({ region, credentials });
+  knownTargetId?: string;
+  roleArn?: string;
+  roleCreatedByCli?: boolean;
+}): Promise<{ success: boolean; error?: string }> {
+  const { region, gatewayId, gatewayName, knownTargetId, roleArn, roleCreatedByCli } = options;
 
-  const sourceName = `agentcore-gw-traces-${gatewayName}`;
-  const destName = `agentcore-gw-dest-${gatewayName}`;
-
-  // 1. Register gateway as trace source
-  await logsClient.send(
-    new PutDeliverySourceCommand({
-      name: sourceName,
-      resourceArn: gatewayArn,
-      logType: 'TRACES',
-    })
-  );
-
-  // 2. Create XRAY destination
-  const destResult = await logsClient.send(
-    new PutDeliveryDestinationCommand({
-      name: destName,
-      deliveryDestinationType: 'XRAY',
-    })
-  );
-
-  const destArn = destResult.deliveryDestination?.arn;
-  if (!destArn) {
-    throw new Error('PutDeliveryDestination returned no ARN');
+  const targetIds: string[] = [];
+  if (knownTargetId) {
+    targetIds.push(knownTargetId);
   }
-
-  // 3. Connect source to destination (may already exist on redeploy)
   try {
-    await logsClient.send(
-      new CreateDeliveryCommand({
-        deliverySourceName: sourceName,
-        deliveryDestinationArn: destArn,
-      })
-    );
-  } catch (err) {
-    const errName = (err as { name?: string }).name;
-    if (errName !== 'ConflictException') throw err;
-    // Delivery already exists — idempotent
+    const targets = await listHttpGatewayTargets({ region, gatewayId, maxResults: 100 });
+    for (const t of targets.targets) {
+      if (!targetIds.includes(t.targetId)) {
+        targetIds.push(t.targetId);
+      }
+    }
+  } catch {
+    // Best-effort — proceed with whatever IDs we have
   }
 
-  // Gateway trace delivery enabled
+  for (const targetId of targetIds) {
+    try {
+      await deleteHttpGatewayTarget({ region, gatewayId, targetId });
+    } catch (err) {
+      console.warn(
+        `Warning: Failed to delete target ${targetId} on gateway "${gatewayName}": ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+  }
+
+  const deleteResult = await deleteHttpGateway({ region, gatewayId });
+  if (!deleteResult.success) {
+    return { success: false, error: deleteResult.error };
+  }
+
+  if (roleCreatedByCli && roleArn) {
+    try {
+      await deleteHttpGatewayRole(region, roleArn);
+    } catch {
+      // Best-effort role cleanup
+    }
+  }
+
+  return { success: true };
 }
 
 /**
- * Check if trace delivery is already enabled for a gateway.
- * If not, enable it. Failures are logged as warnings (non-fatal for existing gateways).
+ * Delete orphaned HTTP gateways (in deployed-state but removed from spec).
+ * Call before setupHttpGateways.
  */
-async function ensureTraceDelivery(options: {
+export async function deleteOrphanedHttpGateways(options: {
   region: string;
-  gatewayName: string;
-  gatewayArn: string;
-}): Promise<void> {
-  const { region, gatewayName, gatewayArn } = options;
-  const credentials = getCredentialProvider();
-  const logsClient = new CloudWatchLogsClient({ region, credentials });
+  projectSpec: AgentCoreProjectSpec;
+  existingHttpGateways?: Record<string, HttpGatewayDeployedState>;
+}): Promise<{ results: HttpGatewaySetupResult[]; hasErrors: boolean }> {
+  const { region, projectSpec, existingHttpGateways } = options;
+  if (!existingHttpGateways) return { results: [], hasErrors: false };
 
-  try {
-    const sources = await logsClient.send(new DescribeDeliverySourcesCommand({}));
-    const hasSource = (sources.deliverySources ?? []).some(
-      s => s.resourceArns?.some(a => a.endsWith(`/${gatewayArn.split('/').pop()!}`)) && s.logType === 'TRACES'
-    );
+  const specGatewayNames = new Set(projectSpec.httpGateways.map(g => g.name));
+  const results: HttpGatewaySetupResult[] = [];
 
-    if (!hasSource) {
-      await enableGatewayTraceDelivery({ region, gatewayName, gatewayArn });
+  for (const [gwName, gwState] of Object.entries(existingHttpGateways)) {
+    if (!specGatewayNames.has(gwName)) {
+      try {
+        const result = await deleteHttpGatewayWithTargets({
+          region,
+          gatewayId: gwState.gatewayId,
+          gatewayName: gwName,
+          knownTargetId: gwState.targetId,
+          roleArn: gwState.roleArn,
+          roleCreatedByCli: gwState.roleCreatedByCli,
+        });
+
+        results.push({
+          gatewayName: gwName,
+          status: result.success ? 'deleted' : 'error',
+          error: result.error,
+        });
+      } catch (err) {
+        results.push({
+          gatewayName: gwName,
+          status: 'error',
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
-  } catch (err) {
-    console.warn(
-      `Warning: Could not verify/enable trace delivery for gateway "${gatewayName}": ${err instanceof Error ? err.message : String(err)}`
-    );
   }
+
+  return {
+    results,
+    hasErrors: results.some(r => r.status === 'error'),
+  };
 }
+
+// ============================================================================
+// Gateway Trace Delivery
+// ============================================================================
 
 // ============================================================================
 // Helpers

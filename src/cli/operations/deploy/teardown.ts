@@ -1,10 +1,9 @@
 import { CONFIG_DIR, ConfigIO } from '../../../lib';
 import type { AwsDeploymentTarget } from '../../../schema';
 import { withTargetRegion } from '../../aws';
-import { deleteHttpGateway, deleteHttpGatewayTarget } from '../../aws/agentcore-http-gateways';
 import { CdkToolkitWrapper, silentIoHost } from '../../cdk/toolkit-lib';
 import { type DiscoveredStack, findStack } from '../../cloudformation/stack-discovery';
-import { deleteHttpGatewayRole } from './post-deploy-http-gateways';
+import { deleteHttpGatewayWithTargets } from './post-deploy-http-gateways';
 import { StackSelectionStrategy } from '@aws-cdk/toolkit-lib';
 import { existsSync } from 'fs';
 import { join } from 'path';
@@ -137,32 +136,18 @@ export async function performStackTeardown(targetName: string): Promise<StackTea
       if (region) {
         for (const [gwName, gwState] of Object.entries(httpGateways)) {
           try {
-            if (gwState.targetId) {
-              const targetResult = await deleteHttpGatewayTarget({
-                region,
-                gatewayId: gwState.gatewayId,
-                targetId: gwState.targetId,
-              });
-              if (!targetResult.success) {
-                console.warn(
-                  `Warning: Failed to delete target for HTTP gateway "${gwName}": ${targetResult.error}. ` +
-                    `Skipping gateway deletion — manual cleanup may be required.`
-                );
-                continue;
-              }
-            }
-            const gwResult = await deleteHttpGateway({ region, gatewayId: gwState.gatewayId });
-            if (!gwResult.success) {
-              console.warn(`Warning: Failed to delete HTTP gateway "${gwName}": ${gwResult.error}`);
-            } else {
+            const result = await deleteHttpGatewayWithTargets({
+              region,
+              gatewayId: gwState.gatewayId,
+              gatewayName: gwName,
+              knownTargetId: gwState.targetId,
+              roleArn: gwState.roleArn,
+              roleCreatedByCli: gwState.roleCreatedByCli,
+            });
+            if (result.success) {
               console.log(`Deleted HTTP gateway "${gwName}"`);
-            }
-            if (gwResult.success && gwState.roleCreatedByCli && gwState.roleArn) {
-              try {
-                await deleteHttpGatewayRole(region, gwState.roleArn);
-              } catch {
-                // Best-effort role cleanup
-              }
+            } else {
+              console.warn(`Warning: Failed to delete HTTP gateway "${gwName}": ${result.error}`);
             }
           } catch (err) {
             console.warn(
