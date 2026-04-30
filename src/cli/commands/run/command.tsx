@@ -274,11 +274,11 @@ export const registerRun = (program: Command) => {
     .option('--bundle-version <version>', 'Config bundle version (used with --bundle-name)')
     .option(
       '--system-prompt-json-path <path>',
-      'JSONPath to the system prompt field within the config bundle (e.g. "$.myAgentArn.configuration.systemPrompt")'
+      'Field name under "configuration" in the bundle (e.g. "systemPrompt"). The CLI resolves it to the full path automatically. Do not use bracket notation — use dot notation only.'
     )
     .option(
       '--tool-desc-json-path <pair...>',
-      'Tool name:JSONPath pairs for tool descriptions in a config bundle (e.g. --tool-desc-json-path "search:$.myAgentArn.configuration.searchDesc")'
+      'Tool name:field pairs for tool descriptions in a config bundle (e.g. --tool-desc-json-path "search:searchDesc"). The CLI resolves each to the full path automatically.'
     )
     .option(
       '--tools <pair...>',
