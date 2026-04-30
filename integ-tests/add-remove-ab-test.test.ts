@@ -28,7 +28,12 @@ describe('integration: add and remove ab-test', () => {
   let project: TestProject;
 
   beforeAll(async () => {
-    project = await createTestProject();
+    project = await createTestProject({
+      language: 'Python',
+      framework: 'Strands',
+      modelProvider: 'Bedrock',
+      memory: 'none',
+    });
   });
 
   afterAll(async () => {
