@@ -21,15 +21,15 @@ agentcore run batch-evaluation -r MyAgent -e Builtin.Helpfulness --json
 
 Built-in evaluators provided by AgentCore:
 
-| Evaluator                          | What it measures                              |
-| ---------------------------------- | --------------------------------------------- |
-| `Builtin.Correctness`              | Factual accuracy of responses                 |
-| `Builtin.Helpfulness`              | How well responses address the user's goal    |
-| `Builtin.Faithfulness`             | Grounding in tool results / provided context  |
-| `Builtin.GoalSuccessRate`          | Whether the agent achieved the user's goal    |
-| `Builtin.ToolSelectionAccuracy`    | Correct tool chosen for the task              |
-| `Builtin.Completeness`             | Whether all parts of the request were handled |
-| `Builtin.TrajectoryExactOrderMatch`| Tool call sequence matches expected trajectory|
+| Evaluator                           | What it measures                               |
+| ----------------------------------- | ---------------------------------------------- |
+| `Builtin.Correctness`               | Factual accuracy of responses                  |
+| `Builtin.Helpfulness`               | How well responses address the user's goal     |
+| `Builtin.Faithfulness`              | Grounding in tool results / provided context   |
+| `Builtin.GoalSuccessRate`           | Whether the agent achieved the user's goal     |
+| `Builtin.ToolSelectionAccuracy`     | Correct tool chosen for the task               |
+| `Builtin.Completeness`              | Whether all parts of the request were handled  |
+| `Builtin.TrajectoryExactOrderMatch` | Tool call sequence matches expected trajectory |
 
 Custom evaluators defined in your project (via `agentcore add evaluator`) can also be used.
 
@@ -68,16 +68,14 @@ agentcore run batch-evaluation \
     "sessionId": "<session-id>",
     "groundTruth": {
       "inline": {
-        "assertions": [
-          {"text": "Agent should use the lookup_order tool"}
-        ],
+        "assertions": [{ "text": "Agent should use the lookup_order tool" }],
         "expectedTrajectory": {
           "toolNames": ["lookup_order"]
         },
         "turns": [
           {
             "input": "What's the status of order ORD-1001?",
-            "expectedResponse": {"text": "Order ORD-1001 has been delivered"}
+            "expectedResponse": { "text": "Order ORD-1001 has been delivered" }
           }
         ]
       }
@@ -87,6 +85,7 @@ agentcore run batch-evaluation \
 ```
 
 All fields inside `inline` are optional — include only what's relevant:
+
 - `assertions` — free-text expectations evaluated by `Builtin.GoalSuccessRate`
 - `expectedTrajectory` — tool call sequence evaluated by `Builtin.TrajectoryExactOrderMatch`
 - `turns` — input/expected-response pairs evaluated by `Builtin.Correctness`
@@ -126,8 +125,8 @@ agentcore
 agentcore run batch-evaluation -r MyAgent -e Builtin.Helpfulness --json
 ```
 
-Returns `batchEvaluationId`, `evaluationResults` with `numberOfSessionsCompleted`, `evaluatorSummaries`
-with per-evaluator `averageScore`.
+Returns `batchEvaluationId`, `evaluationResults` with `numberOfSessionsCompleted`, `evaluatorSummaries` with
+per-evaluator `averageScore`.
 
 ## TUI Wizard
 

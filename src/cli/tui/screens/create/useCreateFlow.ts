@@ -3,13 +3,13 @@ import type { DeployedState } from '../../../../schema';
 import { getErrorMessage } from '../../../errors';
 import { CreateLogger } from '../../../logging';
 import { initGitRepo, setupPythonProject, writeEnvFile, writeGitignore } from '../../../operations';
+import { createConfigBundleForAgent } from '../../../operations/agent/config-bundle-defaults';
 import {
   mapGenerateConfigToRenderConfig,
   mapModelProviderToCredentials,
   mapModelProviderToIdentityProviders,
   writeAgentToProject,
 } from '../../../operations/agent/generate';
-import { createConfigBundleForAgent } from '../../../operations/agent/config-bundle-defaults';
 import { executeImportAgent } from '../../../operations/agent/import';
 import { createManagedOAuthCredential } from '../../../primitives/auth-utils';
 import { computeDefaultCredentialEnvVarName } from '../../../primitives/credential-utils';

@@ -1354,7 +1354,9 @@ export function AddAgentScreen({ existingAgentNames, onComplete, onExit }: AddAg
               ...(byoConfig.sessionStorageMountPath
                 ? [{ label: 'Session Storage', value: byoConfig.sessionStorageMountPath }]
                 : []),
-              ...(byoConfig.withConfigBundle ? [{ label: 'Config Bundle', value: 'Yes (auto-created on deploy)' }] : []),
+              ...(byoConfig.withConfigBundle
+                ? [{ label: 'Config Bundle', value: 'Yes (auto-created on deploy)' }]
+                : []),
             ]}
           />
         )}

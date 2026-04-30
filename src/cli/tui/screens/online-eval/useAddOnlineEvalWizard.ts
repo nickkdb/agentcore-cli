@@ -1,4 +1,4 @@
-import type { AddOnlineEvalConfig, AddOnlineEvalStep, RuntimeEndpointEntry } from './types';
+import type { AddOnlineEvalConfig, AddOnlineEvalStep } from './types';
 import { DEFAULT_SAMPLING_RATE } from './types';
 import { useCallback, useRef, useState } from 'react';
 

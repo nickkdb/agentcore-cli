@@ -244,7 +244,7 @@ export async function handleInvoke(context: InvokeContext, options: InvokeOption
       userId: options.userId,
       headers: options.headers,
       bearerToken: options.bearerToken,
-        baggage,
+      baggage,
     };
 
     // list-tools: list available MCP tools
@@ -459,7 +459,7 @@ export async function handleInvoke(context: InvokeContext, options: InvokeOption
     userId: options.userId,
     headers: options.headers,
     bearerToken: options.bearerToken,
-        baggage,
+    baggage,
   });
 
   logger.logResponse(response.content);

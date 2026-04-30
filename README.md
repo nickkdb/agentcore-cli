@@ -110,27 +110,27 @@ agentcore invoke
 
 ### Evaluations
 
-| Command                  | Description                                   |
-| ------------------------ | --------------------------------------------- |
-| `add evaluator`          | Add a custom LLM-as-a-Judge evaluator         |
-| `add online-eval`        | Add continuous evaluation for live traffic     |
-| `run eval`               | Run on-demand evaluation against agent traces  |
-| `run batch-evaluation`   | Run evaluators across all sessions [preview]   |
-| `run recommendation`     | Optimize prompts and tool descriptions [preview]|
-| `evals history`          | View past eval run results                     |
-| `pause online-eval`      | Pause a deployed online eval config            |
-| `resume online-eval`     | Resume a paused online eval config             |
-| `stop batch-evaluation`  | Stop a running batch evaluation [preview]      |
-| `logs evals`             | Stream or search online eval logs              |
+| Command                 | Description                                      |
+| ----------------------- | ------------------------------------------------ |
+| `add evaluator`         | Add a custom LLM-as-a-Judge evaluator            |
+| `add online-eval`       | Add continuous evaluation for live traffic       |
+| `run eval`              | Run on-demand evaluation against agent traces    |
+| `run batch-evaluation`  | Run evaluators across all sessions [preview]     |
+| `run recommendation`    | Optimize prompts and tool descriptions [preview] |
+| `evals history`         | View past eval run results                       |
+| `pause online-eval`     | Pause a deployed online eval config              |
+| `resume online-eval`    | Resume a paused online eval config               |
+| `stop batch-evaluation` | Stop a running batch evaluation [preview]        |
+| `logs evals`            | Stream or search online eval logs                |
 
 ### Config Bundles [preview]
 
-| Command              | Description                                       |
-| -------------------- | ------------------------------------------------- |
-| `add config-bundle`  | Add a versioned configuration bundle              |
-| `cb versions`        | List version history for a bundle                 |
-| `cb diff`            | Diff two versions of a bundle                     |
-| `cb create-branch`   | Create a new branch on an existing bundle         |
+| Command             | Description                               |
+| ------------------- | ----------------------------------------- |
+| `add config-bundle` | Add a versioned configuration bundle      |
+| `cb versions`       | List version history for a bundle         |
+| `cb diff`           | Diff two versions of a bundle             |
+| `cb create-branch`  | Create a new branch on an existing bundle |
 
 > Create agents with `--with-config-bundle` to auto-wire config bundle support into the generated template.
 

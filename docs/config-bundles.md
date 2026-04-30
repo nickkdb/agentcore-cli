@@ -6,12 +6,12 @@ invocation time from whichever bundle version is active.
 
 ## Concepts
 
-| Concept        | Description                                                                       |
-| -------------- | --------------------------------------------------------------------------------- |
-| **Bundle**     | A named container for component configurations, stored in `agentcore.json`        |
-| **Version**    | An immutable snapshot of a bundle's configuration, created on each deploy or update |
-| **Branch**     | A named lineage within a bundle (e.g. `mainline`, `experiment-1`)                 |
-| **Component**  | A runtime or gateway whose configuration is managed by the bundle                 |
+| Concept       | Description                                                                         |
+| ------------- | ----------------------------------------------------------------------------------- |
+| **Bundle**    | A named container for component configurations, stored in `agentcore.json`          |
+| **Version**   | An immutable snapshot of a bundle's configuration, created on each deploy or update |
+| **Branch**    | A named lineage within a bundle (e.g. `mainline`, `experiment-1`)                   |
+| **Component** | A runtime or gateway whose configuration is managed by the bundle                   |
 
 ## Creating a Config Bundle
 
@@ -42,8 +42,8 @@ The `{{runtime:MyAgent}}` placeholder resolves to the real runtime ARN at deploy
 
 ### Via TUI
 
-Run `agentcore` → Add → select "Configuration Bundle", or select "Config bundle" in the Advanced Configuration
-step when adding an agent.
+Run `agentcore` → Add → select "Configuration Bundle", or select "Config bundle" in the Advanced Configuration step when
+adding an agent.
 
 ## Deploying
 
