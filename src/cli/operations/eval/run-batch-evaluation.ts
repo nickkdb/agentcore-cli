@@ -147,15 +147,19 @@ export async function runBatchEvaluationCommand(
 
     // 3. Start the batch evaluation
     logger?.startStep('Start batch evaluation');
-    const rawName = options.name ?? `${projectSpec.name}_${agent}_${Date.now()}`;
-    const evalName = rawName.replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 48);
-    if (!/^[a-zA-Z]/.test(evalName)) {
-      return {
-        success: false,
-        error: `Batch evaluation name must start with a letter and contain only letters, digits, and underscores (max 48 chars). Got: "${rawName}"`,
-        results: [],
-        logFilePath: logger?.logFilePath,
-      };
+    let evalName: string;
+    if (options.name) {
+      if (!/^[a-zA-Z][a-zA-Z0-9_]{0,47}$/.test(options.name)) {
+        return {
+          success: false,
+          error: `Batch evaluation name must start with a letter and contain only letters, digits, and underscores (max 48 chars). Got: "${options.name}"`,
+          results: [],
+          logFilePath: logger?.logFilePath,
+        };
+      }
+      evalName = options.name;
+    } else {
+      evalName = `${projectSpec.name}_${agent}_${Date.now()}`.replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 48);
     }
 
     onProgress?.('starting', `Starting batch evaluation "${evalName}"...`);
