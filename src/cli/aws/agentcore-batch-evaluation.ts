@@ -323,9 +323,8 @@ function toLegacyStartBody(options: StartBatchEvaluationOptions): string {
     },
   };
 
-  const sessionMetadata = options.evaluationMetadata?.sessionMetadata;
-  if (sessionMetadata && sessionMetadata.length > 0) {
-    body.sessionMetadata = sessionMetadata;
+  if (options.evaluationMetadata) {
+    body.evaluationMetadata = options.evaluationMetadata;
   }
   if (options.clientToken) body.clientToken = options.clientToken;
 
