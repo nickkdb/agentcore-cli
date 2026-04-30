@@ -12,7 +12,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import REGION, RESOURCES_FILE, get_control_client, get_account_id
+from common import REGION, RESOURCE_SUFFIX, RESOURCES_FILE, get_control_client, get_account_id
 
 import boto3
 
