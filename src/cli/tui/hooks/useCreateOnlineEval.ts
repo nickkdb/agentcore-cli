@@ -1,4 +1,5 @@
 import { onlineEvalConfigPrimitive } from '../../primitives/registry';
+import { withAddTelemetry } from '../../telemetry/cli-command-run.js';
 import { useCallback, useEffect, useState } from 'react';
 
 interface CreateOnlineEvalConfig {
@@ -7,6 +8,7 @@ interface CreateOnlineEvalConfig {
   endpoint?: string;
   evaluators: string[];
   samplingRate: number;
+  sessionTimeoutMinutes?: number;
   enableOnCreate: boolean;
 }
 
@@ -18,14 +20,23 @@ export function useCreateOnlineEval() {
   const create = useCallback(async (config: CreateOnlineEvalConfig) => {
     setStatus({ state: 'loading' });
     try {
-      const addResult = await onlineEvalConfigPrimitive.add({
-        name: config.name,
-        agent: config.agent,
-        ...(config.endpoint ? { endpoint: config.endpoint } : {}),
-        evaluators: config.evaluators,
-        samplingRate: config.samplingRate,
-        enableOnCreate: config.enableOnCreate,
-      });
+      const addResult = await withAddTelemetry(
+        'add.online-eval',
+        {
+          evaluator_count: config.evaluators.length,
+          enable_on_create: config.enableOnCreate ?? false,
+        },
+        () =>
+          onlineEvalConfigPrimitive.add({
+            name: config.name,
+            agent: config.agent,
+            ...(config.endpoint ? { endpoint: config.endpoint } : {}),
+            evaluators: config.evaluators,
+            samplingRate: config.samplingRate,
+            ...(config.sessionTimeoutMinutes !== undefined && { sessionTimeoutMinutes: config.sessionTimeoutMinutes }),
+            enableOnCreate: config.enableOnCreate,
+          })
+      );
       if (!addResult.success) {
         throw new Error(addResult.error ?? 'Failed to create online eval config');
       }

@@ -6,6 +6,7 @@ import { runCLI as runCLIImpl } from './cli-runner.js';
 import { expect } from 'vitest';
 
 export { runCLI, spawnAndCollect, cleanSpawnEnv, type RunResult } from './cli-runner.js';
+export { createTelemetryHelper, type TelemetryHelper, type TelemetryEntry } from './telemetry-helper.js';
 export { exists } from './fs-helpers.js';
 export { hasCommand, hasAwsCredentials, prereqs } from './prereqs.js';
 export { createTestProject, type TestProject, type CreateTestProjectOptions } from './project-factory.js';

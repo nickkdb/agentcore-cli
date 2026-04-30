@@ -1,3 +1,4 @@
+import { getOrCreateInstallationId } from '../lib/schemas/io/global-config';
 import { registerABTestCommand } from './commands/abtest';
 import { registerAdd } from './commands/add';
 import { registerConfigBundle } from './commands/config-bundle';
@@ -23,7 +24,6 @@ import { registerTraces } from './commands/traces';
 import { registerUpdate } from './commands/update';
 import { registerValidate } from './commands/validate';
 import { PACKAGE_VERSION, getDistroConfig } from './constants';
-import { getOrCreateInstallationId } from './global-config';
 import { ALL_PRIMITIVES } from './primitives';
 import { TelemetryClientAccessor } from './telemetry';
 import { App } from './tui/App';
