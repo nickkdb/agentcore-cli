@@ -2,7 +2,6 @@ import { ConfigIO } from '../../../../lib';
 import type { DeployedState } from '../../../../schema';
 import { validateAwsCredentials } from '../../../aws/account';
 import { listEvaluators } from '../../../aws/agentcore-control';
-import { deleteRecommendation } from '../../../aws/agentcore-recommendation';
 import { detectRegion } from '../../../aws/region';
 import { getErrorMessage } from '../../../errors';
 import { applyRecommendationToBundle, runRecommendationCommand } from '../../../operations/recommendation';
@@ -20,8 +19,8 @@ import type {
   EvaluatorItem,
   RecommendationWizardConfig,
 } from './types';
-import { Box, Text, useInput } from 'ink';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Box, Text } from 'ink';
+import React, { useCallback, useEffect, useState } from 'react';
 
 type FlowState =
   | { name: 'loading' }
@@ -44,25 +43,6 @@ interface RecommendationFlowProps {
 
 export function RecommendationFlow({ onExit }: RecommendationFlowProps) {
   const [flow, setFlow] = useState<FlowState>({ name: 'loading' });
-  const stoppingRef = useRef(false);
-
-  // Handle Esc to stop a running recommendation
-  useInput((_input, key) => {
-    if (flow.name !== 'running' || !flow.recommendationId || !flow.region || stoppingRef.current) return;
-    if (key.escape) {
-      stoppingRef.current = true;
-      void deleteRecommendation({ region: flow.region, recommendationId: flow.recommendationId }).catch(() => {
-        // Best-effort — the poll loop will pick up the final status
-      });
-      setFlow(prev => {
-        if (prev.name !== 'running') return prev;
-        const steps = prev.steps.map(s =>
-          s.status === 'running' ? { ...s, status: 'error' as const, error: 'Stopping...' } : s
-        );
-        return { ...prev, steps };
-      });
-    }
-  });
 
   // Load agents and evaluators
   useEffect(() => {
@@ -115,28 +95,24 @@ export function RecommendationFlow({ onExit }: RecommendationFlowProps) {
     };
   }, [flow.name]);
 
-  const handleRunComplete = useCallback(
-    (config: RecommendationWizardConfig) => {
-      const willFetchSpans = config.traceSource === 'sessions';
+  const handleRunComplete = useCallback((config: RecommendationWizardConfig) => {
+    const willFetchSpans = config.traceSource === 'sessions';
 
-      const initialSteps: Step[] = [
-        ...(willFetchSpans ? [{ label: 'Fetching session spans from CloudWatch...', status: 'pending' as const }] : []),
-        { label: 'Starting recommendation...', status: 'running' },
-        { label: 'Polling for results', status: 'pending' },
-        { label: 'Saving results', status: 'pending' },
-      ];
+    const initialSteps: Step[] = [
+      ...(willFetchSpans ? [{ label: 'Fetching session spans from CloudWatch...', status: 'pending' as const }] : []),
+      { label: 'Starting recommendation...', status: 'running' },
+      { label: 'Polling for results', status: 'pending' },
+      { label: 'Saving results', status: 'pending' },
+    ];
 
-      // If auto-fetching, the first step is active
-      if (willFetchSpans) {
-        initialSteps[0] = { ...initialSteps[0]!, status: 'running' };
-        initialSteps[1] = { ...initialSteps[1]!, status: 'pending' };
-      }
+    // If auto-fetching, the first step is active
+    if (willFetchSpans) {
+      initialSteps[0] = { ...initialSteps[0]!, status: 'running' };
+      initialSteps[1] = { ...initialSteps[1]!, status: 'pending' };
+    }
 
-      stoppingRef.current = false;
-      setFlow({ name: 'running', config, steps: initialSteps, elapsed: 0 });
-    },
-    [flow]
-  );
+    setFlow({ name: 'running', config, steps: initialSteps, elapsed: 0 });
+  }, []);
 
   // Execute the recommendation when entering 'running' state
   useEffect(() => {
@@ -324,7 +300,6 @@ export function RecommendationFlow({ onExit }: RecommendationFlowProps) {
               <Text dimColor>({timeStr})</Text>
             </Text>
             <StepProgress steps={flow.steps} />
-            {flow.recommendationId && <Text dimColor>Press Esc to stop the recommendation</Text>}
           </Box>
         </Panel>
       </Screen>
