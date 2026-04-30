@@ -9,6 +9,7 @@ import {
   mapModelProviderToIdentityProviders,
   writeAgentToProject,
 } from '../../../operations/agent/generate';
+import { createConfigBundleForAgent } from '../../../operations/agent/config-bundle-defaults';
 import { executeImportAgent } from '../../../operations/agent/import';
 import { createManagedOAuthCredential } from '../../../primitives/auth-utils';
 import { computeDefaultCredentialEnvVarName } from '../../../primitives/credential-utils';
@@ -276,6 +277,7 @@ export function useCreateFlow(cwd: string): CreateFlowState {
                   idleRuntimeSessionTimeout: addAgentConfig.idleRuntimeSessionTimeout,
                   maxLifetime: addAgentConfig.maxLifetime,
                   sessionStorageMountPath: addAgentConfig.sessionStorageMountPath,
+                  withConfigBundle: addAgentConfig.withConfigBundle,
                 };
 
                 logger.logSubStep(`Framework: ${generateConfig.sdk}`);
@@ -337,6 +339,11 @@ export function useCreateFlow(cwd: string): CreateFlowState {
                     spec => configIO.writeProjectSpec(spec),
                     () => configIO.readProjectSpec()
                   );
+                }
+                // Auto-create config bundle when opted in
+                if (addAgentConfig.withConfigBundle) {
+                  logger.logSubStep('Creating config bundle...');
+                  await createConfigBundleForAgent(addAgentConfig.name, configBaseDir);
                 }
               } else if (addAgentConfig.agentType === 'import') {
                 // Import path: delegate to executeImportAgent
