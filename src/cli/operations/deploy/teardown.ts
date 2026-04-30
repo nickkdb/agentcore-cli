@@ -1,6 +1,8 @@
 import { CONFIG_DIR, ConfigIO } from '../../../lib';
 import type { AwsDeploymentTarget } from '../../../schema';
 import { withTargetRegion } from '../../aws';
+import { deleteABTest } from '../../aws/agentcore-ab-tests';
+import { deleteConfigurationBundle } from '../../aws/agentcore-config-bundles';
 import { CdkToolkitWrapper, silentIoHost } from '../../cdk/toolkit-lib';
 import { type DiscoveredStack, findStack } from '../../cloudformation/stack-discovery';
 import { deleteHttpGatewayWithTargets } from './post-deploy-http-gateways';
@@ -113,11 +115,15 @@ export async function performStackTeardown(targetName: string): Promise<StackTea
   const discovered = await discoverDeployedTargets();
   const deployedTarget = discovered.deployedTargets.find(dt => dt.target.name === targetName);
 
-  // Clean up imperatively-created HTTP gateways before stack destruction
+  // Clean up imperatively-created resources before stack destruction
   try {
     const deployedState = await configIO.readDeployedState();
-    const httpGateways = deployedState.targets?.[targetName]?.resources?.httpGateways;
-    if (httpGateways) {
+    const resources = deployedState.targets?.[targetName]?.resources;
+    const httpGateways = resources?.httpGateways;
+    const configBundles = resources?.configBundles;
+    const abTests = resources?.abTests;
+
+    if (httpGateways || configBundles || abTests) {
       let region = deployedTarget?.target.region;
       if (!region) {
         try {
@@ -129,12 +135,10 @@ export async function performStackTeardown(targetName: string): Promise<StackTea
         }
       }
       if (!region) {
-        console.warn(
-          'Warning: Could not determine region for HTTP gateway cleanup — gateways may need manual deletion'
-        );
+        console.warn('Warning: Could not determine region for resource cleanup — resources may need manual deletion');
       }
       if (region) {
-        for (const [gwName, gwState] of Object.entries(httpGateways)) {
+        for (const [gwName, gwState] of Object.entries(httpGateways ?? {})) {
           try {
             const result = await deleteHttpGatewayWithTargets({
               region,
@@ -155,13 +159,39 @@ export async function performStackTeardown(targetName: string): Promise<StackTea
             );
           }
         }
+
+        for (const [bundleName, bundleState] of Object.entries(configBundles ?? {})) {
+          try {
+            await deleteConfigurationBundle({ region, bundleId: bundleState.bundleId });
+            console.log(`Deleted config bundle "${bundleName}"`);
+          } catch (err) {
+            console.warn(
+              `Warning: Error during config bundle "${bundleName}" cleanup: ${err instanceof Error ? err.message : String(err)}`
+            );
+          }
+        }
+
+        for (const [testName, testState] of Object.entries(abTests ?? {})) {
+          try {
+            const result = await deleteABTest({ region, abTestId: testState.abTestId });
+            if (result.success) {
+              console.log(`Deleted AB test "${testName}"`);
+            } else {
+              console.warn(`Warning: Failed to delete AB test "${testName}": ${result.error}`);
+            }
+          } catch (err) {
+            console.warn(
+              `Warning: Error during AB test "${testName}" cleanup: ${err instanceof Error ? err.message : String(err)}`
+            );
+          }
+        }
       }
     }
   } catch (err) {
     // Only suppress "file not found" — other errors (corrupt state, permissions) should warn
     const msg = err instanceof Error ? err.message : String(err);
     if (!msg.includes('ENOENT') && !msg.includes('not found') && !msg.includes('does not exist')) {
-      console.warn(`Warning: Could not read deployed state for HTTP gateway cleanup: ${msg}`);
+      console.warn(`Warning: Could not read deployed state for resource cleanup: ${msg}`);
     }
   }
 
