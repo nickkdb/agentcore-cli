@@ -428,6 +428,7 @@ Target-Based Mode (--mode target-based)
             const { clear, unmount } = render(
               React.createElement(AddFlow, {
                 isInteractive: false,
+                initialResource: 'ab-test',
                 onExit: () => {
                   clear();
                   unmount();

@@ -187,6 +187,7 @@ export class ConfigBundlePrimitive extends BasePrimitive<AddConfigBundleOptions,
               const { clear, unmount } = render(
                 React.createElement(AddFlow, {
                   isInteractive: false,
+                  initialResource: 'config-bundle',
                   onExit: () => {
                     clear();
                     unmount();

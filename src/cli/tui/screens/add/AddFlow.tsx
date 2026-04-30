@@ -187,6 +187,10 @@ function getInitialFlowState(resource?: AddResourceType): FlowState {
       return { name: 'policy-wizard' };
     case 'runtime-endpoint':
       return { name: 'runtime-endpoint-wizard' };
+    case 'config-bundle':
+      return { name: 'config-bundle-wizard' };
+    case 'ab-test':
+      return { name: 'ab-test-wizard' };
     default:
       return { name: 'select' };
   }
