@@ -130,10 +130,12 @@ export async function resolveImportTarget(options: ResolveTargetOptions): Promis
   // Validate ARN format early if provided
   if (
     arn &&
-    !/^arn:[^:]+:bedrock-agentcore:([^:]+):([^:]+):(runtime|memory|evaluator|online-evaluation-config)\/(.+)$/.test(arn)
+    !/^arn:[^:]+:bedrock-agentcore:([^:]+):([^:]+):(runtime|memory|evaluator|online-evaluation-config|gateway)\/(.+)$/.test(
+      arn
+    )
   ) {
     throw new Error(
-      `Not a valid ARN: "${arn}".\nExpected format: arn:<partition>:bedrock-agentcore:<region>:<account>:<runtime|memory|evaluator|online-evaluation-config>/<id>`
+      `Not a valid ARN: "${arn}".\nExpected format: arn:<partition>:bedrock-agentcore:<region>:<account>:<runtime|memory|evaluator|online-evaluation-config|gateway>/<id>`
     );
   }
 
@@ -225,7 +227,7 @@ export interface ParsedArn {
 }
 
 const ARN_PATTERN =
-  /^arn:[^:]+:bedrock-agentcore:([^:]+):([^:]+):(runtime|memory|evaluator|online-evaluation-config)\/(.+)$/;
+  /^arn:[^:]+:bedrock-agentcore:([^:]+):([^:]+):(runtime|memory|evaluator|online-evaluation-config|gateway)\/(.+)$/;
 
 /** Unified config for each importable resource type — ARN mapping, deployed state keys. */
 const RESOURCE_TYPE_CONFIG: Record<
