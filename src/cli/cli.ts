@@ -23,7 +23,7 @@ import { registerTelemetry } from './commands/telemetry';
 import { registerTraces } from './commands/traces';
 import { registerUpdate } from './commands/update';
 import { registerValidate } from './commands/validate';
-import { PACKAGE_VERSION, getDistroConfig } from './constants';
+import { PACKAGE_VERSION } from './constants';
 import { ALL_PRIMITIVES } from './primitives';
 import { TelemetryClientAccessor } from './telemetry';
 import { App } from './tui/App';
@@ -219,10 +219,9 @@ export const main = async (argv: string[]) => {
 
   const args = argv.slice(2);
 
-  // Fire off non-blocking update check (skip for `update` command and dev distro)
+  // Fire off non-blocking update check (skip for `update` command itself)
   const isUpdateCommand = args[0] === 'update';
-  const skipUpdateCheck = isUpdateCommand || !getDistroConfig().checkForUpdates;
-  const updateCheck = skipUpdateCheck ? Promise.resolve(null) : checkForUpdate();
+  const updateCheck = isUpdateCommand ? Promise.resolve(null) : checkForUpdate();
 
   // Show TUI for no arguments, commander handles --help via configureHelp()
   if (args.length === 0) {
