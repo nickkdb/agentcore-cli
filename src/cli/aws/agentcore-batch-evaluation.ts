@@ -12,11 +12,6 @@
  *   DELETE /evaluations/batch-evaluate/{batchEvaluationId}    → DeleteBatchEvaluation
  *
  * Uses direct HTTP requests with SigV4 signing (service: bedrock-agentcore).
- *
- * LEGACY FALLBACK: The API is migrating from an old schema to a new one.
- * Each operation tries the new schema first, then falls back to the legacy
- * schema on error. Search for "LEGACY FALLBACK" to find all fallback code
- * to remove once the migration is complete.
  */
 import { getCredentialProvider } from './account';
 import { Sha256 } from '@aws-crypto/sha256-js';
@@ -25,7 +20,7 @@ import { HttpRequest } from '@smithy/protocol-http';
 import { SignatureV4 } from '@smithy/signature-v4';
 
 // ============================================================================
-// Types (new schema)
+// Types
 // ============================================================================
 
 export interface SessionFilterConfig {
@@ -163,7 +158,6 @@ export interface GetBatchEvaluationResult {
   evaluationResults?: EvaluationResults;
   errorDetails?: string[];
   description?: string;
-  tags?: Record<string, string>;
 }
 
 export interface BatchEvaluationResultEntry {
@@ -279,138 +273,6 @@ async function signedRequest(options: {
 }
 
 // ============================================================================
-// LEGACY FALLBACK — remove this entire section when API migration is complete
-//
-// The API is transitioning from an old schema to a new one. These helpers
-// convert between the two so the CLI works against both old and new backends.
-//
-// Old schema differences:
-//   - Request:  sessionSource.cloudWatchSource       → dataSourceConfig.cloudWatchLogs
-//   - Request:  cloudWatchSource.sessionInput         → cloudWatchLogs.filterConfig
-//   - Request:  sessionInput.sessionFilterConfig      → filterConfig.timeRange
-//   - Request:  evaluationConfig: { evaluators }      → evaluators (top-level)
-//   - Request:  sessionMetadata (top-level)           → evaluationMetadata.sessionMetadata
-//   - Response: batchEvaluateId                       → batchEvaluationId
-//   - Response: outputDataConfig.cloudWatchDestination → outputConfig.cloudWatchConfig
-//   - Response: sessionsCompleted                     → numberOfSessionsCompleted (etc.)
-// ============================================================================
-
-function isLegacyFallbackError(err: unknown): boolean {
-  if (!(err instanceof Error)) return false;
-  return err.message.includes('(400)') || err.message.includes('(422)');
-}
-
-function toLegacyStartBody(options: StartBatchEvaluationOptions): string {
-  const cw = options.dataSourceConfig.cloudWatchLogs;
-  const legacySessionInput = cw?.filterConfig
-    ? {
-        ...(cw.filterConfig.sessionIds ? { sessionIds: cw.filterConfig.sessionIds } : {}),
-        ...(cw.filterConfig.timeRange ? { sessionFilterConfig: cw.filterConfig.timeRange } : {}),
-      }
-    : undefined;
-
-  const body: Record<string, unknown> = {
-    name: options.name,
-    evaluationConfig: {
-      evaluators: options.evaluators,
-    },
-    sessionSource: {
-      cloudWatchSource: {
-        serviceNames: cw?.serviceNames ?? [],
-        logGroupNames: cw?.logGroupNames ?? [],
-        ...(legacySessionInput ? { sessionInput: legacySessionInput } : {}),
-      },
-    },
-  };
-
-  if (options.evaluationMetadata) {
-    body.evaluationMetadata = options.evaluationMetadata;
-  }
-  if (options.clientToken) body.clientToken = options.clientToken;
-
-  return JSON.stringify(body);
-}
-
-function normalizeStartResult(raw: Record<string, unknown>): StartBatchEvaluationResult {
-  return {
-    batchEvaluationId: (raw.batchEvaluationId ?? raw.batchEvaluateId ?? '') as string,
-    batchEvaluationArn: (raw.batchEvaluationArn ?? raw.bundleArn ?? '') as string,
-    name: (raw.batchEvaluationName ?? raw.name ?? '') as string,
-    status: (raw.status ?? '') as string,
-    createdAt: raw.createdAt as string | undefined,
-  };
-}
-
-function normalizeGetResult(raw: Record<string, unknown>): GetBatchEvaluationResult {
-  const id = (raw.batchEvaluationId ?? raw.batchEvaluateId ?? '') as string;
-
-  // LEGACY FALLBACK: normalize outputDataConfig.cloudWatchDestination → outputConfig.cloudWatchConfig
-  let outputConfig = raw.outputConfig as OutputConfig | undefined;
-  if (!outputConfig) {
-    const legacyOutput = raw.outputDataConfig as Record<string, unknown> | undefined;
-    const legacyCw = legacyOutput?.cloudWatchDestination as CloudWatchOutputConfig | undefined;
-    if (legacyCw) {
-      outputConfig = { cloudWatchConfig: legacyCw };
-    }
-  }
-
-  // LEGACY FALLBACK: normalize old evaluationResults field names
-  let evaluationResults = raw.evaluationResults as EvaluationResults | undefined;
-  if (evaluationResults) {
-    const er = evaluationResults as Record<string, unknown>;
-    evaluationResults = {
-      evaluatorSummaries: (er.evaluatorSummaries ?? er.evaluatorSummaries) as EvaluatorSummary[] | undefined,
-      numberOfSessionsCompleted: (er.numberOfSessionsCompleted ?? er.sessionsCompleted) as number | undefined,
-      numberOfSessionsFailed: (er.numberOfSessionsFailed ?? er.sessionsFailed) as number | undefined,
-      numberOfSessionsInProgress: (er.numberOfSessionsInProgress ?? er.sessionsInProgress) as number | undefined,
-      totalNumberOfSessions: (er.totalNumberOfSessions ?? er.totalSessions) as number | undefined,
-      numberOfSessionsIgnored: er.numberOfSessionsIgnored as number | undefined,
-    };
-  }
-
-  return {
-    batchEvaluationId: id,
-    batchEvaluationArn: (raw.batchEvaluationArn ?? '') as string,
-    name: (raw.batchEvaluationName ?? raw.name ?? '') as string,
-    status: (raw.status ?? '') as string,
-    createdAt: raw.createdAt as string | undefined,
-    updatedAt: raw.updatedAt as string | undefined,
-    evaluators: raw.evaluators as Evaluator[] | undefined,
-
-    dataSourceConfig: raw.dataSourceConfig as DataSourceConfig | undefined,
-    outputConfig,
-    evaluationResults,
-    errorDetails: (raw.errorDetails ?? raw.statusReasons) as string[] | undefined,
-    description: raw.description as string | undefined,
-    tags: raw.tags as Record<string, string> | undefined,
-  };
-}
-
-function normalizeStopResult(raw: Record<string, unknown>): StopBatchEvaluationResult {
-  return {
-    batchEvaluationId: (raw.batchEvaluationId ?? raw.batchEvaluateId ?? '') as string,
-    batchEvaluationArn: (raw.batchEvaluationArn ?? '') as string,
-    status: (raw.status ?? '') as string,
-    description: raw.description as string | undefined,
-  };
-}
-
-function normalizeSummary(raw: Record<string, unknown>): BatchEvaluationSummary {
-  return {
-    batchEvaluationId: (raw.batchEvaluationId ?? raw.batchEvaluateId ?? '') as string,
-    batchEvaluationArn: (raw.batchEvaluationArn ?? '') as string,
-    name: (raw.batchEvaluationName ?? raw.name ?? '') as string,
-    status: (raw.status ?? '') as string,
-    createdAt: raw.createdAt as string | undefined,
-    description: raw.description as string | undefined,
-    evaluators: raw.evaluators as Evaluator[] | undefined,
-
-    evaluationResults: raw.evaluationResults as EvaluationResults | undefined,
-    errorDetails: raw.errorDetails as string[] | undefined,
-  };
-}
-
-// ============================================================================
 // API Operations
 // ============================================================================
 
@@ -433,28 +295,21 @@ export async function startBatchEvaluation(options: StartBatchEvaluationOptions)
     body.clientToken = options.clientToken;
   }
 
-  try {
-    const { data } = await signedRequest({
-      region: options.region,
-      method: 'POST',
-      path: '/evaluations/batch-evaluate',
-      body: JSON.stringify(body),
-    });
-    return normalizeStartResult(data as Record<string, unknown>);
-  } catch (err) {
-    // LEGACY FALLBACK: if new schema rejected, retry with old schema
-    if (isLegacyFallbackError(err)) {
-      console.error('[batch-eval] New API schema rejected — retrying with legacy schema (temporary fallback)');
-      const { data } = await signedRequest({
-        region: options.region,
-        method: 'POST',
-        path: '/evaluations/batch-evaluate',
-        body: toLegacyStartBody(options),
-      });
-      return normalizeStartResult(data as Record<string, unknown>);
-    }
-    throw err;
-  }
+  const { data } = await signedRequest({
+    region: options.region,
+    method: 'POST',
+    path: '/evaluations/batch-evaluate',
+    body: JSON.stringify(body),
+  });
+
+  const raw = data as Record<string, unknown>;
+  return {
+    batchEvaluationId: (raw.batchEvaluationId ?? '') as string,
+    batchEvaluationArn: (raw.batchEvaluationArn ?? '') as string,
+    name: (raw.batchEvaluationName ?? '') as string,
+    status: (raw.status ?? '') as string,
+    createdAt: raw.createdAt as string | undefined,
+  };
 }
 
 /**
@@ -467,7 +322,21 @@ export async function getBatchEvaluation(options: GetBatchEvaluationOptions): Pr
     path: `/evaluations/batch-evaluate/${options.batchEvaluationId}`,
   });
 
-  return normalizeGetResult(data as Record<string, unknown>);
+  const raw = data as Record<string, unknown>;
+  return {
+    batchEvaluationId: (raw.batchEvaluationId ?? '') as string,
+    batchEvaluationArn: (raw.batchEvaluationArn ?? '') as string,
+    name: (raw.batchEvaluationName ?? '') as string,
+    status: (raw.status ?? '') as string,
+    createdAt: raw.createdAt as string | undefined,
+    updatedAt: raw.updatedAt as string | undefined,
+    evaluators: raw.evaluators as Evaluator[] | undefined,
+    dataSourceConfig: raw.dataSourceConfig as DataSourceConfig | undefined,
+    outputConfig: raw.outputConfig as OutputConfig | undefined,
+    evaluationResults: raw.evaluationResults as EvaluationResults | undefined,
+    errorDetails: raw.errorDetails as string[] | undefined,
+    description: raw.description as string | undefined,
+  };
 }
 
 /**
@@ -487,9 +356,9 @@ export async function listBatchEvaluations(options: ListBatchEvaluationsOptions)
     path,
   });
 
-  const result = data as { batchEvaluations?: Record<string, unknown>[]; nextToken?: string };
+  const result = data as ListBatchEvaluationsResult;
   return {
-    batchEvaluations: (result.batchEvaluations ?? []).map(normalizeSummary),
+    batchEvaluations: result.batchEvaluations ?? [],
     nextToken: result.nextToken,
   };
 }
@@ -504,7 +373,13 @@ export async function stopBatchEvaluation(options: StopBatchEvaluationOptions): 
     path: `/evaluations/batch-evaluate/${options.batchEvaluationId}/stop`,
   });
 
-  return normalizeStopResult(data as Record<string, unknown>);
+  const raw = data as Record<string, unknown>;
+  return {
+    batchEvaluationId: (raw.batchEvaluationId ?? '') as string,
+    batchEvaluationArn: (raw.batchEvaluationArn ?? '') as string,
+    status: (raw.status ?? '') as string,
+    description: raw.description as string | undefined,
+  };
 }
 
 /**
@@ -521,7 +396,7 @@ export async function deleteBatchEvaluation(
 
   const raw = data as Record<string, unknown>;
   return {
-    batchEvaluationId: (raw.batchEvaluationId ?? raw.batchEvaluateId ?? '') as string,
+    batchEvaluationId: (raw.batchEvaluationId ?? '') as string,
     batchEvaluationArn: (raw.batchEvaluationArn ?? '') as string,
     status: (raw.status ?? '') as string,
   };
