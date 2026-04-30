@@ -381,7 +381,7 @@ export const AgentCoreProjectSpecSchema = z
     }
 
     // Validate HTTP gateway runtimeRef references
-    for (const gw of spec.httpGateways) {
+    for (const gw of spec.httpGateways ?? []) {
       const runtimeExists = spec.runtimes.some(r => r.name === gw.runtimeRef);
       if (!runtimeExists) {
         ctx.addIssue({
@@ -392,13 +392,13 @@ export const AgentCoreProjectSpecSchema = z
     }
 
     // Validate AB test gateway references
-    for (const test of spec.abTests) {
+    for (const test of spec.abTests ?? []) {
       const gwField = test.gatewayRef;
       if (gwField && typeof gwField === 'string') {
         const match = /^\{\{gateway:(.+)\}\}$/.exec(gwField);
         if (match) {
           const gwName = match[1];
-          const gwExists = spec.httpGateways.some(gw => gw.name === gwName);
+          const gwExists = (spec.httpGateways ?? []).some(gw => gw.name === gwName);
           if (!gwExists) {
             ctx.addIssue({
               code: z.ZodIssueCode.custom,
@@ -408,7 +408,7 @@ export const AgentCoreProjectSpecSchema = z
 
           // For target-based AB tests, validate target names exist in the gateway's targets array
           if (test.mode === 'target-based') {
-            const gw = spec.httpGateways.find(g => g.name === gwName);
+            const gw = (spec.httpGateways ?? []).find(g => g.name === gwName);
             if (gw) {
               const gwTargetNames = new Set((gw.targets ?? []).map(t => t.name));
               for (const variant of test.variants) {
@@ -427,7 +427,7 @@ export const AgentCoreProjectSpecSchema = z
     }
 
     // Validate HTTP gateway target runtimeRef and qualifier references
-    for (const gw of spec.httpGateways) {
+    for (const gw of spec.httpGateways ?? []) {
       for (const target of gw.targets ?? []) {
         const runtime = spec.runtimes.find(r => r.name === target.runtimeRef);
         if (!runtime) {
