@@ -137,6 +137,21 @@ export async function resolveImportTarget(options: ResolveTargetOptions): Promis
     );
   }
 
+  // Detect region mismatch between caller's AWS_REGION and the ARN's region up front.
+  // Without this the ARN's region silently wins and the user can import cross-region
+  // by accident, leaving agentcore.json pointed at a region they didn't intend.
+  if (arn) {
+    const arnRegionMatch = /^arn:[^:]+:bedrock-agentcore:([^:]+):/.exec(arn);
+    const arnRegion = arnRegionMatch?.[1];
+    const envRegion = process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION;
+    if (arnRegion && envRegion && envRegion !== arnRegion) {
+      throw new Error(
+        `Region mismatch: AWS_REGION is "${envRegion}" but the ARN is in "${arnRegion}". ` +
+          `Either re-run with AWS_REGION=${arnRegion} or pass an ARN from ${envRegion}.`
+      );
+    }
+  }
+
   let targets = await configIO.readAWSDeploymentTargets();
 
   if (targets.length === 0) {
@@ -229,6 +244,7 @@ const RESOURCE_TYPE_CONFIG: Record<
     collectionKey: 'onlineEvalConfigs',
     idField: 'onlineEvaluationConfigId',
   },
+  gateway: { arnType: 'gateway', collectionKey: 'mcp.gateways', idField: 'gatewayId' },
 };
 
 /**
@@ -302,7 +318,11 @@ export async function findResourceInDeployedState(
 
   const { collectionKey, idField } = RESOURCE_TYPE_CONFIG[resourceType];
 
-  const collection = targetState.resources[collectionKey];
+  // Handle nested path (e.g., 'mcp.gateways') by traversing dot-separated keys
+  let collection: any = targetState.resources;
+  for (const key of collectionKey.split('.')) {
+    collection = collection?.[key];
+  }
   if (!collection) return undefined;
   for (const [name, entry] of Object.entries(collection)) {
     if ((entry as any)[idField] === resourceId) return name;
@@ -359,6 +379,13 @@ export async function updateDeployedState(
       targetState.resources.onlineEvalConfigs[resource.name] = {
         onlineEvaluationConfigId: resource.id,
         onlineEvaluationConfigArn: resource.arn,
+      };
+    } else if (resource.type === 'gateway') {
+      targetState.resources.mcp ??= {};
+      targetState.resources.mcp.gateways ??= {};
+      targetState.resources.mcp.gateways[resource.name] = {
+        gatewayId: resource.id,
+        gatewayArn: resource.arn,
       };
     }
   }
