@@ -175,7 +175,7 @@ export function AddABTestScreen({
   const [treatmentSubFlow, setTreatmentSubFlow] = useState<TargetSubFlowPhase>('pick');
   const [treatmentNewRuntime, setTreatmentNewRuntime] = useState('');
 
-  // Reset sub-flow state when entering a target step
+  /* eslint-disable react-hooks/set-state-in-effect -- intentional reset on step change */
   useEffect(() => {
     if (wizard.step === 'controlTarget') {
       setControlSubFlow('pick');
@@ -189,6 +189,7 @@ export function AddABTestScreen({
       setTreatmentNewRuntime('');
     }
   }, [wizard.step]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Step flags
   const isModeStep = wizard.step === 'mode';
@@ -270,7 +271,7 @@ export function AddABTestScreen({
           disabled: true,
         });
         for (const t of existingTargets) {
-          if (excludeTarget && t.name === excludeTarget.name) continue;
+          if (excludeTarget?.name === t.name) continue;
           items.push({
             id: `existing:${t.name}`,
             title: t.name,
@@ -284,7 +285,7 @@ export function AddABTestScreen({
       for (const rt of runtimes) {
         for (const ep of rt.endpoints) {
           const targetName = ep.name;
-          if (excludeTarget && targetName === excludeTarget.name) continue;
+          if (excludeTarget?.name === targetName) continue;
           endpointItems.push({
             id: `endpoint:${rt.name}/${ep.name}`,
             title: `${rt.name}/${ep.name}`,
@@ -533,12 +534,14 @@ export function AddABTestScreen({
   const [selectedControlEval, setSelectedControlEval] = useState('');
 
   // Reset eval select sub-flow when entering the step
+  /* eslint-disable react-hooks/set-state-in-effect -- intentional reset on step change */
   useEffect(() => {
     if (wizard.step === 'evalSelect') {
       setEvalSelectPhase('controlEval');
       setSelectedControlEval('');
     }
   }, [wizard.step]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Filter online eval configs by runtime + endpoint (qualifier)
   const controlRuntime = wizard.config.controlTargetInfo?.runtimeRef ?? '';

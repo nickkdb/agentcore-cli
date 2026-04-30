@@ -16,6 +16,7 @@
  * DeleteRecommendation (stop-via-delete pattern).
  */
 import { getCredentialProvider } from './account';
+import { dnsSuffix } from './partition';
 import { Sha256 } from '@aws-crypto/sha256-js';
 import { defaultProvider } from '@aws-sdk/credential-provider-node';
 import { HttpRequest } from '@smithy/protocol-http';
@@ -225,7 +226,7 @@ function getDataPlaneEndpoint(region: string): string {
   const stage = process.env.AGENTCORE_STAGE?.toLowerCase();
   if (stage === 'beta') return `https://beta.${region}.elcapdp.genesis-primitives.aws.dev`;
   if (stage === 'gamma') return `https://gamma.${region}.elcapdp.genesis-primitives.aws.dev`;
-  return `https://bedrock-agentcore.${region}.amazonaws.com`;
+  return `https://bedrock-agentcore.${region}.${dnsSuffix(region)}`;
 }
 
 async function signedRequest(options: {

@@ -60,6 +60,7 @@ async function resolveABTestId(
     const result = await listABTests({ region, maxResults: 100 });
     // Match against both prefixed name ({projectName}_{testName}) and bare testName (backwards compat)
     const prefixedName = projectName ? `${projectName}_${testName}` : undefined;
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- boolean OR, not nullish coalescing
     const match = result.abTests.find(t => (prefixedName && t.name === prefixedName) || t.name === testName);
     if (match) {
       return { abTestId: match.abTestId, region };
