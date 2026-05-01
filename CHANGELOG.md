@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.1-preview.0] - 2026-05-01
+
+### Other Changes
+- chore: sync main into preview — evo features (#1077) (aeb796a)
+
 ## [0.13.0] - 2026-05-01
 
 ### Added
