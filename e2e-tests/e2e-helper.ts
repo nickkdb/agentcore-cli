@@ -96,10 +96,13 @@ export function createE2ESuite(cfg: E2EConfig) {
     }, 300000);
 
     afterAll(async () => {
-      if (projectPath && hasAws) {
-        await teardownE2EProject(projectPath, agentName, cfg.modelProvider);
+      try {
+        if (projectPath && hasAws) {
+          await teardownE2EProject(projectPath, agentName, cfg.modelProvider);
+        }
+      } finally {
+        if (testDir) await rm(testDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 1000 });
       }
-      if (testDir) await rm(testDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 1000 });
     }, 600000);
 
     // Container builds go through CodeBuild which is slower and more prone to transient failures.
@@ -350,7 +353,9 @@ async function deleteCredentialProvider(client: BedrockAgentCoreControlClient, n
  * Runs in beforeAll to prevent accumulation from previous runs that
  * crashed or timed out before their afterAll teardown could execute.
  */
-export async function cleanupStaleCredentialProviders(maxAgeMs: number = 5 * 60 * 1000): Promise<void> {
+export async function cleanupStaleCredentialProviders(
+  maxAgeMs: number = parseInt(process.env.E2E_STALE_CRED_MAX_AGE_MS ?? '', 10) || 30 * 60 * 1000
+): Promise<void> {
   const region = process.env.AWS_REGION ?? 'us-east-1';
   const client = new BedrockAgentCoreControlClient({ region });
   const cutoff = new Date(Date.now() - maxAgeMs);

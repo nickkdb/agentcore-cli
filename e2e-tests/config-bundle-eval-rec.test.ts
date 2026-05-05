@@ -64,10 +64,13 @@ describe.sequential('e2e: config bundles, batch evaluation, and recommendations'
   }, 300000);
 
   afterAll(async () => {
-    if (projectPath && hasAws) {
-      await teardownE2EProject(projectPath, agentName, 'Bedrock');
+    try {
+      if (projectPath && hasAws) {
+        await teardownE2EProject(projectPath, agentName, 'Bedrock');
+      }
+    } finally {
+      if (testDir) await rm(testDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 1000 });
     }
-    if (testDir) await rm(testDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 1000 });
   }, 600000);
 
   const run = (args: string[]) => runAgentCoreCLI(args, projectPath);

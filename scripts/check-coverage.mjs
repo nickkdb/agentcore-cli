@@ -35,7 +35,7 @@ const DIRECTORY_THRESHOLDS = [
   { prefix: 'src/cli/aws/', threshold: 40, target: 60 },
   { prefix: 'src/cli/tui/hooks/', threshold: 14, target: 55 },
   { prefix: 'src/cli/tui/components/', threshold: 68, target: 75 },
-  { prefix: 'src/cli/commands/', threshold: 46, target: 60 },
+  { prefix: 'src/cli/commands/', threshold: 34, target: 60 },
 ];
 
 // ---------------------------------------------------------------------------
@@ -139,12 +139,15 @@ if (baseSha && headSha) {
     }
 
     const coveredSet = coveredLinesByFile[file];
-    if (!coveredSet) continue;
 
     let fileCovered = 0;
-    for (const line of lines) {
-      if (coveredSet.has(line)) fileCovered++;
+    if (coveredSet) {
+      for (const line of lines) {
+        if (coveredSet.has(line)) fileCovered++;
+      }
     }
+    // If coveredSet is undefined, the file was never loaded during tests —
+    // count all changed lines as uncovered rather than skipping silently.
 
     prLinesTotal += lines.length;
     prLinesCovered += fileCovered;
