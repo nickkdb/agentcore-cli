@@ -33,12 +33,8 @@ jobs:
       # Evals, Import, and local Dev paths. Manual workflow_dispatch runs the
       # full e2e directory to exercise every framework/model-provider combo.
       SCHEDULED_TESTS: >-
-        e2e-tests/strands-bedrock.test.ts
-        e2e-tests/container-strands-bedrock.test.ts
-        e2e-tests/byo-custom-jwt.test.ts
-        e2e-tests/evals-lifecycle.test.ts
-        e2e-tests/import-resources.test.ts
-        e2e-tests/dev-lifecycle.test.ts
+        e2e-tests/strands-bedrock.test.ts e2e-tests/container-strands-bedrock.test.ts e2e-tests/byo-custom-jwt.test.ts
+        e2e-tests/evals-lifecycle.test.ts e2e-tests/import-resources.test.ts e2e-tests/dev-lifecycle.test.ts
     steps:
       - uses: actions/checkout@v6
         with:
