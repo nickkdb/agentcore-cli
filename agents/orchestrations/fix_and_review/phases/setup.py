@@ -1,3 +1,4 @@
+from collections import defaultdict
 from pathlib import Path
 
 from core.config import PipelineConfig
@@ -16,7 +17,7 @@ def load_prompt(name: str, **kwargs: str) -> str:
     if _prompts_dir is None:
         raise RuntimeError("Prompts directory not set. Call set_prompts_dir() before running phases.")
     template = (_prompts_dir / name).read_text()
-    return template.format(**kwargs)
+    return template.format_map(defaultdict(str, **kwargs))
 
 
 def run_setup(

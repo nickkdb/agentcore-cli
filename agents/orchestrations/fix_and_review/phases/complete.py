@@ -60,6 +60,7 @@ def run_complete(
             rebase_succeeded = False
             client.run_command(session_id, f"cd {repo_name} && git rebase --abort")
             errors.append(f"Rebase failed in {repo_name}: {stderr[:500]}")
+            continue
 
         _, stderr, exit_code = client.run_command(
             session_id, f"cd {repo_name} && git push origin {branch_name} --force-with-lease"
@@ -103,9 +104,5 @@ def run_complete(
                 pr_urls.append(stdout.strip())
             else:
                 errors.append(f"PR may have been created in {repo} but could not extract URL")
-        if exit_code == 0 and stdout.strip():
-            pr_urls.append(stdout.strip())
-        else:
-            errors.append(f"Failed to create PR in {repo}: {stderr[:500]}")
 
     return CompleteResult(pr_urls=pr_urls, rebase_succeeded=rebase_succeeded, errors=errors)

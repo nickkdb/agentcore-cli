@@ -36,6 +36,9 @@ def calculate_reviewer_count(stats: DiffStats, min_r: int = 3, max_r: int = 5) -
 def partition_round1_by_directory(
     changed_files: list[str], num_reviewers: int
 ) -> list[ReviewerAssignment]:
+    if not changed_files:
+        return [ReviewerAssignment(files=[], focus="No files to review")]
+
     groups: dict[str, list[str]] = defaultdict(list)
     for f in changed_files:
         parts = PurePosixPath(f).parts

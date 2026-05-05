@@ -25,6 +25,29 @@ jobs:
   build-feature:
     runs-on: ubuntu-latest
     steps:
+      - name: Validate inputs
+        env:
+          FEATURE_NAME: ${{ inputs.feature_name }}
+          DEVEX_DOC: ${{ inputs.devex_doc }}
+          IMPL_DOC: ${{ inputs.impl_doc }}
+        run: |
+          if [[ ! "$FEATURE_NAME" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+            echo "Error: feature_name must be alphanumeric with hyphens/underscores only"
+            exit 1
+          fi
+          if [[ "$DEVEX_DOC" == *".."* ]] || [[ "$IMPL_DOC" == *".."* ]]; then
+            echo "Error: doc paths must not contain '..'"
+            exit 1
+          fi
+          if [[ ! "$DEVEX_DOC" == *.md ]]; then
+            echo "Error: devex_doc must be a .md file"
+            exit 1
+          fi
+          if [[ ! "$IMPL_DOC" == *.md ]]; then
+            echo "Error: impl_doc must be a .md file"
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v6
 

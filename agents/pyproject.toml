@@ -1,15 +1,15 @@
 [project]
-name = "harness-invoke"
+name = "agentcore-agents"
 version = "0.1.0"
-description = "Add your description here"
+description = "Multi-agent orchestration for automated issue resolution and feature building"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.12"
 dependencies = [
-    "boto3>=1.42.94,<1.43.2",
-    "botocore>=1.42.94,<1.43.2",
-    "pydantic>=2.13.1",
-    "pyyaml>=6.0.3",
-    "urllib3>=2.6.3",
+    "boto3>=1.42.94",
+    "botocore>=1.42.94",
+    "pydantic>=2.10.0",
+    "pyyaml>=6.0",
+    "urllib3>=2.0",
 ]
 
 [dependency-groups]

@@ -61,26 +61,38 @@ def run_verify(
             continue
         test_cmd = TEST_COMMANDS.get(repo, "npm test")
         print(f"  Running tests in {repo} (may take a few minutes)...", flush=True)
-        _, stderr, exit_code = client.run_command(session_id, f'cd {repo} && {test_cmd} 2>&1 | grep -E "(FAIL|PASS|Tests:|Test Suites:)" | tail -20')
-        if exit_code != 0:
+        stdout, stderr, exit_code = client.run_command(
+            session_id, f'cd {repo} && {test_cmd} > /tmp/test_output.txt 2>&1; echo "EXIT:$?"'
+        )
+        test_exit = 1
+        for line in stdout.strip().split("\n"):
+            if line.startswith("EXIT:"):
+                test_exit = int(line.split(":")[1])
+        if test_exit != 0:
             tests_pass = False
-            errors.append(f"Tests failed in {repo}: {stderr[:500]}")
+            summary, _, _ = client.run_command(
+                session_id, 'grep -E "(FAIL|PASS|Tests:|Test Suites:)" /tmp/test_output.txt | tail -20'
+            )
+            errors.append(f"Tests failed in {repo}: {summary[:500]}")
 
-    # Push from each repo that has changes
+    # Only push if all local checks passed
     branch_pushed = True
-    for repo in affected_repos:
-        stdout, _, _ = client.run_command(
-            session_id, f"cd {repo} && git diff main --stat 2>/dev/null"
-        )
-        if not stdout.strip():
-            continue
-        print(f"  Pushing {branch_name} in {repo}...", flush=True)
-        _, stderr, exit_code = client.run_command(
-            session_id, f"cd {repo} && git push origin {branch_name}"
-        )
-        if exit_code != 0:
-            branch_pushed = False
-            errors.append(f"Push failed in {repo}: {stderr[:500]}")
+    if not (typecheck_passes and tests_pass):
+        branch_pushed = False
+    else:
+        for repo in affected_repos:
+            stdout, _, _ = client.run_command(
+                session_id, f"cd {repo} && git diff main --stat 2>/dev/null"
+            )
+            if not stdout.strip():
+                continue
+            print(f"  Pushing {branch_name} in {repo}...", flush=True)
+            _, stderr, exit_code = client.run_command(
+                session_id, f"cd {repo} && git push origin {branch_name}"
+            )
+            if exit_code != 0:
+                branch_pushed = False
+                errors.append(f"Push failed in {repo}: {stderr[:500]}")
 
     return VerificationResult(
         commits_exist=commits_exist,

@@ -34,17 +34,33 @@ def _extract_json(raw_text: str) -> str | None:
     if start == -1:
         return None
 
-    depth = 0
-    for i in range(start, len(raw_text)):
-        if raw_text[i] == "{":
-            depth += 1
-        elif raw_text[i] == "}":
-            depth -= 1
-            if depth == 0:
-                candidate = raw_text[start : i + 1]
-                if "approved" in candidate:
-                    return candidate
-                return None
+    while start != -1:
+        depth = 0
+        in_string = False
+        escape_next = False
+        for i in range(start, len(raw_text)):
+            c = raw_text[i]
+            if escape_next:
+                escape_next = False
+                continue
+            if c == "\\":
+                escape_next = True
+                continue
+            if c == '"':
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
+            if c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+                if depth == 0:
+                    candidate = raw_text[start : i + 1]
+                    if "approved" in candidate:
+                        return candidate
+                    break
+        start = raw_text.find("{", start + 1)
     return None
 
 

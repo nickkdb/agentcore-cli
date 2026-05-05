@@ -1,0 +1,10 @@
+harness_arn: "arn:aws:bedrock-agentcore:us-west-2:YOUR_ACCOUNT_ID:harness/YOUR_HARNESS_ID"
+region: "us-west-2"
+aws_profile: "deploy"
+model_id: "global.anthropic.claude-opus-4-7"
+min_reviewers: 3
+max_reviewers: 5
+max_review_rounds: 5
+repos:
+  cli: "aws/agentcore-cli"
+  cdk: "aws/agentcore-l3-cdk-constructs"

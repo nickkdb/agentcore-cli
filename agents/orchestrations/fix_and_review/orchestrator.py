@@ -35,6 +35,9 @@ def run_pipeline(
     config = PipelineConfig.from_yaml(config_path)
     for key, value in overrides.items():
         if hasattr(config, key):
+            field_type = type(getattr(config, key))
+            if field_type == int:
+                value = int(value)
             setattr(config, key, value)
 
     if prompts_dir:

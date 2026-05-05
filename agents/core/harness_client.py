@@ -20,7 +20,6 @@ class HarnessClient:
             region_name=config.region,
             profile_name=config.aws_profile,
         )
-        self.credentials = self.session.get_credentials().get_frozen_credentials()
         self.http = urllib3.PoolManager()
         self.client = self.session.client(
             "bedrock-agentcore",
@@ -50,7 +49,8 @@ class HarnessClient:
             "Content-Type": "application/json",
             "Accept": "application/vnd.amazon.eventstream",
         })
-        SigV4Auth(self.credentials, "bedrock-agentcore", region).add_auth(request)
+        credentials = self.session.get_credentials().get_frozen_credentials()
+        SigV4Auth(credentials, "bedrock-agentcore", region).add_auth(request)
 
         response = self.http.urlopen(
             "POST", url, body=json.dumps(body).encode(),
