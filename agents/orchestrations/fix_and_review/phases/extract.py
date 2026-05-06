@@ -18,27 +18,49 @@ def run_extract(
     cli_repo: str,
     cdk_repo: str,
 ) -> ExtractResult:
-    diff_stat_stdout, _, _ = client.run_command(session_id, "git diff main --stat")
-    full_diff_stdout, _, _ = client.run_command(session_id, "git diff main")
-    commit_log_stdout, _, _ = client.run_command(session_id, "git log main..HEAD --oneline")
+    cli_name = cli_repo.split("/")[-1]
+    cdk_name = cdk_repo.split("/")[-1]
 
+    all_diff_stat = ""
+    all_full_diff = ""
+    all_commit_log = ""
     changed_files: list[str] = []
-    for line in diff_stat_stdout.strip().split("\n"):
-        line = line.strip()
-        if "|" in line:
-            file_path = line.split("|")[0].strip()
-            if file_path:
-                changed_files.append(file_path)
-
     total_lines = 0
-    for line in full_diff_stdout.split("\n"):
-        if line.startswith("+") and not line.startswith("+++"):
-            total_lines += 1
-        elif line.startswith("-") and not line.startswith("---"):
-            total_lines += 1
+    has_cli = False
+    has_cdk = False
 
-    has_cli = any(f.startswith(cli_repo) or f.startswith("src/cli") for f in changed_files)
-    has_cdk = any(f.startswith(cdk_repo) or f.startswith("src/cdk") for f in changed_files)
+    for repo_name in [cli_name, cdk_name]:
+        # Check if this repo has changes on the branch
+        commit_log, _, exit_code = client.run_command(
+            session_id, f"cd {repo_name} && git log main..HEAD --oneline 2>/dev/null"
+        )
+        if exit_code != 0 or not commit_log.strip():
+            continue
+
+        diff_stat, _, _ = client.run_command(session_id, f"cd {repo_name} && git diff main --stat")
+        full_diff, _, _ = client.run_command(session_id, f"cd {repo_name} && git diff main")
+
+        all_diff_stat += diff_stat
+        all_full_diff += full_diff
+        all_commit_log += commit_log
+
+        for line in diff_stat.strip().split("\n"):
+            line = line.strip()
+            if "|" in line:
+                file_path = line.split("|")[0].strip()
+                if file_path:
+                    changed_files.append(file_path)
+                    if repo_name == cli_name:
+                        has_cli = True
+                    else:
+                        has_cdk = True
+
+        for line in full_diff.split("\n"):
+            if line.startswith("+") and not line.startswith("+++"):
+                total_lines += 1
+            elif line.startswith("-") and not line.startswith("---"):
+                total_lines += 1
+
     cross_repo = has_cli and has_cdk
 
     stats = DiffStats(
@@ -48,8 +70,8 @@ def run_extract(
     )
 
     return ExtractResult(
-        diff_stat=diff_stat_stdout,
-        full_diff=full_diff_stdout,
-        commit_log=commit_log_stdout,
+        diff_stat=all_diff_stat,
+        full_diff=all_full_diff,
+        commit_log=all_commit_log,
         stats=stats,
     )
