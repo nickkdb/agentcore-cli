@@ -13,8 +13,8 @@ Steps:
    - git clone https://github.com/{cdk_repo}.git {cdk_repo_name}
 5. Install dependencies: cd {cli_repo_name} && npm install 2>&1 | tail -3 && cd ..
 6. Create a feature branch in both repos:
-   - cd {cli_repo_name} && git checkout -b feature/{feature_name} && cd ..
-   - cd {cdk_repo_name} && git checkout -b feature/{feature_name} && cd ..
+   - cd {cli_repo_name} && git checkout -b {branch_name} && cd ..
+   - cd {cdk_repo_name} && git checkout -b {branch_name} && cd ..
 7. Report back confirmation that the environment is ready.
 
 IMPORTANT: Run each step as a separate shell command. Do not combine them. If tools are already installed, skip step 1.

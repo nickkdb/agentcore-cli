@@ -14,8 +14,8 @@ Steps:
 5. Install dependencies: cd {cli_repo_name} && npm install 2>&1 | tail -3 && cd ..
 6. Fetch the issue details: gh issue view {issue_url} --json title,body,labels,comments,assignees
 7. Create a feature branch in both repos:
-   - cd {cli_repo_name} && git checkout -b fix/{issue_number} && cd ..
-   - cd {cdk_repo_name} && git checkout -b fix/{issue_number} && cd ..
+   - cd {cli_repo_name} && git checkout -b {branch_name} && cd ..
+   - cd {cdk_repo_name} && git checkout -b {branch_name} && cd ..
 8. Report back: the issue title, body, and which repos likely need changes based on the issue content.
 
 IMPORTANT: Run each step as a separate shell command. Do not combine them. If tools are already installed, skip step 1.

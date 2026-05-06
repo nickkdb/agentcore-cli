@@ -26,6 +26,7 @@ def run_setup(
     session_id: str,
     issue_url: str,
     feature_name: str | None = None,
+    branch_name: str | None = None,
 ) -> str:
     issue_number = issue_url.rstrip("/").split("/")[-1]
     prompt = load_prompt(
@@ -37,5 +38,6 @@ def run_setup(
         issue_url=issue_url,
         issue_number=issue_number,
         feature_name=feature_name or issue_number,
+        branch_name=branch_name or f"fix/{issue_number}",
     )
     return client.invoke(session_id=session_id, message=prompt)

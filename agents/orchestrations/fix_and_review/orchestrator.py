@@ -70,7 +70,7 @@ def run_pipeline(
     t0 = time.time()
     print("--- Phase 0: Setup ---")
     issue_details = run_setup(client, config, session_id, issue_url,
-                              feature_name=feature_name)
+                              feature_name=feature_name, branch_name=branch_name)
     if is_feature:
         issue_title = feature_name or "unnamed feature"
     else:
