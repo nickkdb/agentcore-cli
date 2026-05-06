@@ -17,9 +17,9 @@ Instructions:
 
 {previous_findings_context}
 
-CRITICAL CONSTRAINTS:
-- Use at most 10 shell commands total. Do NOT explore the whole codebase.
-- Focus on: correctness, breaking changes, obvious bugs. Skip style nits.
+CONSTRAINTS:
+- Stay focused on the diff and immediately related code. Do not explore unrelated parts of the codebase.
+- Focus on: correctness, breaking changes, obvious bugs, missing error handling. Skip style nits.
 - If the code looks correct and doesn't break anything, approve it.
 - Do NOT run npm install, npm test, or any build commands.
 
