@@ -17,4 +17,4 @@ def run_execute(
         commit_message=f"fix issue #{issue_number}",
         branch_name=branch_name,
     )
-    return client.invoke(session_id=session_id, message=prompt)
+    return client.invoke(session_id=session_id, message=prompt, max_iterations=40)

@@ -27,4 +27,4 @@ def run_fix(
         round_number=str(round_number),
         branch_name=branch_name,
     )
-    return client.invoke(session_id=session_id, message=prompt)
+    return client.invoke(session_id=session_id, message=prompt, max_iterations=30)

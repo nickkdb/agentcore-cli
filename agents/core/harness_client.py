@@ -31,6 +31,7 @@ class HarnessClient:
         session_id: str,
         message: str,
         system_prompt: str | None = None,
+        max_iterations: int | None = None,
         verbose: bool = True,
     ) -> str:
         body: dict = {
@@ -40,6 +41,8 @@ class HarnessClient:
         }
         if system_prompt:
             body["systemPrompt"] = [{"text": system_prompt}]
+        if max_iterations:
+            body["maxIterations"] = max_iterations
 
         region = self.config.region
         arn = self.config.harness_arn
