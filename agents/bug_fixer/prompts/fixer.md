@@ -8,9 +8,14 @@ Instructions:
 1. Fix each finding, starting with Critical severity first, then High, Medium, Low.
 2. If a finding is not applicable or is a false positive, explain why in a commit message.
 3. Run `npm run typecheck 2>&1 | tail -20` in each affected repo after fixes.
-4. Run tests with summary: `npm run test:unit 2>&1 | grep -E "(FAIL|PASS|Tests:|Test Suites:)" | tail -20`
-5. If tests fail, debug the specific file: `npm run test:unit -- path/to/failing.test.ts 2>&1 | tail -50`
+4. Run ONLY targeted tests for files you changed:
+   - `npx vitest run --project unit path/to/relevant.test.ts 2>&1 | tail -30`
+   - Run 1-5 targeted test files, NOT the full suite.
+5. If targeted tests fail, fix and re-run only those tests.
 6. Commit: `git add -A && git commit -m "fix: address review findings round {round_number}"`
 7. Push: `git push origin {branch_name}`
 
-IMPORTANT: Never run `npm run test:unit` without piping through grep or tail. The full output is too large and will overflow context.
+IMPORTANT:
+- Do NOT run `npm run test:unit` (full suite). It takes too long. Only run targeted tests.
+- CI will validate the full suite after PR creation.
+- Always pipe test output through `| tail -30`.

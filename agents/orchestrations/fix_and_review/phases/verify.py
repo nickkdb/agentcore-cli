@@ -59,10 +59,33 @@ def run_verify(
         )
         if not stdout.strip():
             continue
-        test_cmd = TEST_COMMANDS.get(repo, "npm test")
-        print(f"  Running tests in {repo} (may take a few minutes)...", flush=True)
+        # Find test files related to changed source files
+        print(f"  Running targeted tests in {repo}...", flush=True)
+        changed_files_out, _, _ = client.run_command(
+            session_id, f"cd {repo} && git diff main --name-only | head -20"
+        )
+        test_files: list[str] = []
+        for changed in changed_files_out.strip().split("\n"):
+            changed = changed.strip()
+            if not changed:
+                continue
+            if "__tests__" in changed or ".test." in changed:
+                test_files.append(changed)
+            else:
+                # Look for adjacent test file
+                test_candidate = changed.replace("/src/", "/src/").replace(".ts", ".test.ts")
+                dir_parts = changed.rsplit("/", 1)
+                if len(dir_parts) == 2:
+                    test_dir = f"{dir_parts[0]}/__tests__/{dir_parts[1].replace('.ts', '.test.ts')}"
+                    test_files.append(test_dir)
+
+        if not test_files:
+            continue
+
+        # Run only the targeted tests (max 5)
+        test_paths = " ".join(test_files[:5])
         stdout, stderr, exit_code = client.run_command(
-            session_id, f'cd {repo} && {test_cmd} > /tmp/test_output.txt 2>&1; echo "EXIT:$?"'
+            session_id, f'cd {repo} && npx vitest run --project unit {test_paths} > /tmp/test_output.txt 2>&1; echo "EXIT:$?"'
         )
         test_exit = 1
         for line in stdout.strip().split("\n"):
@@ -71,7 +94,7 @@ def run_verify(
         if test_exit != 0:
             tests_pass = False
             summary, _, _ = client.run_command(
-                session_id, 'grep -E "(FAIL|PASS|Tests:|Test Suites:)" /tmp/test_output.txt | tail -20'
+                session_id, 'tail -20 /tmp/test_output.txt'
             )
             errors.append(f"Tests failed in {repo}: {summary[:500]}")
 
