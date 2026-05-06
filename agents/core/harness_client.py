@@ -1,5 +1,6 @@
 import json
 import sys
+import time
 import uuid
 from urllib.parse import quote
 
@@ -33,6 +34,28 @@ class HarnessClient:
         system_prompt: str | None = None,
         max_iterations: int | None = None,
         verbose: bool = True,
+        retries: int = 2,
+    ) -> str:
+        for attempt in range(retries + 1):
+            try:
+                return self._invoke_once(session_id, message, system_prompt, max_iterations, verbose)
+            except (urllib3.exceptions.ProtocolError, urllib3.exceptions.ReadTimeoutError, ConnectionResetError) as e:
+                if attempt < retries:
+                    if verbose:
+                        print(f"\n  ⚠️  Connection error (attempt {attempt + 1}/{retries + 1}): {e}. Retrying...", flush=True)
+                    time.sleep(5)
+                else:
+                    if verbose:
+                        print(f"\n  ⚠️  Connection error after {retries + 1} attempts: {e}", flush=True)
+                    raise
+
+    def _invoke_once(
+        self,
+        session_id: str,
+        message: str,
+        system_prompt: str | None = None,
+        max_iterations: int | None = None,
+        verbose: bool = True,
     ) -> str:
         body: dict = {
             "runtimeSessionId": session_id,
@@ -48,7 +71,8 @@ class HarnessClient:
         arn = self.config.harness_arn
         url = f"https://bedrock-agentcore.{region}.amazonaws.com/harnesses/invoke?harnessArn={quote(arn, safe='')}"
 
-        request = AWSRequest(method="POST", url=url, data=json.dumps(body), headers={
+        body_bytes = json.dumps(body).encode()
+        request = AWSRequest(method="POST", url=url, data=body_bytes, headers={
             "Content-Type": "application/json",
             "Accept": "application/vnd.amazon.eventstream",
         })
@@ -56,7 +80,7 @@ class HarnessClient:
         SigV4Auth(credentials, "bedrock-agentcore", region).add_auth(request)
 
         response = self.http.urlopen(
-            "POST", url, body=json.dumps(body).encode(),
+            "POST", url, body=body_bytes,
             headers=dict(request.headers),
             preload_content=False,
             timeout=urllib3.Timeout(connect=30, read=900),
