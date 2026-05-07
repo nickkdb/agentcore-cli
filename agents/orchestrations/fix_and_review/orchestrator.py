@@ -91,6 +91,29 @@ def run_pipeline(
     else:
         plan = run_plan(client, config, session_id, issue_details)
     print(f"Plan generated ({len(plan)} chars). [{int(time.time()-t0)}s | total {elapsed()}]")
+
+    # Check if agent determined this isn't fixable
+    if "ASSESSMENT: NOT_FIXABLE" in plan:
+        print("  Agent determined this issue is not fixable with available repos.")
+        reason = ""
+        for line in plan.split("\n"):
+            if line.startswith("REASON:"):
+                reason = line[len("REASON:"):].strip()
+                break
+        # Post comment on the issue explaining why
+        if not is_feature:
+            comment = (
+                f"After analyzing this issue and exploring the codebase, I've determined this "
+                f"cannot be fixed with changes to the CLI/CDK/SDK repos alone.\n\n"
+                f"**Reason:** {reason}\n\n"
+                f"_This assessment was made by an automated agent. Please review and re-label if you disagree._"
+            )
+            client.run_command(
+                session_id,
+                f'gh issue comment {issue_url} --body "{comment}"'
+            )
+            print(f"  Comment posted on issue. Exiting.")
+        return 0
     print()
 
     # Phase 1.5: Validate Plan

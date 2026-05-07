@@ -2,13 +2,11 @@ import time
 
 from core.harness_client import HarnessClient
 from core.config import PipelineConfig
-from orchestrations.fix_and_review.phases.setup import load_prompt
 
 
 POLL_INTERVAL_SECONDS = 60
 MAX_WAIT_MINUTES = 30
 AUTOMATION_USER = "agentcore-cli-automation"
-APPROVAL_KEYWORDS = ["lgtm", "good to go", "approved", "looks good", "ship it"]
 
 
 def run_babysit(
@@ -53,22 +51,38 @@ def run_babysit(
 
             print(f"  New comment from {AUTOMATION_USER}: {comment_body[:100]}...", flush=True)
 
-            # Check if it's an approval
-            if any(keyword in comment_body.lower() for keyword in APPROVAL_KEYWORDS):
-                print(f"  PR approved by {AUTOMATION_USER}. Done babysitting.", flush=True)
+            # Parse structured verdict from the comment
+            verdict = _parse_verdict(comment_body)
+
+            if verdict == "APPROVED" or verdict == "APPROVED WITH MINOR COMMENTS":
+                print(f"  PR {verdict} by {AUTOMATION_USER}. Done babysitting.", flush=True)
                 return
 
-            # It's a fix request — invoke harness to address it
-            print(f"  Fixing requested changes...", flush=True)
-            fix_prompt = (
-                f"The automated reviewer left this comment on your PR:\n\n"
-                f"{comment_body}\n\n"
-                f"Address the feedback. Make the changes, run typecheck, commit, and push.\n"
-                f"Commit message: fix: address review feedback\n"
-                f"Push: git push origin {branch_name}"
-            )
-            client.invoke(session_id=session_id, message=fix_prompt)
+            if verdict == "REQUESTING CHANGES":
+                print(f"  Changes requested. Fixing...", flush=True)
+                fix_prompt = (
+                    f"The automated reviewer posted this on your PR (verdict: REQUESTING CHANGES):\n\n"
+                    f"{comment_body}\n\n"
+                    f"Address ALL the requested changes. Make the fixes, run typecheck with "
+                    f"`npm run typecheck 2>&1 | tail -20`, commit, and push.\n"
+                    f"Commit message: fix: address reviewer feedback\n"
+                    f"Push: git push origin {branch_name}"
+                )
+                client.invoke(session_id=session_id, message=fix_prompt)
+                client.run_command(session_id, f"cd {repo_name} && git push origin {branch_name}")
+                print(f"  Fix pushed. Waiting for next review...", flush=True)
+            else:
+                # Unknown verdict format — treat as informational, keep waiting
+                print(f"  Comment doesn't match expected verdict format. Skipping.", flush=True)
 
-            # Verify push happened
-            client.run_command(session_id, f"cd {repo_name} && git push origin {branch_name}")
-            print(f"  Fix pushed. Waiting for next review...", flush=True)
+
+def _parse_verdict(comment_body: str) -> str | None:
+    first_line = comment_body.strip().split("\n")[0].strip()
+    first_line_upper = first_line.upper().replace("**", "").strip()
+    if first_line_upper.startswith("APPROVED WITH MINOR COMMENTS"):
+        return "APPROVED WITH MINOR COMMENTS"
+    if first_line_upper.startswith("APPROVED"):
+        return "APPROVED"
+    if first_line_upper.startswith("REQUESTING CHANGES"):
+        return "REQUESTING CHANGES"
+    return None

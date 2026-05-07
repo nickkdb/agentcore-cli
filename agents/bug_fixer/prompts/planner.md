@@ -7,9 +7,14 @@ You have access to two TypeScript repositories:
 The issue details are:
 {issue_details}
 
-Analyze the issue, explore the relevant code in both repos, and produce a structured implementation plan.
+Analyze the issue, explore the relevant code in both repos, and determine if this can be fixed.
 
-Your plan MUST include:
+If after analyzing the issue you determine it CANNOT be fixed with changes to the CLI, CDK, or SDK repos (e.g., it requires service-side API changes, infrastructure changes, or is not actually a bug), output EXACTLY:
+
+ASSESSMENT: NOT_FIXABLE
+REASON: <one paragraph explaining why this cannot be fixed in these repos and what would be needed instead>
+
+Otherwise, produce a structured implementation plan. Your plan MUST include:
 1. **Affected repos**: Which repos need changes (cli, cdk, or both)
 2. **Files to change**: Exact file paths to modify, create, or delete
 3. **Approach**: Step-by-step description of the changes
