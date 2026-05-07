@@ -36,26 +36,65 @@ def fetch_issues_by_label(repo: str, label: str, max_count: int) -> list[str]:
 
 
 def run_single_issue(issue_url: str, config_path: str) -> dict:
+    import io
+    import contextlib
+    import json as json_mod
+
+    issue_number = issue_url.rstrip("/").split("/")[-1]
+    log_path = Path(f"/tmp/batch-issue-{issue_number}.log")
     start = time.time()
+
     try:
-        set_prompts_dir(PROMPTS_DIR)
-        exit_code = run_pipeline(
-            issue_url=issue_url,
-            config_path=config_path,
-            prompts_dir=PROMPTS_DIR,
-        )
-        return {
+        # Redirect stdout to per-issue log file
+        with open(log_path, "w") as log_file:
+            with contextlib.redirect_stdout(log_file):
+                set_prompts_dir(PROMPTS_DIR)
+                exit_code = run_pipeline(
+                    issue_url=issue_url,
+                    config_path=config_path,
+                    prompts_dir=PROMPTS_DIR,
+                )
+        result = {
             "issue": issue_url,
+            "number": issue_number,
             "status": "success" if exit_code == 0 else "failed",
             "duration": int(time.time() - start),
+            "log_file": str(log_path),
         }
     except Exception as e:
-        return {
+        result = {
             "issue": issue_url,
+            "number": issue_number,
             "status": "error",
             "error": str(e),
             "duration": int(time.time() - start),
+            "log_file": str(log_path),
         }
+
+    # Write state file for dashboard
+    _update_state(issue_number, result)
+    return result
+
+
+def _update_state(issue_number: str, result: dict) -> None:
+    import json as json_mod
+    import fcntl
+
+    state_path = Path("/tmp/batch-state.json")
+    try:
+        with open(state_path, "r+") as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
+            state = json_mod.load(f)
+            state[issue_number] = result
+            f.seek(0)
+            f.truncate()
+            json_mod.dump(state, f, indent=2)
+            fcntl.flock(f, fcntl.LOCK_UN)
+    except (FileNotFoundError, json_mod.JSONDecodeError):
+        with open(state_path, "w") as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
+            json_mod.dump({issue_number: result}, f, indent=2)
+            fcntl.flock(f, fcntl.LOCK_UN)
 
 
 def main():
