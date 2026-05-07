@@ -1,3 +1,4 @@
+import { requireProject, requireTTY } from '../../tui/guards';
 import { handleImport } from './actions';
 import { ANSI } from './constants';
 import { registerImportEvaluator } from './import-evaluator';
@@ -22,11 +23,13 @@ export const registerImport = (program: Command) => {
     .option('-y, --yes', 'Auto-confirm prompts')
     .action(async (cliOptions: { source?: string; target?: string; yes?: boolean }) => {
       if (!cliOptions.source) {
-        // No --source and no subcommand — launch interactive TUI
-        const { requireProject } = await import('../../tui/guards/project');
-        const { requireTTY } = await import('../../tui/guards/tty');
-        requireProject();
+        // No --source and no subcommand — launch interactive TUI.
+        // Call requireTTY() before requireProject() so non-TTY contexts always
+        // exit with the plain-text message rather than going through any Ink
+        // rendering path (FatalError uses Ink, which can produce malformed
+        // output to a piped stream).
         requireTTY();
+        requireProject();
         const { render } = await import('ink');
         const React = await import('react');
         const { ImportFlow } = await import('../../tui/screens/import');

@@ -37,13 +37,7 @@ describe('import command non-TTY behavior (issue #982)', () => {
     expect(result.exitCode).toBe(1);
 
     const combined = `${result.stdout}\n${result.stderr}`;
-    expect(
-      combined.toLowerCase().includes('requires an interactive terminal'),
-      `Should print interactive-terminal message, got stdout=${result.stdout}, stderr=${result.stderr}`
-    ).toBeTruthy();
-    expect(
-      !combined.includes('Raw mode is not supported'),
-      `Must not surface the Ink raw-mode error, got: ${combined}`
-    ).toBeTruthy();
+    expect(combined.toLowerCase()).toContain('requires an interactive terminal');
+    expect(combined).not.toContain('Raw mode is not supported');
   });
 });
