@@ -81,7 +81,13 @@ def run_babysit(
                 )
                 client.invoke(session_id=session_id, message=fix_prompt)
                 client.run_command(session_id, f"cd {repo_name} && git push origin {branch_name}")
-                print(f"  Fix pushed. Waiting for next review...", flush=True)
+                print(f"  Fix pushed. Re-triggering reviewer...", flush=True)
+                # Re-trigger the reviewer workflow so it reviews the updated PR
+                client.run_command(
+                    session_id,
+                    f'cd {repo_name} && gh workflow run "AgentCore Harness Reviewing" -f pr_url={pr_url}'
+                )
+                print(f"  Reviewer re-triggered. Waiting for next review...", flush=True)
 
             if state == "COMMENTED":
                 print(f"  Review comment (non-blocking). Continuing to wait.", flush=True)

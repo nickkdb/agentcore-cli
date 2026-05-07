@@ -24,16 +24,17 @@ from orchestrations.fix_and_review.phases.validate import run_validate
 from orchestrations.fix_and_review.phases.verify import run_verify
 
 
-def _invoke_with_retry(fn, max_retries=2, phase_name="phase"):
+def _invoke_with_retry(fn, max_retries=2, phase_name="phase", log=None):
     """Retry a phase function on MaxTokensExceededError."""
+    _print = log or (lambda *a, **k: print(*a, **k))
     for attempt in range(max_retries + 1):
         try:
             return fn()
         except MaxTokensExceededError as e:
             if attempt < max_retries:
-                _log(f"  ⚠️  {phase_name} hit max_tokens (attempt {attempt + 1}/{max_retries + 1}). Retrying with fresh invocation...", flush=True)
+                _print(f"  ⚠️  {phase_name} hit max_tokens (attempt {attempt + 1}/{max_retries + 1}). Retrying with fresh invocation...")
             else:
-                _log(f"  ⚠️  {phase_name} hit max_tokens after {max_retries + 1} attempts. Using partial output.", flush=True)
+                _print(f"  ⚠️  {phase_name} hit max_tokens after {max_retries + 1} attempts. Using partial output.")
                 return e.partial_output
 
 
@@ -72,7 +73,7 @@ def run_pipeline(
     def _log(*args, **kwargs):
         kwargs.setdefault("file", _out)
         kwargs.setdefault("flush", True)
-        _log(*args, **kwargs)
+        print(*args, **kwargs)
 
     client = HarnessClient(config, output=_out)
     session_id = HarnessClient.new_session_id()
@@ -94,7 +95,7 @@ def run_pipeline(
     issue_details = _invoke_with_retry(
         lambda: run_setup(client, config, session_id, issue_url,
                           feature_name=feature_name, branch_name=branch_name),
-        phase_name="Setup")
+        phase_name="Setup", log=_log)
     if is_feature:
         issue_title = feature_name or "unnamed feature"
     else:
@@ -112,11 +113,11 @@ def run_pipeline(
         plan = _invoke_with_retry(
             lambda: run_plan(client, config, session_id, issue_details,
                             devex_content=devex_content, impl_content=impl_content),
-            phase_name="Plan")
+            phase_name="Plan", log=_log)
     else:
         plan = _invoke_with_retry(
             lambda: run_plan(client, config, session_id, issue_details),
-            phase_name="Plan")
+            phase_name="Plan", log=_log)
     _log(f"Plan generated ({len(plan)} chars). [{int(time.time()-t0)}s | total {elapsed()}]")
 
     # Check if agent determined this isn't fixable
@@ -176,7 +177,7 @@ def run_pipeline(
     for attempt in range(3):
         _invoke_with_retry(
             lambda: run_execute(client, config, session_id, plan, branch_name, issue_number),
-            phase_name="Execute")
+            phase_name="Execute", log=_log)
         _log(f"Execution complete. [{int(time.time()-t0)}s | total {elapsed()}]")
 
         # Phase 2.5: Verify
