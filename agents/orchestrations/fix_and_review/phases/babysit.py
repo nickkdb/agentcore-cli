@@ -97,26 +97,26 @@ def _check_ci(client: HarnessClient, session_id: str, repo_name: str, pr_number:
     """Check CI status: 'passing', 'failing', 'pending', or 'unknown'."""
     stdout, _, exit_code = client.run_command(
         session_id,
-        f'cd {repo_name} && gh pr checks {pr_number} --json name,state,conclusion 2>/dev/null | head -50'
+        f'cd {repo_name} && gh pr checks {pr_number} 2>/dev/null'
     )
     if exit_code != 0 or not stdout.strip():
         return "unknown"
 
-    if '"conclusion":"FAILURE"' in stdout or '"conclusion":"failure"' in stdout:
+    if "\tfail\t" in stdout:
         return "failing"
-    if '"state":"PENDING"' in stdout or '"state":"pending"' in stdout:
+    if "\tpending\t" in stdout:
         return "pending"
-    if '"conclusion":"SUCCESS"' in stdout or '"conclusion":"success"' in stdout:
+    if "\tpass\t" in stdout and "\tfail\t" not in stdout:
         return "passing"
     return "unknown"
 
 
 def _fix_ci(client: HarnessClient, session_id: str, repo_name: str, pr_number: str, branch_name: str) -> None:
     """Get CI failure logs and ask agent to fix."""
-    # Get the failing check's log
+    # Get the failing checks
     stdout, _, _ = client.run_command(
         session_id,
-        f'cd {repo_name} && gh pr checks {pr_number} 2>&1 | grep -i "fail\\|X" | head -10'
+        f'cd {repo_name} && gh pr checks {pr_number} 2>&1 | grep "fail"'
     )
 
     # Get more detail on the failure
