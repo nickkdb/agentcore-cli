@@ -14,11 +14,25 @@ The plan:
 7. If your tests fail, fix, format, and commit.
 8. Push: `git push origin {branch_name}`
 
+## AFTER PUSHING — FIX CI
+
+After pushing, wait 30 seconds then check CI:
+```
+sleep 30 && gh pr checks $(gh pr list --head {branch_name} --json number --jq '.[0].number') 2>&1 | grep fail
+```
+If any checks fail:
+- `format` → run `npm run format && git add -A && git commit -m "style: format" && git push origin {branch_name}`
+- `lint` → run `npm run lint:fix && git add -A && git commit -m "style: lint fix" && git push origin {branch_name}`
+- `unit-test` or `build` → look at the failure, fix it, commit, push
+- `snapshots` → run `npm run test:update-snapshots && git add -A && git commit -m "test: update snapshots" && git push origin {branch_name}`
+
+Repeat until CI is green or you've tried 3 times.
+
 ## STOP CONDITIONS
 
-- STOP after pushing. You are done.
+- STOP after CI is green (or 3 CI fix attempts).
 - STOP if typecheck still fails after 2 fix attempts. Commit what you have and push anyway.
-- STOP if you've made more than 15 tool calls. Commit whatever state you're in and push.
+- STOP if you've made more than 20 tool calls. Commit whatever state you're in and push.
 - DO NOT keep exploring the codebase after making your changes.
 - DO NOT refactor, rename, or "improve" code outside the plan.
 - DO NOT run `npm run test:unit` (full suite). Only targeted tests.
