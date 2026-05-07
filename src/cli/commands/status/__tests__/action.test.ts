@@ -631,6 +631,20 @@ describe('handleProjectStatus — live enrichment', () => {
     expect(evalEntry!.deploymentState).toBe('local-only');
     expect(mockGetEvaluator).not.toHaveBeenCalled();
   });
+
+  it('returns empty targetName when no targets are configured (regression for #985)', async () => {
+    const ctx = makeContext({
+      awsTargets: [] as unknown as StatusContext['awsTargets'],
+      deployedState: {
+        targets: {},
+      } as unknown as StatusContext['deployedState'],
+    });
+
+    const result = await handleProjectStatus(ctx);
+
+    expect(result.success).toBe(true);
+    expect(result.targetName).toBe('');
+  });
 });
 
 describe('buildRuntimeInvocationUrl', () => {

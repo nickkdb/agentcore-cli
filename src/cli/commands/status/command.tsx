@@ -113,7 +113,8 @@ export const registerStatus = (program: Command) => {
 
           render(
             <Text>
-              AgentCore Status - {result.runtimeId} (target: {result.targetName})
+              AgentCore Status - {result.runtimeId} (target:{' '}
+              {result.targetName && result.targetName.length > 0 ? result.targetName : 'No target configured'})
               {runtimeStatus ? ` - ${runtimeStatus}` : ''}
             </Text>
           );
