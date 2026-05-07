@@ -2,7 +2,7 @@ import time
 from pathlib import Path
 
 from core.config import PipelineConfig
-from core.harness_client import HarnessClient
+from core.harness_client import HarnessClient, MaxTokensExceededError
 from core.parsing import Finding
 from orchestrations.fix_and_review.partitioning import (
     ReviewerAssignment,
@@ -22,6 +22,19 @@ from orchestrations.fix_and_review.phases.review import run_review
 from orchestrations.fix_and_review.phases.setup import run_setup, set_prompts_dir
 from orchestrations.fix_and_review.phases.validate import run_validate
 from orchestrations.fix_and_review.phases.verify import run_verify
+
+
+def _invoke_with_retry(fn, max_retries=2, phase_name="phase"):
+    """Retry a phase function on MaxTokensExceededError."""
+    for attempt in range(max_retries + 1):
+        try:
+            return fn()
+        except MaxTokensExceededError as e:
+            if attempt < max_retries:
+                print(f"  ⚠️  {phase_name} hit max_tokens (attempt {attempt + 1}/{max_retries + 1}). Retrying with fresh invocation...", flush=True)
+            else:
+                print(f"  ⚠️  {phase_name} hit max_tokens after {max_retries + 1} attempts. Using partial output.", flush=True)
+                return e.partial_output
 
 
 def run_pipeline(
@@ -77,8 +90,10 @@ def run_pipeline(
     # Phase 0: Setup
     t0 = time.time()
     print("--- Phase 0: Setup ---")
-    issue_details = run_setup(client, config, session_id, issue_url,
-                              feature_name=feature_name, branch_name=branch_name)
+    issue_details = _invoke_with_retry(
+        lambda: run_setup(client, config, session_id, issue_url,
+                          feature_name=feature_name, branch_name=branch_name),
+        phase_name="Setup")
     if is_feature:
         issue_title = feature_name or "unnamed feature"
     else:
@@ -93,10 +108,14 @@ def run_pipeline(
     t0 = time.time()
     print("--- Phase 1: Plan ---")
     if is_feature:
-        plan = run_plan(client, config, session_id, issue_details,
-                        devex_content=devex_content, impl_content=impl_content)
+        plan = _invoke_with_retry(
+            lambda: run_plan(client, config, session_id, issue_details,
+                            devex_content=devex_content, impl_content=impl_content),
+            phase_name="Plan")
     else:
-        plan = run_plan(client, config, session_id, issue_details)
+        plan = _invoke_with_retry(
+            lambda: run_plan(client, config, session_id, issue_details),
+            phase_name="Plan")
     print(f"Plan generated ({len(plan)} chars). [{int(time.time()-t0)}s | total {elapsed()}]")
 
     # Check if agent determined this isn't fixable
@@ -154,7 +173,9 @@ def run_pipeline(
         affected_repos = ["agentcore-cli"]
 
     for attempt in range(3):
-        run_execute(client, config, session_id, plan, branch_name, issue_number)
+        _invoke_with_retry(
+            lambda: run_execute(client, config, session_id, plan, branch_name, issue_number),
+            phase_name="Execute")
         print(f"Execution complete. [{int(time.time()-t0)}s | total {elapsed()}]")
 
         # Phase 2.5: Verify
