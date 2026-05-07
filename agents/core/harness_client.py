@@ -14,6 +14,21 @@ from botocore.eventstream import EventStreamBuffer
 from core.config import PipelineConfig
 
 
+class MaxTokensExceededError(Exception):
+    """Raised when the agent hits the max_tokens limit mid-response."""
+    def __init__(self, partial_output: str, message: str = ""):
+        self.partial_output = partial_output
+        super().__init__(message or "Agent hit max_tokens limit")
+
+
+class StreamError(Exception):
+    """Raised on non-retryable stream errors."""
+    def __init__(self, partial_output: str, payload: dict):
+        self.partial_output = partial_output
+        self.payload = payload
+        super().__init__(str(payload))
+
+
 class HarnessClient:
     def __init__(self, config: PipelineConfig, output=None):
         self.config = config
@@ -45,7 +60,9 @@ class HarnessClient:
         for attempt in range(retries + 1):
             try:
                 return self._invoke_once(session_id, message, system_prompt, max_iterations, verbose)
-            except (urllib3.exceptions.ProtocolError, urllib3.exceptions.ReadTimeoutError, ConnectionResetError) as e:
+            except MaxTokensExceededError:
+                raise  # Don't retry — caller must handle (retry the phase with different strategy)
+            except (urllib3.exceptions.ProtocolError, urllib3.exceptions.ReadTimeoutError, ConnectionResetError, StreamError) as e:
                 if attempt < retries:
                     if verbose:
                         self._print(f"\n  ⚠️  Connection error (attempt {attempt + 1}/{retries + 1}): {e}. Retrying...")
@@ -130,9 +147,11 @@ class HarnessClient:
                     payload = json.loads(event.payload.decode("utf-8"))
                     if verbose:
                         self._print(f"\n  ⚠️  Stream error: {payload}")
-                    if text_parts:
-                        return "".join(text_parts)
-                    raise RuntimeError(f"Stream error: {payload}")
+                    partial = "".join(text_parts)
+                    msg = payload.get("message", "")
+                    if "max_tokens" in msg.lower():
+                        raise MaxTokensExceededError(partial, msg)
+                    raise StreamError(partial, payload)
 
                 event_type = event.headers.get(":event-type", "")
                 if not event.payload:
