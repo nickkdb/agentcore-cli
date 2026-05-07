@@ -33,6 +33,18 @@ def run_babysit(
 
         time.sleep(POLL_INTERVAL_SECONDS)
 
+        # 0. Check for injected context from dashboard (local filesystem)
+        import os
+        inject_path = f"/tmp/inject-{pr_number}.txt"
+        if os.path.exists(inject_path):
+            with open(inject_path) as f:
+                injected = f.read().strip()
+            os.remove(inject_path)
+            if injected:
+                print(f"  Injected context received: {injected[:80]}...", flush=True)
+                client.invoke(session_id=session_id, message=injected)
+                print(f"  Context processed.", flush=True)
+
         # 1. Check CI status
         ci_status = _check_ci(client, session_id, repo_name, pr_number)
         if ci_status == "failing":
