@@ -55,16 +55,15 @@ def run_single_issue(issue_url: str, config_path: str) -> dict:
     })
 
     try:
-        # Redirect stdout to per-issue log file (line-buffered)
+        # Each issue gets its own log file handle passed to the harness client
         with open(log_path, "w", buffering=1) as log_file:
-            with contextlib.redirect_stdout(log_file):
-                os.environ.setdefault("PYTHONUNBUFFERED", "1")
-                set_prompts_dir(PROMPTS_DIR)
-                exit_code = run_pipeline(
-                    issue_url=issue_url,
-                    config_path=config_path,
-                    prompts_dir=PROMPTS_DIR,
-                )
+            set_prompts_dir(PROMPTS_DIR)
+            exit_code = run_pipeline(
+                issue_url=issue_url,
+                config_path=config_path,
+                prompts_dir=PROMPTS_DIR,
+                output=log_file,
+            )
         result = {
             "issue": issue_url,
             "number": issue_number,

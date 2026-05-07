@@ -15,8 +15,9 @@ from core.config import PipelineConfig
 
 
 class HarnessClient:
-    def __init__(self, config: PipelineConfig):
+    def __init__(self, config: PipelineConfig, output=None):
         self.config = config
+        self.output = output or sys.stdout
         self.session = boto3.Session(
             region_name=config.region,
             profile_name=config.aws_profile,
@@ -26,6 +27,11 @@ class HarnessClient:
             "bedrock-agentcore",
             config=BotoConfig(read_timeout=600, connect_timeout=30, retries={"max_attempts": 2}),
         )
+
+    def _print(self, *args, **kwargs):
+        kwargs.setdefault("file", self.output)
+        kwargs.setdefault("flush", True)
+        print(*args, **kwargs)
 
     def invoke(
         self,
@@ -42,11 +48,11 @@ class HarnessClient:
             except (urllib3.exceptions.ProtocolError, urllib3.exceptions.ReadTimeoutError, ConnectionResetError) as e:
                 if attempt < retries:
                     if verbose:
-                        print(f"\n  ⚠️  Connection error (attempt {attempt + 1}/{retries + 1}): {e}. Retrying...", flush=True)
+                        self._print(f"\n  ⚠️  Connection error (attempt {attempt + 1}/{retries + 1}): {e}. Retrying...")
                     time.sleep(5)
                 else:
                     if verbose:
-                        print(f"\n  ⚠️  Connection error after {retries + 1} attempts: {e}", flush=True)
+                        self._print(f"\n  ⚠️  Connection error after {retries + 1} attempts: {e}")
                     raise
 
     def _invoke_once(
@@ -89,19 +95,19 @@ class HarnessClient:
         if response.status != 200:
             error = response.read().decode("utf-8")
             if verbose:
-                print(f"\n  ⚠️  HTTP {response.status}: {error}", flush=True)
+                self._print(f"\n  ⚠️  HTTP {response.status}: {error}")
             raise RuntimeError(f"InvokeHarness failed: HTTP {response.status}: {error}")
 
         request_id = response.headers.get("x-amzn-RequestId", "unknown")
         if verbose:
-            print(f"  [request: {request_id}]", flush=True)
+            self._print(f"  [request: {request_id}]")
         self.last_request_id = request_id
 
         return self._accumulate_text_from_http(response, verbose=verbose)
 
     def run_command(self, session_id: str, command: str, verbose: bool = False) -> tuple[str, str, int]:
         if verbose:
-            print(f"  $ {command}", flush=True)
+            self._print(f"  $ {command}")
         response = self.client.invoke_agent_runtime_command(
             agentRuntimeArn=self.config.harness_arn,
             runtimeSessionId=session_id,
@@ -123,7 +129,7 @@ class HarnessClient:
                 if event.headers.get(":message-type") == "exception":
                     payload = json.loads(event.payload.decode("utf-8"))
                     if verbose:
-                        print(f"\n  ⚠️  Stream error: {payload}", flush=True)
+                        self._print(f"\n  ⚠️  Stream error: {payload}")
                     if text_parts:
                         return "".join(text_parts)
                     raise RuntimeError(f"Stream error: {payload}")
@@ -145,17 +151,17 @@ class HarnessClient:
                     if "text" in delta:
                         text_parts.append(delta["text"])
                         if verbose:
-                            print(delta["text"], end="", flush=True)
+                            self._print(delta["text"], end="")
                     elif "toolUse" in delta and current_tool:
                         tool_input_parts.append(delta["toolUse"].get("input", ""))
                 elif event_type == "contentBlockStop":
                     if current_tool and verbose:
                         tool_input = "".join(tool_input_parts)
-                        print(f"\n  🔧 {current_tool}: {tool_input[:200]}", flush=True)
+                        self._print(f"\n  🔧 {current_tool}: {tool_input[:200]}")
                         current_tool = None
                         tool_input_parts = []
                 elif event_type == "messageStop" and verbose:
-                    print(flush=True)
+                    self._print(flush=True)
 
         return "".join(text_parts)
 
@@ -171,15 +177,15 @@ class HarnessClient:
                     if "stdout" in delta:
                         stdout_parts.append(delta["stdout"])
                         if verbose:
-                            print(delta["stdout"], end="", flush=True)
+                            self._print(delta["stdout"], end="")
                     if "stderr" in delta:
                         stderr_parts.append(delta["stderr"])
                         if verbose:
-                            print(delta["stderr"], end="", file=sys.stderr, flush=True)
+                            self._print(delta["stderr"], end="", file=sys.stderr)
                 elif "contentStop" in chunk:
                     exit_code = chunk["contentStop"].get("exitCode", -1)
                     if verbose:
-                        print(f"  [exit: {exit_code}]", flush=True)
+                        self._print(f"  [exit: {exit_code}]")
         return "".join(stdout_parts), "".join(stderr_parts), exit_code
 
     @staticmethod

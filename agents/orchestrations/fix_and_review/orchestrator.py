@@ -31,6 +31,7 @@ def run_pipeline(
     devex_content: str | None = None,
     impl_content: str | None = None,
     feature_name: str | None = None,
+    output=None,
     **overrides: str,
 ) -> int:
     config = PipelineConfig.from_yaml(config_path)
@@ -53,7 +54,13 @@ def run_pipeline(
         short_id = HarnessClient.new_session_id()[:8].lower()
         branch_name = f"fix/{issue_number}-{short_id}"
 
-    client = HarnessClient(config)
+    # Redirect all print output to the provided file handle (for batch mode)
+    import sys as _sys
+    _original_stdout = _sys.stdout
+    if output:
+        _sys.stdout = output
+
+    client = HarnessClient(config, output=output or _original_stdout)
     session_id = HarnessClient.new_session_id()
 
     pipeline_start = time.time()
@@ -283,6 +290,7 @@ def run_pipeline(
         print(f"\n=== Pipeline Failed [{elapsed()}] ===")
         print(f"Errors: {result.errors}")
 
+    _sys.stdout = _original_stdout
     return 0 if result.pr_urls else 1
 
 
