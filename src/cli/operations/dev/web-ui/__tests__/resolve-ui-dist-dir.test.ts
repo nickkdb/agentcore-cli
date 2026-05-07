@@ -1,8 +1,27 @@
 import { resolveUIDistDir } from '../web-server.js';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+const testDir = dirname(fileURLToPath(import.meta.url));
+const bundledExists = existsSync(
+  join(
+    testDir,
+    '..',
+    '..',
+    '..',
+    '..',
+    '..',
+    '..',
+    'node_modules',
+    '@aws',
+    'agent-inspector',
+    'dist-assets',
+    'index.html'
+  )
+);
 
 describe('resolveUIDistDir', () => {
   const originalEnv = process.env;
@@ -19,6 +38,13 @@ describe('resolveUIDistDir', () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  it.skipIf(bundledExists)('returns null when no candidate has index.html', () => {
+    // AGENT_INSPECTOR_PATH points to empty dir, bundled candidates don't exist in test env
+    process.env.AGENT_INSPECTOR_PATH = join(tmpDir, 'empty');
+
+    expect(resolveUIDistDir()).toBeNull();
+  });
+
   it('returns AGENT_INSPECTOR_PATH when env var is set and dir has index.html', () => {
     process.env.AGENT_INSPECTOR_PATH = tmpDir;
     writeFileSync(join(tmpDir, 'index.html'), '<html></html>');
@@ -26,11 +52,10 @@ describe('resolveUIDistDir', () => {
     expect(resolveUIDistDir()).toBe(tmpDir);
   });
 
-  it('skips AGENT_INSPECTOR_PATH when env var is set but dir lacks index.html', () => {
+  it.skipIf(bundledExists)('skips AGENT_INSPECTOR_PATH when env var is set but dir lacks index.html', () => {
     process.env.AGENT_INSPECTOR_PATH = tmpDir;
 
-    const result = resolveUIDistDir();
-    expect(result).not.toBe(tmpDir);
+    expect(resolveUIDistDir()).toBeNull();
   });
 
   it('prefers AGENT_INSPECTOR_PATH over bundled candidates', () => {
@@ -38,13 +63,5 @@ describe('resolveUIDistDir', () => {
     writeFileSync(join(tmpDir, 'index.html'), '<html></html>');
 
     expect(resolveUIDistDir()).toBe(tmpDir);
-  });
-
-  it('returns a bundled candidate when no env var is set and bundled path exists', () => {
-    const result = resolveUIDistDir();
-    // If a bundled candidate has index.html, it should be returned
-    if (result) {
-      expect(result).toContain('dist-assets');
-    }
   });
 });
