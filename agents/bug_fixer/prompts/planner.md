@@ -27,7 +27,9 @@ REASON: <one paragraph why>
 
 ## Plan format
 
-Output a SHORT plan (under 500 words):
+Write your plan to `/tmp/plan.md` on the filesystem using the shell or file_operations tool. Then output "PLAN WRITTEN" as your final message.
+
+The plan file must contain (under 500 words total):
 
 1. **Affected repos**: cli, cdk, or both
 2. **Files to change**: Exact paths (max 7 files)

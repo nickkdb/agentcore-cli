@@ -110,14 +110,23 @@ def run_pipeline(
     t0 = time.time()
     _log("--- Phase 1: Plan ---")
     if is_feature:
-        plan = _invoke_with_retry(
+        _invoke_with_retry(
             lambda: run_plan(client, config, session_id, issue_details,
                             devex_content=devex_content, impl_content=impl_content),
             phase_name="Plan", log=_log)
     else:
-        plan = _invoke_with_retry(
+        _invoke_with_retry(
             lambda: run_plan(client, config, session_id, issue_details),
             phase_name="Plan", log=_log)
+    # Read plan from file (agent writes to /tmp/plan.md)
+    plan_from_file, _, _ = client.run_command(session_id, "cat /tmp/plan.md 2>/dev/null")
+    if plan_from_file.strip():
+        plan = plan_from_file.strip()
+    else:
+        # Fallback: agent may have output the plan in stream (old behavior)
+        plan = _invoke_with_retry(
+            lambda: run_plan(client, config, session_id, issue_details),
+            phase_name="Plan-retry", log=_log)
     _log(f"Plan generated ({len(plan)} chars). [{int(time.time()-t0)}s | total {elapsed()}]")
 
     # Check if agent determined this isn't fixable
