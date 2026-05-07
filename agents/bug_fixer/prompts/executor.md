@@ -6,12 +6,13 @@ The plan:
 ## Steps
 
 1. Make the code changes described in the plan. Only touch the files listed.
-2. COMMIT IMMEDIATELY: `git add -A && git commit -m "fix: {commit_message}"`
-3. Run typecheck: `npm run typecheck 2>&1 | tail -20`
-4. If typecheck fails, fix ONLY the errors you caused (not pre-existing ones). Commit again.
-5. Run targeted tests: `npx vitest run --project unit path/to/test.ts 2>&1 | tail -30`
-6. If your tests fail, fix and commit.
-7. Push: `git push origin {branch_name}`
+2. Run formatter: `npm run format 2>&1 | tail -5`
+3. COMMIT IMMEDIATELY: `git add -A && git commit -m "fix: {commit_message}"`
+4. Run typecheck: `npm run typecheck 2>&1 | tail -20`
+5. If typecheck fails, fix ONLY the errors you caused (not pre-existing ones). Run format again. Commit.
+6. Run targeted tests: `npx vitest run --project unit path/to/test.ts 2>&1 | tail -30`
+7. If your tests fail, fix, format, and commit.
+8. Push: `git push origin {branch_name}`
 
 ## STOP CONDITIONS
 
