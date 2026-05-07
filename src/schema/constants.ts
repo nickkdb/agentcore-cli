@@ -143,10 +143,30 @@ export function isReservedProjectName(name: string): boolean {
 // Infrastructure Constants (shared between agent-env and mcp schemas)
 // ============================================================================
 
+/**
+ * Supported Python runtime versions.
+ *
+ * NOTE on PYTHON_3_14 (issue #907): PYTHON_3_14 is kept in this enum because
+ * CloudFormation accepts it in `us-west-2` and `us-east-1`. In other regions,
+ * `AWS::EarlyValidation::PropertyValidation` rejects it. To avoid breaking
+ * users in supported regions while protecting users in unsupported regions,
+ * PYTHON_3_14 remains opt-in and is not the default — see DEFAULT_PYTHON_VERSION
+ * below.
+ */
 export const PythonRuntimeSchema = z.enum(['PYTHON_3_10', 'PYTHON_3_11', 'PYTHON_3_12', 'PYTHON_3_13', 'PYTHON_3_14']);
 export type PythonRuntime = z.infer<typeof PythonRuntimeSchema>;
 
-/** Default Python runtime version for new agents and MCP tools */
+/**
+ * Default Python runtime version for new agents and MCP tools.
+ *
+ * NOTE: Keep this below the newest enum value until CloudFormation supports
+ * it in all regions. PYTHON_3_14 is intentionally NOT the default — see
+ * issue #907 (https://github.com/aws/agentcore-cli/issues/907):
+ * CloudFormation's `AWS::EarlyValidation::PropertyValidation` rejects
+ * PYTHON_3_14 outside of us-west-2 / us-east-1, leaving stacks stuck in
+ * REVIEW_IN_PROGRESS. PYTHON_3_14 remains a valid enum member for users
+ * deploying in supported regions who explicitly opt in.
+ */
 export const DEFAULT_PYTHON_VERSION: PythonRuntime = 'PYTHON_3_13';
 
 export const NodeRuntimeSchema = z.enum(['NODE_18', 'NODE_20', 'NODE_22']);
