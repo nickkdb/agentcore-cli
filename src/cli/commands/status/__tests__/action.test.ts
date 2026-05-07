@@ -805,3 +805,59 @@ describe('handleProjectStatus — invocation URL enrichment', () => {
     expect(agentEntry!.invocationUrl).toBeUndefined();
   });
 });
+
+describe('registerStatus --type / --state validation exit code', () => {
+  const renderMock = vi.fn();
+  vi.doMock('ink', () => ({
+    Box: ({ children }: { children?: unknown }) => children,
+    Text: ({ children }: { children?: unknown }) => children,
+    render: (...args: unknown[]) => renderMock(...args),
+  }));
+  vi.doMock('../../../tui/guards', () => ({
+    requireProject: vi.fn(),
+  }));
+
+  beforeEach(() => {
+    renderMock.mockReset();
+  });
+
+  it('exits with non-zero code when --type is invalid', async () => {
+    const { Command } = await import('@commander-js/extra-typings');
+    const { registerStatus } = await import('../command.js');
+
+    const program = new Command();
+    program.exitOverride();
+    registerStatus(program as unknown as Parameters<typeof registerStatus>[0]);
+
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`__exit:${code ?? 0}`);
+    }) as never);
+
+    try {
+      await expect(program.parseAsync(['node', 'agentcore', 'status', '--type', 'bogus'])).rejects.toThrow(/__exit:1/);
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    } finally {
+      exitSpy.mockRestore();
+    }
+  });
+
+  it('exits with non-zero code when --state is invalid', async () => {
+    const { Command } = await import('@commander-js/extra-typings');
+    const { registerStatus } = await import('../command.js');
+
+    const program = new Command();
+    program.exitOverride();
+    registerStatus(program as unknown as Parameters<typeof registerStatus>[0]);
+
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`__exit:${code ?? 0}`);
+    }) as never);
+
+    try {
+      await expect(program.parseAsync(['node', 'agentcore', 'status', '--state', 'bogus'])).rejects.toThrow(/__exit:1/);
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    } finally {
+      exitSpy.mockRestore();
+    }
+  });
+});

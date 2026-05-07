@@ -76,7 +76,7 @@ export const registerStatus = (program: Command) => {
             Invalid resource type &apos;{cliOptions.type}&apos;. Valid types: {VALID_RESOURCE_TYPES.join(', ')}
           </Text>
         );
-        return;
+        process.exit(1);
       }
 
       // Validate --state
@@ -86,7 +86,7 @@ export const registerStatus = (program: Command) => {
             Invalid state &apos;{cliOptions.state}&apos;. Valid states: {VALID_STATES.join(', ')}
           </Text>
         );
-        return;
+        process.exit(1);
       }
 
       try {
