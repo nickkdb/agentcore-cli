@@ -5,7 +5,7 @@ from core.config import PipelineConfig
 
 
 POLL_INTERVAL_SECONDS = 60
-MAX_WAIT_MINUTES = 30
+MAX_WAIT_MINUTES = 60
 AUTOMATION_USER = "agentcore-cli-automation"
 
 
@@ -20,9 +20,10 @@ def run_babysit(
     repo = "/".join(pr_url.split("/")[3:5])
     repo_name = repo.split("/")[-1]
     seen_review_ids: set[str] = set()
+    seen_ci_failures: set[str] = set()
     start_time = time.time()
 
-    print(f"  Babysitting PR #{pr_number} — waiting for reviews from {AUTOMATION_USER}...", flush=True)
+    print(f"  Babysitting PR #{pr_number} — watching for reviews and CI status...", flush=True)
 
     while True:
         elapsed_minutes = (time.time() - start_time) / 60
@@ -32,7 +33,16 @@ def run_babysit(
 
         time.sleep(POLL_INTERVAL_SECONDS)
 
-        # Check for PR reviews (not comments) from the automation user
+        # 1. Check CI status
+        ci_status = _check_ci(client, session_id, repo_name, pr_number)
+        if ci_status == "failing":
+            failure_key = f"ci-{int(elapsed_minutes)}"
+            if failure_key not in seen_ci_failures:
+                seen_ci_failures.add(failure_key)
+                print(f"  CI failing. Getting failure logs and fixing...", flush=True)
+                _fix_ci(client, session_id, repo_name, pr_number, branch_name)
+
+        # 2. Check for PR reviews from automation user
         stdout, _, exit_code = client.run_command(
             session_id,
             f'cd {repo_name} && gh pr view {pr_number} --json reviews --jq \'.reviews[] | select(.author.login=="{AUTOMATION_USER}") | "\\(.id)|\\(.state)|\\(.body)"\' 2>/dev/null'
@@ -55,12 +65,10 @@ def run_babysit(
 
             print(f"  New review from {AUTOMATION_USER}: state={state}", flush=True)
 
-            # APPROVED — we're done
             if state == "APPROVED":
                 print(f"  PR approved by {AUTOMATION_USER}. Done babysitting.", flush=True)
                 return
 
-            # CHANGES_REQUESTED — fix and push
             if state == "CHANGES_REQUESTED":
                 print(f"  Changes requested. Fixing...", flush=True)
                 fix_prompt = (
@@ -75,6 +83,59 @@ def run_babysit(
                 client.run_command(session_id, f"cd {repo_name} && git push origin {branch_name}")
                 print(f"  Fix pushed. Waiting for next review...", flush=True)
 
-            # COMMENTED — non-blocking, keep waiting for a decisive review
             if state == "COMMENTED":
-                print(f"  Review comment (non-blocking). Continuing to wait for approval or change request.", flush=True)
+                print(f"  Review comment (non-blocking). Continuing to wait.", flush=True)
+
+
+def _check_ci(client: HarnessClient, session_id: str, repo_name: str, pr_number: str) -> str:
+    """Check CI status: 'passing', 'failing', 'pending', or 'unknown'."""
+    stdout, _, exit_code = client.run_command(
+        session_id,
+        f'cd {repo_name} && gh pr checks {pr_number} --json name,state,conclusion 2>/dev/null | head -50'
+    )
+    if exit_code != 0 or not stdout.strip():
+        return "unknown"
+
+    if '"conclusion":"FAILURE"' in stdout or '"conclusion":"failure"' in stdout:
+        return "failing"
+    if '"state":"PENDING"' in stdout or '"state":"pending"' in stdout:
+        return "pending"
+    if '"conclusion":"SUCCESS"' in stdout or '"conclusion":"success"' in stdout:
+        return "passing"
+    return "unknown"
+
+
+def _fix_ci(client: HarnessClient, session_id: str, repo_name: str, pr_number: str, branch_name: str) -> None:
+    """Get CI failure logs and ask agent to fix."""
+    # Get the failing check's log
+    stdout, _, _ = client.run_command(
+        session_id,
+        f'cd {repo_name} && gh pr checks {pr_number} 2>&1 | grep -i "fail\\|X" | head -10'
+    )
+
+    # Get more detail on the failure
+    log_output, _, _ = client.run_command(
+        session_id,
+        f'cd {repo_name} && gh run list --branch {branch_name} --status failure --limit 1 --json databaseId --jq ".[0].databaseId" 2>/dev/null'
+    )
+    run_id = log_output.strip()
+
+    failure_details = ""
+    if run_id:
+        details, _, _ = client.run_command(
+            session_id,
+            f'cd {repo_name} && gh run view {run_id} --log-failed 2>/dev/null | tail -50'
+        )
+        failure_details = details
+
+    fix_prompt = (
+        f"CI is failing on this PR. Here are the failing checks:\n\n"
+        f"{stdout}\n\n"
+        f"Failure details:\n{failure_details}\n\n"
+        f"Fix the CI failures. Run typecheck, fix issues, commit and push.\n"
+        f"Commit message: fix: resolve CI failures\n"
+        f"Push: git push origin {branch_name}"
+    )
+    client.invoke(session_id=session_id, message=fix_prompt)
+    client.run_command(session_id, f"cd {repo_name} && git push origin {branch_name}")
+    print(f"  CI fix pushed. Waiting for CI to re-run...", flush=True)
