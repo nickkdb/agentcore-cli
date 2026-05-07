@@ -1,5 +1,6 @@
 import { computeManagedOAuthCredentialName } from '../../../../primitives/credential-utils.js';
 import { mapByoConfigToAgent } from '../../../../tui/screens/agent/useAddAgent.js';
+import { DEFAULT_PYTHON_VERSION } from '../../../../tui/screens/generate/defaults.js';
 import type { GenerateConfig } from '../../../../tui/screens/generate/types.js';
 import {
   mapGenerateConfigToAgent,
@@ -87,7 +88,8 @@ describe('mapGenerateConfigToAgent', () => {
     expect(result.name).toBe('TestProject');
     expect(result.build).toBe('CodeZip');
     expect(result.entrypoint).toBe('main.py');
-    expect(result.runtimeVersion).toBe('PYTHON_3_14');
+    expect(result.runtimeVersion).toBe(DEFAULT_PYTHON_VERSION);
+    expect(result.runtimeVersion).toBe('PYTHON_3_13');
     expect(result.networkMode).toBe('PUBLIC');
     expect(result.protocol).toBe('HTTP');
   });

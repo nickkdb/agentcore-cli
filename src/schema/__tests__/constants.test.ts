@@ -207,4 +207,19 @@ describe('DEFAULT_PYTHON_VERSION (issue #907)', () => {
   it('is a valid member of PythonRuntimeSchema', () => {
     expect(PythonRuntimeSchema.safeParse(DEFAULT_PYTHON_VERSION).success).toBe(true);
   });
+
+  // Regression invariant: the default must lag the newest enum entry until
+  // CloudFormation catches up. If a future PR bumps both the newest version
+  // and the default in lockstep, this test will fail and force a maintainer
+  // to confirm CFN support.
+  it('does not equal the newest entry in PythonRuntimeSchema', () => {
+    const versions = PythonRuntimeSchema.options;
+    expect(DEFAULT_PYTHON_VERSION).not.toBe(versions[versions.length - 1]);
+  });
+
+  // PYTHON_3_14 is intentionally retained as a valid opt-in for users in
+  // CloudFormation-supported regions (us-west-2, us-east-1).
+  it('still accepts PYTHON_3_14 as an explicit opt-in via PythonRuntimeSchema', () => {
+    expect(PythonRuntimeSchema.safeParse('PYTHON_3_14').success).toBe(true);
+  });
 });
