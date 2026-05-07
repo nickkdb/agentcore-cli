@@ -24,7 +24,9 @@ export const registerImport = (program: Command) => {
       if (!cliOptions.source) {
         // No --source and no subcommand — launch interactive TUI
         const { requireProject } = await import('../../tui/guards/project');
+        const { requireTTY } = await import('../../tui/guards/tty');
         requireProject();
+        requireTTY();
         const { render } = await import('ink');
         const React = await import('react');
         const { ImportFlow } = await import('../../tui/screens/import');
