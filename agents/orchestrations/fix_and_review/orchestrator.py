@@ -31,9 +31,9 @@ def _invoke_with_retry(fn, max_retries=2, phase_name="phase"):
             return fn()
         except MaxTokensExceededError as e:
             if attempt < max_retries:
-                print(f"  ⚠️  {phase_name} hit max_tokens (attempt {attempt + 1}/{max_retries + 1}). Retrying with fresh invocation...", flush=True)
+                _log(f"  ⚠️  {phase_name} hit max_tokens (attempt {attempt + 1}/{max_retries + 1}). Retrying with fresh invocation...", flush=True)
             else:
-                print(f"  ⚠️  {phase_name} hit max_tokens after {max_retries + 1} attempts. Using partial output.", flush=True)
+                _log(f"  ⚠️  {phase_name} hit max_tokens after {max_retries + 1} attempts. Using partial output.", flush=True)
                 return e.partial_output
 
 
@@ -67,21 +67,22 @@ def run_pipeline(
         short_id = HarnessClient.new_session_id()[:8].lower()
         branch_name = f"fix/{issue_number}-{short_id}"
 
-    # Redirect all print output to the provided file handle (for batch mode)
-    import sys as _sys
-    _original_stdout = _sys.stdout
-    if output:
-        _sys.stdout = output
+    _out = output or __import__("sys").stdout
 
-    client = HarnessClient(config, output=output or _original_stdout)
+    def _log(*args, **kwargs):
+        kwargs.setdefault("file", _out)
+        kwargs.setdefault("flush", True)
+        _log(*args, **kwargs)
+
+    client = HarnessClient(config, output=_out)
     session_id = HarnessClient.new_session_id()
 
     pipeline_start = time.time()
-    print(f"=== Pipeline Start ===")
-    print(f"{'Feature' if is_feature else 'Issue'}: {feature_name or issue_url}")
-    print(f"Session: {session_id}")
-    print(f"Harness: {config.harness_arn}")
-    print()
+    _log(f"=== Pipeline Start ===")
+    _log(f"{'Feature' if is_feature else 'Issue'}: {feature_name or issue_url}")
+    _log(f"Session: {session_id}")
+    _log(f"Harness: {config.harness_arn}")
+    _log()
 
     def elapsed() -> str:
         m, s = divmod(int(time.time() - pipeline_start), 60)
@@ -89,7 +90,7 @@ def run_pipeline(
 
     # Phase 0: Setup
     t0 = time.time()
-    print("--- Phase 0: Setup ---")
+    _log("--- Phase 0: Setup ---")
     issue_details = _invoke_with_retry(
         lambda: run_setup(client, config, session_id, issue_url,
                           feature_name=feature_name, branch_name=branch_name),
@@ -101,12 +102,12 @@ def run_pipeline(
             session_id, f"gh issue view {issue_url} --json title --jq .title 2>/dev/null"
         )
         issue_title = issue_title_raw.strip() or f"resolve #{issue_number}"
-    print(f"Setup complete. {'Feature' if is_feature else 'Issue'}: {issue_title} [{int(time.time()-t0)}s | total {elapsed()}]")
-    print()
+    _log(f"Setup complete. {'Feature' if is_feature else 'Issue'}: {issue_title} [{int(time.time()-t0)}s | total {elapsed()}]")
+    _log()
 
     # Phase 1: Plan
     t0 = time.time()
-    print("--- Phase 1: Plan ---")
+    _log("--- Phase 1: Plan ---")
     if is_feature:
         plan = _invoke_with_retry(
             lambda: run_plan(client, config, session_id, issue_details,
@@ -116,11 +117,11 @@ def run_pipeline(
         plan = _invoke_with_retry(
             lambda: run_plan(client, config, session_id, issue_details),
             phase_name="Plan")
-    print(f"Plan generated ({len(plan)} chars). [{int(time.time()-t0)}s | total {elapsed()}]")
+    _log(f"Plan generated ({len(plan)} chars). [{int(time.time()-t0)}s | total {elapsed()}]")
 
     # Check if agent determined this isn't fixable
     if "ASSESSMENT: NOT_FIXABLE" in plan:
-        print("  Agent determined this issue is not fixable with available repos.")
+        _log("  Agent determined this issue is not fixable with available repos.")
         reason = ""
         for line in plan.split("\n"):
             if line.startswith("REASON:"):
@@ -138,32 +139,32 @@ def run_pipeline(
                 session_id,
                 f'gh issue comment {issue_url} --body "{comment}"'
             )
-            print(f"  Comment posted on issue. Exiting.")
+            _log(f"  Comment posted on issue. Exiting.")
         return 0
-    print()
+    _log()
 
     # Phase 1.5: Validate Plan
     t0 = time.time()
-    print("--- Phase 1.5: Validate Plan ---")
+    _log("--- Phase 1.5: Validate Plan ---")
     for attempt in range(3):
         validation = run_validate(client, session_id, plan)
         if validation.valid:
-            print(f"Plan validated. [{int(time.time()-t0)}s | total {elapsed()}]")
+            _log(f"Plan validated. [{int(time.time()-t0)}s | total {elapsed()}]")
             break
-        print(f"Validation errors: {validation.errors}")
+        _log(f"Validation errors: {validation.errors}")
         if attempt < 2:
-            print("Re-planning...")
+            _log("Re-planning...")
             plan = run_plan(
                 client, config, session_id,
                 f"Previous plan had issues: {validation.errors}\n\n{issue_details}",
             )
         else:
-            print("WARNING: Plan validation failed after 3 attempts. Proceeding anyway.")
-    print()
+            _log("WARNING: Plan validation failed after 3 attempts. Proceeding anyway.")
+    _log()
 
     # Phase 2: Execute
     t0 = time.time()
-    print("--- Phase 2: Execute ---")
+    _log("--- Phase 2: Execute ---")
     affected_repos: list[str] = []
     if "agentcore-cli" in plan.lower() or "cli" in plan.lower():
         affected_repos.append("agentcore-cli")
@@ -176,33 +177,33 @@ def run_pipeline(
         _invoke_with_retry(
             lambda: run_execute(client, config, session_id, plan, branch_name, issue_number),
             phase_name="Execute")
-        print(f"Execution complete. [{int(time.time()-t0)}s | total {elapsed()}]")
+        _log(f"Execution complete. [{int(time.time()-t0)}s | total {elapsed()}]")
 
         # Phase 2.5: Verify
-        print("--- Phase 2.5: Verify ---")
+        _log("--- Phase 2.5: Verify ---")
         verification = run_verify(client, session_id, branch_name, affected_repos)
         if verification.all_passed:
-            print(f"Verification passed. [{int(time.time()-t0)}s | total {elapsed()}]")
+            _log(f"Verification passed. [{int(time.time()-t0)}s | total {elapsed()}]")
             break
-        print(f"Verification failed: {verification.errors}")
+        _log(f"Verification failed: {verification.errors}")
         if attempt < 2:
-            print("Re-executing with error context...")
+            _log("Re-executing with error context...")
         else:
-            print("WARNING: Verification failed after 3 attempts. Proceeding to review anyway.")
-    print()
+            _log("WARNING: Verification failed after 3 attempts. Proceeding to review anyway.")
+    _log()
 
     # Phase 3: Extract
     t0 = time.time()
-    print("--- Phase 3: Extract ---")
+    _log("--- Phase 3: Extract ---")
     extract = run_extract(client, session_id, config.cli_repo, config.cdk_repo)
-    print(
+    _log(
         f"Extracted diff: {len(extract.stats.changed_files)} files, "
         f"{extract.stats.total_lines} lines changed [{int(time.time()-t0)}s | total {elapsed()}]"
     )
     if not extract.stats.changed_files:
-        print("\n=== Pipeline Failed — no changes were produced. Agent may have failed to commit. ===")
+        _log("\n=== Pipeline Failed — no changes were produced. Agent may have failed to commit. ===")
         return 1
-    print()
+    _log()
 
     # Review Loop
     all_previous_findings_files: list[str] = []
@@ -211,7 +212,7 @@ def run_pipeline(
     for round_num in range(1, config.max_review_rounds + 1):
         t0 = time.time()
         # Phase 4: Review
-        print(f"--- Phase 4: Review (Round {round_num}) ---")
+        _log(f"--- Phase 4: Review (Round {round_num}) ---")
         num_reviewers = calculate_reviewer_count(
             extract.stats, config.min_reviewers, config.max_reviewers
         )
@@ -243,12 +244,12 @@ def run_pipeline(
         review_results = run_review(
             client, config, assignments, branch_name, issue_summary, previous_context
         )
-        print(f"Reviews collected from {len(review_results)} reviewers. [{int(time.time()-t0)}s | total {elapsed()}]")
+        _log(f"Reviews collected from {len(review_results)} reviewers. [{int(time.time()-t0)}s | total {elapsed()}]")
 
         # Phase 5: Aggregate
-        print(f"--- Phase 5: Aggregate (Round {round_num}) ---")
+        _log(f"--- Phase 5: Aggregate (Round {round_num}) ---")
         aggregate = run_aggregate(review_results)
-        print(
+        _log(
             f"Approved: {aggregate.all_approved}, "
             f"Findings: {len(aggregate.unique_findings)}, "
             f"Parse failures: {aggregate.parse_failures}"
@@ -260,7 +261,7 @@ def run_pipeline(
                 if f.severity in ("critical", "high", "medium")
             ]
             if not medium_plus:
-                print(f"All reviewers approved. Moving to Complete. [total {elapsed()}]")
+                _log(f"All reviewers approved. Moving to Complete. [total {elapsed()}]")
                 review_summary_parts.append(
                     f"Round {round_num}: {len(aggregate.unique_findings)} findings, all approved"
                 )
@@ -276,22 +277,22 @@ def run_pipeline(
 
         # Phase 6: Fix
         t_fix = time.time()
-        print(f"--- Phase 6: Fix (Round {round_num}) ---")
+        _log(f"--- Phase 6: Fix (Round {round_num}) ---")
         run_fix(client, config, session_id, aggregate.unique_findings, branch_name, round_num)
-        print(f"Fixes applied. [{int(time.time()-t_fix)}s | total {elapsed()}]")
+        _log(f"Fixes applied. [{int(time.time()-t_fix)}s | total {elapsed()}]")
 
         # Re-extract for next round
         extract = run_extract(client, session_id, config.cli_repo, config.cdk_repo)
-        print()
+        _log()
     else:
-        print(
+        _log(
             f"WARNING: Max review rounds ({config.max_review_rounds}) reached "
             f"without full approval."
         )
 
     # Phase 8: Complete
     t0 = time.time()
-    print("--- Phase 8: Complete ---")
+    _log("--- Phase 8: Complete ---")
     review_summary = "\n".join(review_summary_parts)
     result = run_complete(
         client, config, session_id, branch_name, issue_url, issue_number,
@@ -299,19 +300,18 @@ def run_pipeline(
     )
 
     if result.pr_urls:
-        print(f"\n=== Pipeline Complete [{elapsed()}] ===")
+        _log(f"\n=== Pipeline Complete [{elapsed()}] ===")
         for url in result.pr_urls:
-            print(f"PR: {url}")
+            _log(f"PR: {url}")
 
         # Phase 9: Babysit PR — wait for automation reviewer feedback
-        print(f"\n--- Phase 9: Babysit PR ---")
+        _log(f"\n--- Phase 9: Babysit PR ---")
         for url in result.pr_urls:
             run_babysit(client, config, session_id, url, branch_name)
     else:
-        print(f"\n=== Pipeline Failed [{elapsed()}] ===")
-        print(f"Errors: {result.errors}")
+        _log(f"\n=== Pipeline Failed [{elapsed()}] ===")
+        _log(f"Errors: {result.errors}")
 
-    _sys.stdout = _original_stdout
     return 0 if result.pr_urls else 1
 
 

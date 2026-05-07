@@ -36,10 +36,7 @@ def fetch_issues_by_label(repo: str, label: str, max_count: int) -> list[str]:
 
 
 def run_single_issue(issue_url: str, config_path: str) -> dict:
-    import io
-    import contextlib
     import json as json_mod
-    import os
 
     issue_number = issue_url.rstrip("/").split("/")[-1]
     log_path = Path(f"/tmp/batch-issue-{issue_number}.log")
@@ -55,15 +52,15 @@ def run_single_issue(issue_url: str, config_path: str) -> dict:
     })
 
     try:
-        # Each issue gets its own log file handle passed to the harness client
-        with open(log_path, "w", buffering=1) as log_file:
-            set_prompts_dir(PROMPTS_DIR)
-            exit_code = run_pipeline(
-                issue_url=issue_url,
-                config_path=config_path,
-                prompts_dir=PROMPTS_DIR,
-                output=log_file,
-            )
+        log_file = open(log_path, "w", buffering=1)
+        set_prompts_dir(PROMPTS_DIR)
+        exit_code = run_pipeline(
+            issue_url=issue_url,
+            config_path=config_path,
+            prompts_dir=PROMPTS_DIR,
+            output=log_file,
+        )
+        log_file.close()
         result = {
             "issue": issue_url,
             "number": issue_number,
