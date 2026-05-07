@@ -39,15 +39,26 @@ def run_single_issue(issue_url: str, config_path: str) -> dict:
     import io
     import contextlib
     import json as json_mod
+    import os
 
     issue_number = issue_url.rstrip("/").split("/")[-1]
     log_path = Path(f"/tmp/batch-issue-{issue_number}.log")
     start = time.time()
 
+    # Mark as running immediately so dashboard can see it
+    _update_state(issue_number, {
+        "issue": issue_url,
+        "number": issue_number,
+        "status": "running",
+        "duration": 0,
+        "log_file": str(log_path),
+    })
+
     try:
-        # Redirect stdout to per-issue log file
-        with open(log_path, "w") as log_file:
+        # Redirect stdout to per-issue log file (line-buffered)
+        with open(log_path, "w", buffering=1) as log_file:
             with contextlib.redirect_stdout(log_file):
+                os.environ.setdefault("PYTHONUNBUFFERED", "1")
                 set_prompts_dir(PROMPTS_DIR)
                 exit_code = run_pipeline(
                     issue_url=issue_url,
@@ -71,7 +82,7 @@ def run_single_issue(issue_url: str, config_path: str) -> dict:
             "log_file": str(log_path),
         }
 
-    # Write state file for dashboard
+    # Write final state
     _update_state(issue_number, result)
     return result
 
