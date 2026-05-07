@@ -12,6 +12,7 @@ from orchestrations.fix_and_review.partitioning import (
     partition_round3_risk_areas,
 )
 from orchestrations.fix_and_review.phases.aggregate import run_aggregate
+from orchestrations.fix_and_review.phases.babysit import run_babysit
 from orchestrations.fix_and_review.phases.complete import run_complete
 from orchestrations.fix_and_review.phases.execute import run_execute
 from orchestrations.fix_and_review.phases.extract import ExtractResult, run_extract
@@ -250,6 +251,11 @@ def run_pipeline(
         print(f"\n=== Pipeline Complete [{elapsed()}] ===")
         for url in result.pr_urls:
             print(f"PR: {url}")
+
+        # Phase 9: Babysit PR — wait for automation reviewer feedback
+        print(f"\n--- Phase 9: Babysit PR ---")
+        for url in result.pr_urls:
+            run_babysit(client, config, session_id, url, branch_name)
     else:
         print(f"\n=== Pipeline Failed [{elapsed()}] ===")
         print(f"Errors: {result.errors}")
