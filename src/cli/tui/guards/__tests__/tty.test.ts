@@ -2,12 +2,31 @@ import { requireTTY } from '../tty.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 describe('requireTTY', () => {
-  const originalStdinIsTTY = process.stdin.isTTY;
-  const originalStdoutIsTTY = process.stdout.isTTY;
+  let originalStdinIsTTY: boolean | undefined;
+  let originalStdoutIsTTY: boolean | undefined;
   let exitSpy: ReturnType<typeof vi.spyOn>;
   let errorSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    // Snapshot the live values inside beforeEach so a previous test file in
+    // the same worker that mutated process.stdin/stdout.isTTY without
+    // restoring cannot poison our restoration. Also re-define with
+    // configurable: true to make subsequent restoration deterministic
+    // across Node versions where the original descriptor for piped streams
+    // may not be configurable.
+    originalStdinIsTTY = process.stdin.isTTY;
+    originalStdoutIsTTY = process.stdout.isTTY;
+    Object.defineProperty(process.stdin, 'isTTY', {
+      value: originalStdinIsTTY,
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(process.stdout, 'isTTY', {
+      value: originalStdoutIsTTY,
+      configurable: true,
+      writable: true,
+    });
+
     // Throw from process.exit so we can assert without actually exiting the test runner.
     exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
       throw new Error(`__exit__:${code}`);

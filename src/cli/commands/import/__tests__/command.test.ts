@@ -40,4 +40,19 @@ describe('import command non-TTY behavior (issue #982)', () => {
     expect(combined.toLowerCase()).toContain('requires an interactive terminal');
     expect(combined).not.toContain('Raw mode is not supported');
   });
+
+  it('does not apply the TTY guard to --source path (pins guard placement)', async () => {
+    // The requireTTY() guard must remain inside the no-source branch only.
+    // If it gets accidentally hoisted to the top of the action, this test
+    // will start failing with the interactive-terminal message instead of
+    // the source-file-validation message.
+    const bogusSource = join(projectDir, 'definitely-does-not-exist.yaml');
+    const result = await runCLI(['import', '--source', bogusSource], projectDir);
+
+    expect(result.exitCode).toBe(1);
+
+    const combined = `${result.stdout}\n${result.stderr}`;
+    expect(combined).toContain('Source file not found');
+    expect(combined.toLowerCase()).not.toContain('requires an interactive terminal');
+  });
 });
