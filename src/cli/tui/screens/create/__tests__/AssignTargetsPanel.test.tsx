@@ -154,7 +154,7 @@ describe('buildAwsTargetsConfig (schema-validated)', () => {
       buildAwsTargetsConfig([targetA], {
         dev: new Set(['dev-a', 'missing-target']),
       })
-    ).toThrowError(/unknown target "missing-target"/);
+    ).toThrowError(/unknown target.*missing-target/);
   });
 
   it('round-trips through aws-targets.json on disk and re-validates with AwsTargetsSchema', async () => {
