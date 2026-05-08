@@ -6,3 +6,10 @@ export {
   type EnvironmentPreset,
   type EnvironmentStepProps,
 } from './EnvironmentStep';
+export {
+  AssignTargetsPanel,
+  buildAwsTargetsConfig,
+  buildEnvironmentsSection,
+  type AssignTargetsPanelProps,
+  type EnvironmentAssignments,
+} from './AssignTargetsPanel';
