@@ -1,6 +1,8 @@
 export interface DeployOptions {
   target?: string;
   env?: string;
+  parallel?: boolean;
+  continueOnError?: boolean;
   yes?: boolean;
   progress?: boolean;
   verbose?: boolean;

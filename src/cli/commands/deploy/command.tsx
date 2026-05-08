@@ -168,6 +168,11 @@ export const registerDeploy = (program: Command) => {
     .description(COMMAND_DESCRIPTIONS.deploy)
     .option('--target <target>', 'Deployment target name (default: "default") [non-interactive]')
     .option('--env <name>', 'Environment name to deploy (deploys all targets in the environment) [non-interactive]')
+    .option('--parallel', 'Deploy environment targets concurrently (requires --env) [non-interactive]')
+    .option(
+      '--continue-on-error',
+      'Continue deploying remaining targets after a failure (requires --env) [non-interactive]'
+    )
     .option('-y, --yes', 'Auto-confirm prompts, read credentials from env [non-interactive]')
     .option('-v, --verbose', 'Show resource-level deployment events [non-interactive]')
     .option('--json', 'Output as JSON [non-interactive]')
@@ -177,6 +182,8 @@ export const registerDeploy = (program: Command) => {
       async (cliOptions: {
         target?: string;
         env?: string;
+        parallel?: boolean;
+        continueOnError?: boolean;
         yes?: boolean;
         verbose?: boolean;
         json?: boolean;
@@ -189,6 +196,8 @@ export const registerDeploy = (program: Command) => {
             cliOptions.json ||
             cliOptions.target ||
             cliOptions.env ||
+            cliOptions.parallel ||
+            cliOptions.continueOnError ||
             cliOptions.dryRun ||
             cliOptions.yes ||
             cliOptions.verbose
