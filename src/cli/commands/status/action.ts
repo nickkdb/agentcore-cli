@@ -1,12 +1,23 @@
 import { ConfigIO } from '../../../lib';
-import type { AgentCoreProjectSpec, AwsDeploymentTargets, DeployedResourceState, DeployedState } from '../../../schema';
-import { getAgentRuntimeStatus } from '../../aws';
+import type {
+  AgentCoreProjectSpec,
+  AwsDeploymentTarget,
+  AwsDeploymentTargets,
+  DeployedResourceState,
+  DeployedState,
+  Environments,
+} from '../../../schema';
+import { AwsTargetsSchema } from '../../../schema';
+import { getAgentRuntimeStatus, getCredentialProvider } from '../../aws';
 import { getEvaluator, getOnlineEvaluationConfig } from '../../aws/agentcore-control';
 import { dnsSuffix } from '../../aws/partition';
 import { getErrorMessage } from '../../errors';
 import { ExecLogger } from '../../logging';
+import { resolveEnvironment } from '../../operations/deploy/environment';
 import type { ResourceDeploymentState } from './constants';
 import { buildRuntimeInvocationUrl } from './constants';
+import { CloudFormationClient, DescribeStacksCommand } from '@aws-sdk/client-cloudformation';
+import { readFile } from 'node:fs/promises';
 
 export type { ResourceDeploymentState };
 
@@ -552,4 +563,123 @@ export async function handleRuntimeLookup(
     logger.finalize(false);
     return { success: false, error: errorMsg, logPath: logger.getRelativeLogPath() };
   }
+}
+
+// ============================================================================
+// Environment-scoped status (--env)
+// ============================================================================
+
+export interface EnvStatusRow {
+  target: string;
+  region: string;
+  status: string;
+  lastDeployed: string;
+}
+
+export interface EnvStatusResult {
+  success: boolean;
+  envName: string;
+  rows: EnvStatusRow[];
+  error?: string;
+}
+
+export type StackInfoFetcher = (region: string, stackName: string) => Promise<{ status?: string; lastUpdated?: Date }>;
+
+/**
+ * Default stack-info fetcher: DescribeStacks via SDK. Returns undefined fields
+ * when the stack does not exist or the call fails (caller decides how to display).
+ */
+export const defaultStackInfoFetcher: StackInfoFetcher = async (region, stackName) => {
+  const cfn = new CloudFormationClient({ region, credentials: getCredentialProvider() });
+  try {
+    const resp = await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
+    const stack = resp.Stacks?.[0];
+    return {
+      status: stack?.StackStatus,
+      lastUpdated: stack?.LastUpdatedTime ?? stack?.CreationTime,
+    };
+  } catch {
+    return {};
+  }
+};
+
+/**
+ * Read aws-targets.json supporting both the legacy array shape and the new
+ * `{ targets, environments }` object shape. Falls back to empty environments
+ * for the legacy shape so resolveEnvironment surfaces a clean "no environments"
+ * error.
+ */
+async function readEnvironmentsFromAwsTargets(
+  configIO: ConfigIO,
+  targets: AwsDeploymentTarget[]
+): Promise<{ targets: AwsDeploymentTarget[]; environments?: Environments }> {
+  const filePath = configIO.getPathResolver().getAWSTargetsConfigPath();
+  try {
+    const raw = await readFile(filePath, 'utf8');
+    const parsed: unknown = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return { targets };
+    }
+    const validated = AwsTargetsSchema.parse(parsed);
+    return { targets, environments: validated.environments };
+  } catch {
+    return { targets };
+  }
+}
+
+function formatStatusRow(
+  target: AwsDeploymentTarget,
+  stackName: string | undefined,
+  info: { status?: string; lastUpdated?: Date } | undefined
+): EnvStatusRow {
+  return {
+    target: target.name,
+    region: target.region,
+    status: info?.status ?? (stackName ? 'NOT_DEPLOYED' : 'NOT_DEPLOYED'),
+    lastDeployed: info?.lastUpdated ? info.lastUpdated.toISOString() : '\u2014',
+  };
+}
+
+/**
+ * Resolve an environment to its targets and query each target's stack status.
+ * Used by `agentcore status --env <name>`.
+ */
+export async function handleEnvStatus(
+  envName: string,
+  options: {
+    configIO?: ConfigIO;
+    fetchStackInfo?: StackInfoFetcher;
+  } = {}
+): Promise<EnvStatusResult> {
+  const configIO = options.configIO ?? new ConfigIO();
+  const fetchStackInfo = options.fetchStackInfo ?? defaultStackInfoFetcher;
+
+  let context: StatusContext;
+  try {
+    context = await loadStatusConfig(configIO);
+  } catch (err: unknown) {
+    return { success: false, envName, rows: [], error: getErrorMessage(err) };
+  }
+
+  const awsTargetsWithEnv = await readEnvironmentsFromAwsTargets(configIO, context.awsTargets);
+
+  let resolved;
+  try {
+    resolved = resolveEnvironment(envName, awsTargetsWithEnv);
+  } catch (err: unknown) {
+    return { success: false, envName, rows: [], error: getErrorMessage(err) };
+  }
+
+  const rows: EnvStatusRow[] = await Promise.all(
+    resolved.targets.map(async target => {
+      const stackName = context.deployedState.targets?.[target.name]?.resources?.stackName;
+      if (!stackName) {
+        return formatStatusRow(target, undefined, undefined);
+      }
+      const info = await fetchStackInfo(target.region, stackName);
+      return formatStatusRow(target, stackName, info);
+    })
+  );
+
+  return { success: true, envName, rows };
 }

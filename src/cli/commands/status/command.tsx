@@ -2,7 +2,7 @@ import { getErrorMessage } from '../../errors';
 import { COMMAND_DESCRIPTIONS } from '../../tui/copy';
 import { requireProject } from '../../tui/guards';
 import type { ResourceStatusEntry } from './action';
-import { handleProjectStatus, handleRuntimeLookup, loadStatusConfig } from './action';
+import { handleEnvStatus, handleProjectStatus, handleRuntimeLookup, loadStatusConfig } from './action';
 import { DEPLOYMENT_STATE_COLORS, DEPLOYMENT_STATE_LABELS } from './constants';
 import type { Command } from '@commander-js/extra-typings';
 import { Box, Text, render } from 'ink';
@@ -25,6 +25,7 @@ const VALID_STATES = ['deployed', 'local-only', 'pending-removal'] as const;
 interface StatusCliOptions {
   runtimeId?: string;
   target?: string;
+  env?: string;
   type?: string;
   state?: string;
   runtime?: string;
@@ -59,6 +60,7 @@ export const registerStatus = (program: Command) => {
     .description(COMMAND_DESCRIPTIONS.status)
     .option('--runtime-id <id>', 'Look up a specific runtime by ID')
     .option('--target <name>', 'Select deployment target')
+    .option('--env <name>', 'Show status for all targets in an environment')
     .option(
       '--type <type>',
       'Filter by resource type (agent, runtime-endpoint, memory, credential, gateway, evaluator, online-eval, policy-engine, policy, config-bundle, ab-test)'
@@ -68,6 +70,31 @@ export const registerStatus = (program: Command) => {
     .option('--json', 'Output as JSON')
     .action(async (cliOptions: StatusCliOptions) => {
       requireProject();
+
+      // Environment-scoped status: render a single table across all targets in the env
+      if (cliOptions.env) {
+        if (cliOptions.target) {
+          render(<Text color="red">Cannot use --env and --target together. Pick one.</Text>);
+          process.exit(1);
+        }
+        try {
+          const envResult = await handleEnvStatus(cliOptions.env);
+          if (cliOptions.json) {
+            console.log(JSON.stringify(envResult, null, 2));
+            if (!envResult.success) process.exit(1);
+            return;
+          }
+          if (!envResult.success) {
+            render(<Text color="red">{envResult.error}</Text>);
+            process.exit(1);
+          }
+          render(<EnvStatusTable envName={envResult.envName} rows={envResult.rows} />);
+          return;
+        } catch (error) {
+          render(<Text color="red">Error: {getErrorMessage(error)}</Text>);
+          process.exit(1);
+        }
+      }
 
       // Validate --type
       if (cliOptions.type && !(VALID_RESOURCE_TYPES as readonly string[]).includes(cliOptions.type)) {
@@ -312,5 +339,39 @@ function ResourceEntry({ entry, showRuntime }: { entry: ResourceStatusEntry; sho
       {entry.identifier && <Text dimColor> ({entry.identifier})</Text>}
       {entry.error && <Text color="red"> - Error: {entry.error}</Text>}
     </Text>
+  );
+}
+
+function EnvStatusTable({
+  envName,
+  rows,
+}: {
+  envName: string;
+  rows: { target: string; region: string; status: string; lastDeployed: string }[];
+}) {
+  const columns = [
+    { key: 'target', header: 'Target' },
+    { key: 'region', header: 'Region' },
+    { key: 'status', header: 'Status' },
+    { key: 'lastDeployed', header: 'Last Deployed' },
+  ] as const;
+
+  const widths = columns.map(col => {
+    const headerLen = col.header.length;
+    const cellMax = rows.reduce((max, row) => Math.max(max, String(row[col.key]).length), 0);
+    return Math.max(headerLen, cellMax);
+  });
+
+  const pad = (text: string, width: number) => text + ' '.repeat(Math.max(0, width - text.length));
+
+  return (
+    <Box flexDirection="column">
+      <Text bold>Environment: {envName}</Text>
+      <Text bold>{columns.map((c, i) => pad(c.header, widths[i]!)).join('  ')}</Text>
+      {rows.length === 0 && <Text dimColor>No targets in this environment.</Text>}
+      {rows.map(row => (
+        <Text key={row.target}>{columns.map((c, i) => pad(String(row[c.key]), widths[i]!)).join('  ')}</Text>
+      ))}
+    </Box>
   );
 }
