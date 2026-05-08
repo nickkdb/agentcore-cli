@@ -1,7 +1,9 @@
 import { ConfigIO, NoProjectError, findConfigRoot } from '../../../lib';
-import type { AgentCoreRegion, AwsDeploymentTarget } from '../../../schema';
+import type { AgentCoreRegion, AwsDeploymentTarget, Environments } from '../../../schema';
+import { AwsTargetsSchema } from '../../../schema';
 import { detectAwsContext } from '../../aws';
 import { getErrorMessage } from '../../errors';
+import { readFile } from 'node:fs/promises';
 import { useCallback, useEffect, useState } from 'react';
 
 export type AwsConfigPhase =
@@ -26,6 +28,8 @@ export interface AwsTargetConfigState {
   detectedRegion: AgentCoreRegion;
   /** Available targets for selection (when phase === 'select-target') */
   availableTargets: AwsDeploymentTarget[];
+  /** Environments map parsed from aws-targets.json (undefined when not defined or on legacy array shape). */
+  environments?: Environments;
   /** Selected target indices (empty means all targets) */
   selectedTargetIndices: number[];
   /** Pending target indices for multi-select (before confirmation) */
@@ -77,6 +81,7 @@ export function useAwsTargetConfig(): AwsTargetConfigState {
   const [detectedRegion, setDetectedRegion] = useState<AgentCoreRegion>('us-east-1');
   const [manualAccountId, setManualAccountId] = useState<string>('');
   const [availableTargets, setAvailableTargets] = useState<AwsDeploymentTarget[]>([]);
+  const [environments, setEnvironments] = useState<Environments | undefined>(undefined);
   const [selectedTargetIndices, setSelectedTargetIndices] = useState<number[]>([]);
   const [pendingTargetIndices, setPendingTargetIndices] = useState<number[]>([]);
 
@@ -111,6 +116,19 @@ export function useAwsTargetConfig(): AwsTargetConfigState {
 
         const configIO = new ConfigIO({ baseDir: configRoot });
         const targets = await configIO.resolveAWSDeploymentTargets();
+        // Best-effort read of the new `{ targets, environments }` object shape.
+        // Falls back to undefined for legacy array configs or any read/parse error.
+        try {
+          const filePath = configIO.getPathResolver().getAWSTargetsConfigPath();
+          const raw = await readFile(filePath, 'utf8');
+          const parsed: unknown = JSON.parse(raw);
+          if (!Array.isArray(parsed)) {
+            const validated = AwsTargetsSchema.parse(parsed);
+            setEnvironments(validated.environments);
+          }
+        } catch {
+          // Legacy array shape, missing file, or invalid JSON \u2014 environments stay undefined.
+        }
 
         if (targets.length > 1) {
           // Multiple targets - show selection
@@ -246,6 +264,7 @@ export function useAwsTargetConfig(): AwsTargetConfigState {
     error,
     detectedRegion,
     availableTargets,
+    environments,
     selectedTargetIndices,
     pendingTargetIndices,
     startConfig,
