@@ -649,14 +649,17 @@ export async function handleEnvStatus(
   options: {
     configIO?: ConfigIO;
     fetchStackInfo?: StackInfoFetcher;
+    /** Inject a loader (used by tests to bypass real ConfigIO project/state reads). */
+    loadConfig?: (configIO: ConfigIO) => Promise<StatusContext>;
   } = {}
 ): Promise<EnvStatusResult> {
   const configIO = options.configIO ?? new ConfigIO();
   const fetchStackInfo = options.fetchStackInfo ?? defaultStackInfoFetcher;
+  const loadConfig = options.loadConfig ?? loadStatusConfig;
 
   let context: StatusContext;
   try {
-    context = await loadStatusConfig(configIO);
+    context = await loadConfig(configIO);
   } catch (err: unknown) {
     return { success: false, envName, rows: [], error: getErrorMessage(err) };
   }

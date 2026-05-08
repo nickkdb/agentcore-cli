@@ -1,5 +1,5 @@
 import type { AwsDeploymentTarget } from '../../../../schema';
-import type { StackInfoFetcher } from '../action';
+import { type StackInfoFetcher, handleEnvStatus } from '../action';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -16,52 +16,34 @@ const targetB: AwsDeploymentTarget = {
   region: 'us-east-1',
 };
 
-interface FakePathResolver {
-  getAWSTargetsConfigPath(): string;
-}
-
-interface FakeConfigIO {
-  getPathResolver(): FakePathResolver;
-}
-
-function makeFakeConfigIO(awsTargetsPath: string): FakeConfigIO {
+function makeFakeConfigIO(awsTargetsPath: string): never {
   return {
     getPathResolver: () => ({ getAWSTargetsConfigPath: () => awsTargetsPath }),
-  };
+  } as never;
 }
+
+const baseContext = {
+  project: { name: 'proj' } as never,
+  awsTargets: [targetA, targetB],
+  deployedState: {
+    targets: {
+      'dev-a': { resources: { stackName: 'stack-dev-a' } },
+      'dev-b': { resources: { stackName: 'stack-dev-b' } },
+    },
+  },
+};
 
 describe('handleEnvStatus', () => {
   let tmpDir: string;
   let awsTargetsPath: string;
-  const loadedContext = {
-    project: { name: 'proj' } as never,
-    awsTargets: [targetA, targetB],
-    deployedState: {
-      targets: {
-        'dev-a': { resources: { stackName: 'stack-dev-a' } },
-        'dev-b': { resources: { stackName: 'stack-dev-b' } },
-      },
-    },
-  };
 
   beforeEach(async () => {
-    tmpDir = await mkdir(path.join(os.tmpdir(), `status-env-${Date.now()}-${Math.random().toString(36).slice(2)}`), {
-      recursive: true,
-    }).then(p => p ?? path.join(os.tmpdir(), `status-env-${Date.now()}`));
+    tmpDir = path.join(os.tmpdir(), `status-env-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    await mkdir(tmpDir, { recursive: true });
     awsTargetsPath = path.join(tmpDir, 'aws-targets.json');
-    // Mock loadStatusConfig by wiring a fake ConfigIO with no I/O for project/state.
-    vi.doMock('../action', async importOriginal => {
-      const actual = await importOriginal<typeof import('../action')>();
-      return {
-        ...actual,
-        loadStatusConfig: vi.fn().mockResolvedValue(loadedContext),
-      };
-    });
   });
 
   afterEach(async () => {
-    vi.restoreAllMocks();
-    vi.doUnmock('../action');
     if (tmpDir) await rm(tmpDir, { recursive: true, force: true });
   });
 
@@ -74,9 +56,7 @@ describe('handleEnvStatus', () => {
       })
     );
 
-    const { handleEnvStatus: handleEnvStatusReloaded } = await import('../action');
-
-    const fetchStackInfo: StackInfoFetcher = vi.fn(async (region, stackName) => {
+    const fetchStackInfo: StackInfoFetcher = vi.fn(async (_region, stackName) => {
       await Promise.resolve();
       if (stackName === 'stack-dev-a') {
         return { status: 'CREATE_COMPLETE', lastUpdated: new Date('2025-01-01T00:00:00Z') };
@@ -84,8 +64,9 @@ describe('handleEnvStatus', () => {
       return { status: 'UPDATE_COMPLETE', lastUpdated: new Date('2025-02-02T00:00:00Z') };
     });
 
-    const result = await handleEnvStatusReloaded('dev', {
-      configIO: makeFakeConfigIO(awsTargetsPath) as never,
+    const result = await handleEnvStatus('dev', {
+      configIO: makeFakeConfigIO(awsTargetsPath),
+      loadConfig: () => Promise.resolve(baseContext as never),
       fetchStackInfo,
     });
 
@@ -119,26 +100,19 @@ describe('handleEnvStatus', () => {
       })
     );
 
-    // Reload to pick up fresh module mocks for this test file.
-    vi.doMock('../action', async importOriginal => {
-      const actual = await importOriginal<typeof import('../action')>();
-      return {
-        ...actual,
-        loadStatusConfig: vi.fn().mockResolvedValue({
-          ...loadedContext,
-          deployedState: { targets: { 'dev-a': { resources: { stackName: 'stack-dev-a' } } } },
-        }),
-      };
-    });
-    const { handleEnvStatus: reloaded } = await import('../action');
+    const ctxOnlyA = {
+      ...baseContext,
+      deployedState: { targets: { 'dev-a': { resources: { stackName: 'stack-dev-a' } } } },
+    };
 
     const fetchStackInfo: StackInfoFetcher = vi.fn(async () => {
       await Promise.resolve();
       return { status: 'CREATE_COMPLETE', lastUpdated: new Date('2025-01-01T00:00:00Z') };
     });
 
-    const result = await reloaded('dev', {
-      configIO: makeFakeConfigIO(awsTargetsPath) as never,
+    const result = await handleEnvStatus('dev', {
+      configIO: makeFakeConfigIO(awsTargetsPath),
+      loadConfig: () => Promise.resolve(ctxOnlyA as never),
       fetchStackInfo,
     });
 
@@ -147,7 +121,7 @@ describe('handleEnvStatus', () => {
     const devB = result.rows.find(r => r.target === 'dev-b');
     expect(devB?.status).toBe('NOT_DEPLOYED');
     expect(devB?.lastDeployed).toBe('\u2014');
-    // Stack info fetcher only called for dev-a.
+    // Stack info fetcher only called for dev-a (the only target with a stackName).
     expect(fetchStackInfo).toHaveBeenCalledTimes(1);
   });
 
@@ -159,10 +133,10 @@ describe('handleEnvStatus', () => {
         environments: { dev: { targets: ['dev-a'] } },
       })
     );
-    const { handleEnvStatus: reloaded } = await import('../action');
 
-    const result = await reloaded('staging', {
-      configIO: makeFakeConfigIO(awsTargetsPath) as never,
+    const result = await handleEnvStatus('staging', {
+      configIO: makeFakeConfigIO(awsTargetsPath),
+      loadConfig: () => Promise.resolve(baseContext as never),
       fetchStackInfo: () => Promise.resolve({}),
     });
 
@@ -174,10 +148,10 @@ describe('handleEnvStatus', () => {
   it('returns a failure result when aws-targets.json has no environments', async () => {
     // Legacy array shape (no environments).
     await writeFile(awsTargetsPath, JSON.stringify([targetA, targetB]));
-    const { handleEnvStatus: reloaded } = await import('../action');
 
-    const result = await reloaded('dev', {
-      configIO: makeFakeConfigIO(awsTargetsPath) as never,
+    const result = await handleEnvStatus('dev', {
+      configIO: makeFakeConfigIO(awsTargetsPath),
+      loadConfig: () => Promise.resolve(baseContext as never),
       fetchStackInfo: () => Promise.resolve({}),
     });
 
