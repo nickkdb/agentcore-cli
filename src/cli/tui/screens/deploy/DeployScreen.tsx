@@ -1,5 +1,6 @@
 import { ConfigIO } from '../../../../lib';
 import type { AgentCoreMcpSpec, AgentCoreProjectSpec } from '../../../../schema';
+import { type EnvDeployResult, handleEnvDeploy } from '../../../commands/deploy/actions';
 import { formatTargetStatus } from '../../../operations/deploy/gateway-status';
 import {
   AwsTargetConfigUI,
@@ -18,6 +19,7 @@ import {
 import { BOOTSTRAP, HELP_TEXT } from '../../constants';
 import { useAwsTargetConfig } from '../../hooks';
 import { InvokeScreen } from '../invoke';
+import { EnvironmentPicker } from './EnvironmentPicker';
 import { type PreSynthesized, useDeployFlow } from './useDeployFlow';
 import { Box, Text, useInput, useStdout } from 'ink';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -63,6 +65,9 @@ export function DeployScreen({
   const [showResourceGraph, setShowResourceGraph] = useState(false);
   const [showDiff, setShowDiff] = useState(diffMode ?? false);
   const [mcpSpec, setMcpSpec] = useState<AgentCoreMcpSpec | undefined>();
+  const [envChoice, setEnvChoice] = useState<'pending' | 'skipped' | 'running' | 'done'>('pending');
+  const [envDeployResult, setEnvDeployResult] = useState<EnvDeployResult | null>(null);
+  const [selectedEnvName, setSelectedEnvName] = useState<string | null>(null);
 
   // Load MCP spec for ResourceGraph
   const configIO = useMemo(() => new ConfigIO(), []);
@@ -143,12 +148,20 @@ export function DeployScreen({
     { isActive: isInteractive && !diffMode && !!context }
   );
 
+  // Determine whether to show the env picker. Only relevant in interactive mode
+  // when the user has not yet made an env / single-target choice and the
+  // project has at least one environment defined.
+  const hasEnvironments = !!awsConfig.environments && Object.keys(awsConfig.environments).length > 0;
+  const showEnvPicker = isInteractive && !skipPreflight && !diffMode && hasEnvironments && envChoice === 'pending';
+
   // Auto-start deploy when AWS target is configured (or immediately when preSynthesized)
   useEffect(() => {
+    if (showEnvPicker) return;
+    if (envChoice === 'running' || envChoice === 'done') return;
     if (phase === 'idle' && (skipPreflight || awsConfig.isConfigured)) {
       startDeploy();
     }
-  }, [phase, awsConfig.isConfigured, startDeploy, skipPreflight]);
+  }, [phase, awsConfig.isConfigured, startDeploy, skipPreflight, showEnvPicker, envChoice]);
 
   // Auto-confirm teardown when autoConfirm is enabled
   useEffect(() => {
@@ -191,6 +204,24 @@ export function DeployScreen({
       onExit();
     }
   }, [isInteractive, allSuccess, onExit]);
+
+  // Run multi-target deploy after the user picks an env in the TUI picker.
+  useEffect(() => {
+    if (envChoice !== 'running' || !selectedEnvName) return;
+    let cancelled = false;
+    void handleEnvDeploy({
+      env: selectedEnvName,
+      autoConfirm: true,
+      onLog: () => undefined,
+    }).then(result => {
+      if (cancelled) return;
+      setEnvDeployResult(result);
+      setEnvChoice('done');
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [envChoice, selectedEnvName]);
 
   // Show invoke screen (only in interactive mode when selected from next steps)
   if (showInvoke && isInteractive) {
@@ -237,6 +268,50 @@ export function DeployScreen({
     awsConfig.phase === 'checking' || awsConfig.phase === 'detecting' || awsConfig.phase === 'saving';
   if (showAwsConfig && awsTransitional) {
     return null;
+  }
+
+  // Env picker: only when environments are defined and user hasn't yet chosen.
+  if (showEnvPicker && awsConfig.environments) {
+    return (
+      <Screen title="AgentCore Deploy" onExit={onExit}>
+        <EnvironmentPicker
+          environments={awsConfig.environments}
+          isActive={true}
+          onSelect={name => {
+            setSelectedEnvName(name);
+            setEnvChoice('running');
+          }}
+          onSkip={() => setEnvChoice('skipped')}
+        />
+      </Screen>
+    );
+  }
+
+  // Env deploy in flight or completed.
+  if (envChoice === 'running' || envChoice === 'done') {
+    return (
+      <Screen title="AgentCore Deploy" onExit={onExit}>
+        <Box flexDirection="column">
+          <Text bold>Environment: {selectedEnvName}</Text>
+          {envChoice === 'running' && <Text dimColor>Deploying targets…</Text>}
+          {envChoice === 'done' && envDeployResult && (
+            <Box flexDirection="column" marginTop={1}>
+              <Text color={envDeployResult.success ? 'green' : 'red'}>
+                {envDeployResult.success ? '\u2713' : '\u2717'} Environment &quot;{envDeployResult.envName}&quot;{' '}
+                {envDeployResult.success ? 'deployed' : 'deploy failed'}
+              </Text>
+              {envDeployResult.error && <Text color="red">{envDeployResult.error}</Text>}
+              {envDeployResult.results.map((r, idx) => (
+                <Text key={r.targetName ?? `result-${idx}`}>
+                  {r.success ? '\u2713' : '\u2717'} {r.targetName ?? '(unknown target)'}
+                  {r.error ? ` — ${r.error}` : ''}
+                </Text>
+              ))}
+            </Box>
+          )}
+        </Box>
+      </Screen>
+    );
   }
 
   // Credentials prompt phase
