@@ -68,6 +68,7 @@ export function DeployScreen({
   const [envChoice, setEnvChoice] = useState<'pending' | 'skipped' | 'running' | 'done'>('pending');
   const [envDeployResult, setEnvDeployResult] = useState<EnvDeployResult | null>(null);
   const [selectedEnvName, setSelectedEnvName] = useState<string | null>(null);
+  const [envDeployLog, setEnvDeployLog] = useState<string[]>([]);
 
   // Load MCP spec for ResourceGraph
   const configIO = useMemo(() => new ConfigIO(), []);
@@ -211,8 +212,23 @@ export function DeployScreen({
     let cancelled = false;
     void handleEnvDeploy({
       env: selectedEnvName,
-      autoConfirm: true,
-      onLog: () => undefined,
+      // Honor the outer DeployScreen's autoConfirm prop so teardown deploys
+      // are NOT silently approved when the user opens the TUI without -y.
+      // Inside handleDeploy this gates the teardown-confirmation prompt.
+      autoConfirm: autoConfirm,
+      onLog: line => {
+        if (cancelled) return;
+        // Keep the last 20 lines so long deploys don't grow state unbounded.
+        setEnvDeployLog(prev => (prev.length >= 20 ? [...prev.slice(-19), line] : [...prev, line]));
+      },
+      onProgress: (step, status) => {
+        if (cancelled) return;
+        const mark = status === 'success' ? '\u2713' : status === 'error' ? '\u2717' : '\u2026';
+        setEnvDeployLog(prev => {
+          const next = [...prev, `  ${mark} ${step}`];
+          return next.length > 20 ? next.slice(-20) : next;
+        });
+      },
     }).then(result => {
       if (cancelled) return;
       setEnvDeployResult(result);
@@ -221,7 +237,7 @@ export function DeployScreen({
     return () => {
       cancelled = true;
     };
-  }, [envChoice, selectedEnvName]);
+  }, [envChoice, selectedEnvName, autoConfirm]);
 
   // Show invoke screen (only in interactive mode when selected from next steps)
   if (showInvoke && isInteractive) {
@@ -294,6 +310,15 @@ export function DeployScreen({
         <Box flexDirection="column">
           <Text bold>Environment: {selectedEnvName}</Text>
           {envChoice === 'running' && <Text dimColor>Deploying targets…</Text>}
+          {envDeployLog.length > 0 && (
+            <Box flexDirection="column" marginTop={1}>
+              {envDeployLog.map((line, idx) => (
+                <Text key={`log-${idx}`} dimColor>
+                  {line}
+                </Text>
+              ))}
+            </Box>
+          )}
           {envChoice === 'done' && envDeployResult && (
             <Box flexDirection="column" marginTop={1}>
               <Text color={envDeployResult.success ? 'green' : 'red'}>
