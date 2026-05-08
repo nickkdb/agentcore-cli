@@ -33,26 +33,31 @@ describe('EnvironmentPicker', () => {
     expect(onSkip).not.toHaveBeenCalled();
   });
 
-  it('navigates with arrow keys and selects the highlighted env', () => {
+  it('navigates with arrow keys and selects the highlighted env', async () => {
     const onSelect = vi.fn();
     const { stdin } = render(
       <EnvironmentPicker environments={environments} onSelect={onSelect} onSkip={() => undefined} />
     );
     // Down once -> "prod" (alphabetical: dev, prod, skip).
     stdin.write('\u001B[B');
+    await new Promise(resolve => setTimeout(resolve, 50));
     stdin.write('\r');
+    await new Promise(resolve => setTimeout(resolve, 50));
     expect(onSelect).toHaveBeenCalledWith('prod');
   });
 
-  it('calls onSkip when the skip option is selected with Enter', () => {
+  it('calls onSkip when the skip option is selected with Enter', async () => {
     const onSkip = vi.fn();
     const { stdin } = render(
       <EnvironmentPicker environments={environments} onSelect={() => undefined} onSkip={onSkip} />
     );
     // Down twice from "dev" -> "prod" -> skip.
     stdin.write('\u001B[B');
+    await new Promise(resolve => setTimeout(resolve, 50));
     stdin.write('\u001B[B');
+    await new Promise(resolve => setTimeout(resolve, 50));
     stdin.write('\r');
+    await new Promise(resolve => setTimeout(resolve, 50));
     expect(onSkip).toHaveBeenCalled();
   });
 
