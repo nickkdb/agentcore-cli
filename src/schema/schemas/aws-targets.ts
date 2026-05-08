@@ -74,3 +74,77 @@ export const AwsDeploymentTargetsSchema = z.array(AwsDeploymentTargetSchema).sup
 );
 
 export type AwsDeploymentTargets = z.infer<typeof AwsDeploymentTargetsSchema>;
+
+// ============================================================================
+// Environment Name
+// Format mirrors deployment target names but is lower-case only so that env
+// names map cleanly to URL-safe / config-key contexts (e.g. `--env dev`).
+// ============================================================================
+
+export const EnvironmentNameSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(
+    /^[a-z][a-z0-9-]*$/,
+    'Environment name must start with a lowercase letter and contain only lowercase alphanumeric characters and hyphens'
+  )
+  .describe('Unique identifier for a deployment environment');
+
+export type EnvironmentName = z.infer<typeof EnvironmentNameSchema>;
+
+// ============================================================================
+// Environment Overrides
+// In v1, only `envVars` may be overridden per environment. The schema is
+// `strict` so unknown override fields are rejected up-front (forward-compat
+// fields require an explicit schema bump).
+// ============================================================================
+
+export const EnvironmentOverridesSchema = z
+  .object({
+    envVars: z.record(z.string(), z.string()).optional(),
+  })
+  .strict();
+
+export type EnvironmentOverrides = z.infer<typeof EnvironmentOverridesSchema>;
+
+// ============================================================================
+// Environment
+// Maps an environment name to an ordered, non-empty list of target references
+// (target names) plus optional in-memory overrides applied at deploy time.
+// ============================================================================
+
+export const EnvironmentSchema = z
+  .object({
+    targets: z.array(DeploymentTargetNameSchema).min(1, 'Environment must reference at least one target'),
+    overrides: EnvironmentOverridesSchema.optional(),
+  })
+  .strict();
+
+export type Environment = z.infer<typeof EnvironmentSchema>;
+
+// ============================================================================
+// Environments
+// Record keyed by environment name. Cross-validation that each `targets[]`
+// entry refers to an existing target in the deployment targets array is added
+// in the wrapping schema (see T2).
+// ============================================================================
+
+export const EnvironmentsSchema = z.record(EnvironmentNameSchema, EnvironmentSchema);
+
+export type Environments = z.infer<typeof EnvironmentsSchema>;
+
+// ============================================================================
+// AWS Targets (object form)
+// Backward-compatible object wrapper that pairs the existing targets array
+// with an optional `environments` map. The plain-array `AwsDeploymentTargetsSchema`
+// remains the authoritative on-disk shape for now; this object form is the
+// foundation for T2's cross-validation and future migrations.
+// ============================================================================
+
+export const AwsTargetsSchema = z.object({
+  targets: AwsDeploymentTargetsSchema,
+  environments: EnvironmentsSchema.optional(),
+});
+
+export type AwsTargets = z.infer<typeof AwsTargetsSchema>;
