@@ -142,9 +142,28 @@ export type Environments = z.infer<typeof EnvironmentsSchema>;
 // foundation for T2's cross-validation and future migrations.
 // ============================================================================
 
-export const AwsTargetsSchema = z.object({
-  targets: AwsDeploymentTargetsSchema,
-  environments: EnvironmentsSchema.optional(),
-});
+export const AwsTargetsSchema = z
+  .object({
+    targets: AwsDeploymentTargetsSchema,
+    environments: EnvironmentsSchema.optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (!data.environments) return;
+    const availableTargets = data.targets.map(t => t.name);
+    const availableSet = new Set(availableTargets);
+    for (const [envName, env] of Object.entries(data.environments)) {
+      env.targets.forEach((targetRef, idx) => {
+        if (!availableSet.has(targetRef)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['environments', envName, 'targets', idx],
+            message:
+              `Environment "${envName}" references unknown target "${targetRef}". ` +
+              `Available targets: ${availableTargets.length > 0 ? availableTargets.join(', ') : '(none defined)'}`,
+          });
+        }
+      });
+    }
+  });
 
 export type AwsTargets = z.infer<typeof AwsTargetsSchema>;
