@@ -141,6 +141,7 @@ export const registerDeploy = (program: Command) => {
     .alias('dp')
     .description(COMMAND_DESCRIPTIONS.deploy)
     .option('--target <target>', 'Deployment target name (default: "default") [non-interactive]')
+    .option('--env <name>', 'Environment name to deploy (deploys all targets in the environment) [non-interactive]')
     .option('-y, --yes', 'Auto-confirm prompts, read credentials from env [non-interactive]')
     .option('-v, --verbose', 'Show resource-level deployment events [non-interactive]')
     .option('--json', 'Output as JSON [non-interactive]')
@@ -149,6 +150,7 @@ export const registerDeploy = (program: Command) => {
     .action(
       async (cliOptions: {
         target?: string;
+        env?: string;
         yes?: boolean;
         verbose?: boolean;
         json?: boolean;
@@ -157,12 +159,19 @@ export const registerDeploy = (program: Command) => {
       }) => {
         try {
           requireProject();
-          if (cliOptions.json || cliOptions.target || cliOptions.dryRun || cliOptions.yes || cliOptions.verbose) {
+          if (
+            cliOptions.json ||
+            cliOptions.target ||
+            cliOptions.env ||
+            cliOptions.dryRun ||
+            cliOptions.yes ||
+            cliOptions.verbose
+          ) {
             // CLI mode - any flag triggers non-interactive mode
             const options = {
               ...cliOptions,
               plan: cliOptions.dryRun,
-              target: cliOptions.target ?? 'default',
+              target: cliOptions.env ? cliOptions.target : (cliOptions.target ?? 'default'),
               progress: !cliOptions.json,
             };
             await handleDeployCLI(options as DeployOptions);

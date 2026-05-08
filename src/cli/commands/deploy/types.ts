@@ -1,5 +1,6 @@
 export interface DeployOptions {
   target?: string;
+  env?: string;
   yes?: boolean;
   progress?: boolean;
   verbose?: boolean;
