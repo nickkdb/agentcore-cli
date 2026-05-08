@@ -6,7 +6,6 @@ import type {
   EnvironmentOverrides,
   Environments,
 } from '../../../schema';
-import { AwsTargetsSchema } from '../../../schema';
 import { applyTargetRegionToEnv } from '../../aws';
 import { validateAwsCredentials } from '../../aws/account';
 import { CdkToolkitWrapper, createSwitchableIoHost } from '../../cdk/toolkit-lib';
@@ -53,7 +52,6 @@ import { enableOnlineEvalConfigs } from '../../operations/deploy/post-deploy-onl
 import { toStackName } from '../import/import-utils';
 import type { DeployResult } from './types';
 import { StackSelectionStrategy } from '@aws-cdk/toolkit-lib';
-import { readFile } from 'node:fs/promises';
 
 export interface ValidatedDeployOptions {
   target: string;
@@ -735,6 +733,10 @@ export interface EnvDeployOptions {
   verbose?: boolean;
   plan?: boolean;
   diff?: boolean;
+  /** Run env targets concurrently via Promise.allSettled. */
+  parallel?: boolean;
+  /** Continue past per-target failures (sequential mode only). */
+  continueOnError?: boolean;
   onProgress?: (step: string, status: 'start' | 'success' | 'error') => void;
   onResourceEvent?: (message: string) => void;
   /** Sink for orchestrator progress + summary lines. Defaults to console.log. */
@@ -754,22 +756,21 @@ export interface EnvDeployResult {
  * `{ targets, environments }` object shape. Returns environments only when
  * the file uses the object shape; otherwise environments is undefined.
  */
+/**
+ * Read aws-targets.json with environments if present. Delegates to
+ * `ConfigIO.readAwsTargetsFull` and then applies region fallback so the same
+ * environment/profile precedence used by the rest of the CLI is honored.
+ */
 async function readAwsTargetsWithEnvironments(
   configIO: ConfigIO
 ): Promise<{ targets: AwsDeploymentTarget[]; environments?: Environments }> {
-  const filePath = configIO.getPathResolver().getAWSTargetsConfigPath();
-  const raw = await readFile(filePath, 'utf8');
-  const parsed: unknown = JSON.parse(raw);
-  if (Array.isArray(parsed)) {
-    // Legacy shape: hand off to ConfigIO so region fallback still applies.
-    const targets = await configIO.resolveAWSDeploymentTargets();
-    return { targets };
-  }
-  // Object shape: validate and return both halves.
-  const validated = AwsTargetsSchema.parse(parsed);
-  // Region fallback for object-shape entries (mirrors resolveAWSDeploymentTargets).
-  const targets = await configIO.resolveAWSDeploymentTargets();
-  return { targets, environments: validated.environments };
+  const full = await configIO.readAwsTargetsFull();
+  // Apply the standard region fallback (env vars / profile config) by going
+  // through resolveAWSDeploymentTargets — its result preserves saved regions
+  // and fills in only blanks, so we can safely substitute it for the targets
+  // we just read while keeping the environments map from the object shape.
+  const resolved = await configIO.resolveAWSDeploymentTargets();
+  return full.environments ? { targets: resolved, environments: full.environments } : { targets: resolved };
 }
 
 /**
@@ -796,7 +797,12 @@ export async function handleEnvDeploy(options: EnvDeployOptions): Promise<EnvDep
   const results: DeployResult[] = [];
   const aggregate = await deployToTargets(
     resolved.targets,
-    { environmentName: options.env, log: options.onLog },
+    {
+      environmentName: options.env,
+      parallel: options.parallel,
+      continueOnError: options.continueOnError,
+      log: options.onLog,
+    },
     async target => {
       const result = await handleDeploy({
         target: target.name,

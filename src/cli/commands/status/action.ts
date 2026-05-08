@@ -7,7 +7,6 @@ import type {
   DeployedState,
   Environments,
 } from '../../../schema';
-import { AwsTargetsSchema } from '../../../schema';
 import { getAgentRuntimeStatus, getCredentialProvider } from '../../aws';
 import { getEvaluator, getOnlineEvaluationConfig } from '../../aws/agentcore-control';
 import { dnsSuffix } from '../../aws/partition';
@@ -17,7 +16,6 @@ import { resolveEnvironment } from '../../operations/deploy/environment';
 import type { ResourceDeploymentState } from './constants';
 import { buildRuntimeInvocationUrl } from './constants';
 import { CloudFormationClient, DescribeStacksCommand } from '@aws-sdk/client-cloudformation';
-import { readFile } from 'node:fs/promises';
 
 export type { ResourceDeploymentState };
 
@@ -604,24 +602,17 @@ export const defaultStackInfoFetcher: StackInfoFetcher = async (region, stackNam
 };
 
 /**
- * Read aws-targets.json supporting both the legacy array shape and the new
- * `{ targets, environments }` object shape. Falls back to empty environments
- * for the legacy shape so resolveEnvironment surfaces a clean "no environments"
- * error.
+ * Read aws-targets.json with environments via ConfigIO. Falls back to the
+ * supplied targets list (no environments) on any read failure so callers can
+ * still surface a clean "no environments" error from resolveEnvironment.
  */
 async function readEnvironmentsFromAwsTargets(
   configIO: ConfigIO,
   targets: AwsDeploymentTarget[]
 ): Promise<{ targets: AwsDeploymentTarget[]; environments?: Environments }> {
-  const filePath = configIO.getPathResolver().getAWSTargetsConfigPath();
   try {
-    const raw = await readFile(filePath, 'utf8');
-    const parsed: unknown = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return { targets };
-    }
-    const validated = AwsTargetsSchema.parse(parsed);
-    return { targets, environments: validated.environments };
+    const full = await configIO.readAwsTargetsFull();
+    return full.environments ? { targets, environments: full.environments } : { targets };
   } catch {
     return { targets };
   }

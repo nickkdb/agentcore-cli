@@ -76,6 +76,8 @@ async function handleDeployCLI(options: DeployOptions): Promise<void> {
       verbose: options.verbose ?? options.diff,
       plan: options.plan,
       diff: options.diff,
+      parallel: options.parallel,
+      continueOnError: options.continueOnError,
       onProgress,
       onResourceEvent,
       onLog: line => console.log(line),

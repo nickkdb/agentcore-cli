@@ -1,6 +1,7 @@
-import type { AwsDeploymentTarget } from '../../../../schema';
+import type { AwsDeploymentTarget, Environments } from '../../../../schema';
+import { AwsTargetsSchema } from '../../../../schema';
 import { type StackInfoFetcher, handleEnvStatus } from '../action';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -19,6 +20,17 @@ const targetB: AwsDeploymentTarget = {
 function makeFakeConfigIO(awsTargetsPath: string): never {
   return {
     getPathResolver: () => ({ getAWSTargetsConfigPath: () => awsTargetsPath }),
+    // Mirror ConfigIO.readAwsTargetsFull's contract just enough for the
+    // status helper: dual-shape read with no region fallback.
+    readAwsTargetsFull: async (): Promise<{ targets: AwsDeploymentTarget[]; environments?: Environments }> => {
+      const raw = await readFile(awsTargetsPath, 'utf8');
+      const parsed: unknown = JSON.parse(raw);
+      if (Array.isArray(parsed)) return { targets: parsed as AwsDeploymentTarget[] };
+      const validated = AwsTargetsSchema.parse(parsed);
+      return validated.environments
+        ? { targets: validated.targets, environments: validated.environments }
+        : { targets: validated.targets };
+    },
   } as never;
 }
 

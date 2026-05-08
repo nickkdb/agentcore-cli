@@ -1,9 +1,16 @@
-import type { AgentCoreCliMcpDefs, AgentCoreProjectSpec, AwsDeploymentTarget, DeployedState } from '../../../schema';
+import type {
+  AgentCoreCliMcpDefs,
+  AgentCoreProjectSpec,
+  AwsDeploymentTarget,
+  DeployedState,
+  Environments,
+} from '../../../schema';
 import {
   AgentCoreCliMcpDefsSchema,
   AgentCoreProjectSpecSchema,
   AgentCoreRegionSchema,
   AwsDeploymentTargetsSchema,
+  AwsTargetsSchema,
   createValidatedDeployedStateSchema,
 } from '../../../schema';
 import {
@@ -120,12 +127,44 @@ export class ConfigIO {
 
   /**
    * Read and validate the AWS configuration file.
+   * Accepts both the legacy array shape (`AwsDeploymentTarget[]`) and the new
+   * object shape (`{ targets, environments? }`); returns the targets array
+   * either way. Use `readAwsTargetsFull()` to also retrieve the environments map.
    * Region is preserved as saved. Use resolveAWSDeploymentTargets() for environment/profile overrides.
    * TODO: Account is still overridden via AWS_PROFILE — consider moving to resolveAWSDeploymentTargets() for consistency.
    */
   async readAWSDeploymentTargets(): Promise<AwsDeploymentTarget[]> {
+    const { targets } = await this.readAwsTargetsFull();
+    return targets;
+  }
+
+  /**
+   * Read and validate the AWS configuration file as the full object form.
+   * Returns both the targets array and the optional `environments` map.
+   * Tolerant to either on-disk shape: legacy array files yield
+   * `environments: undefined`; new object files are validated through
+   * `AwsTargetsSchema` (incl. cross-validation that env target refs exist).
+   */
+  async readAwsTargetsFull(): Promise<{
+    targets: AwsDeploymentTarget[];
+    environments?: Environments;
+  }> {
     const filePath = this.pathResolver.getAWSTargetsConfigPath();
-    let targets = await this.readAndValidate(filePath, 'AWS Targets', AwsDeploymentTargetsSchema);
+    let targets: AwsDeploymentTarget[];
+    let environments: Environments | undefined;
+
+    // Peek at the on-disk shape so we can route to the correct schema. We
+    // intentionally use a single readAndValidate call per branch so existing
+    // ConfigNotFoundError / ConfigParseError / ConfigValidationError paths
+    // stay consistent for both shapes.
+    const peeked = await this.peekAwsTargetsShape(filePath);
+    if (peeked === 'object') {
+      const full = await this.readAndValidate(filePath, 'AWS Targets', AwsTargetsSchema);
+      targets = full.targets;
+      environments = full.environments;
+    } else {
+      targets = await this.readAndValidate(filePath, 'AWS Targets', AwsDeploymentTargetsSchema);
+    }
 
     // Override account from credentials if AWS_PROFILE is set
     if (process.env.AWS_PROFILE) {
@@ -135,7 +174,34 @@ export class ConfigIO {
       }
     }
 
-    return targets;
+    return environments ? { targets, environments } : { targets };
+  }
+
+  /**
+   * Resolve the on-disk shape of aws-targets.json. Returns 'array' when the
+   * top-level JSON value is an array (legacy), 'object' otherwise. Throws
+   * the same errors as readAndValidate would for missing / unreadable /
+   * unparseable files so callers see a single failure surface.
+   */
+  private async peekAwsTargetsShape(filePath: string): Promise<'array' | 'object'> {
+    if (!existsSync(filePath)) {
+      throw new ConfigNotFoundError(filePath, 'AWS Targets');
+    }
+    let raw: string;
+    try {
+      raw = await readFile(filePath, 'utf-8');
+    } catch (err: unknown) {
+      const normalizedError = err instanceof Error ? err : new Error('Unknown error');
+      throw new ConfigReadError(filePath, normalizedError);
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (err: unknown) {
+      const normalizedError = err instanceof Error ? err : new Error('Invalid JSON');
+      throw new ConfigParseError(filePath, normalizedError);
+    }
+    return Array.isArray(parsed) ? 'array' : 'object';
   }
 
   /**
@@ -181,11 +247,26 @@ export class ConfigIO {
   }
 
   /**
-   * Write and validate the AWS configuration file
+   * Write and validate the AWS configuration file (legacy array shape).
    */
   async writeAWSDeploymentTargets(data: AwsDeploymentTarget[]): Promise<void> {
     const filePath = this.pathResolver.getAWSTargetsConfigPath();
     await this.validateAndWrite(filePath, 'AWS Targets', AwsDeploymentTargetsSchema, data);
+  }
+
+  /**
+   * Write the full `{ targets, environments? }` object shape, validated against
+   * AwsTargetsSchema (incl. cross-validation that env target refs exist).
+   * When `environments` is undefined or empty the legacy array shape is written
+   * to preserve compatibility with older tooling that may still consume this file.
+   */
+  async writeAwsTargetsFull(data: { targets: AwsDeploymentTarget[]; environments?: Environments }): Promise<void> {
+    const filePath = this.pathResolver.getAWSTargetsConfigPath();
+    if (!data.environments || Object.keys(data.environments).length === 0) {
+      await this.validateAndWrite(filePath, 'AWS Targets', AwsDeploymentTargetsSchema, data.targets);
+      return;
+    }
+    await this.validateAndWrite(filePath, 'AWS Targets', AwsTargetsSchema, data);
   }
 
   /**

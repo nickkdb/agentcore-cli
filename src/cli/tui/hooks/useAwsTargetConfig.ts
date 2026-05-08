@@ -1,9 +1,7 @@
 import { ConfigIO, NoProjectError, findConfigRoot } from '../../../lib';
 import type { AgentCoreRegion, AwsDeploymentTarget, Environments } from '../../../schema';
-import { AwsTargetsSchema } from '../../../schema';
 import { detectAwsContext } from '../../aws';
 import { getErrorMessage } from '../../errors';
-import { readFile } from 'node:fs/promises';
 import { useCallback, useEffect, useState } from 'react';
 
 export type AwsConfigPhase =
@@ -117,17 +115,12 @@ export function useAwsTargetConfig(): AwsTargetConfigState {
         const configIO = new ConfigIO({ baseDir: configRoot });
         const targets = await configIO.resolveAWSDeploymentTargets();
         // Best-effort read of the new `{ targets, environments }` object shape.
-        // Falls back to undefined for legacy array configs or any read/parse error.
+        // Falls back to undefined for legacy array configs or any read failure.
         try {
-          const filePath = configIO.getPathResolver().getAWSTargetsConfigPath();
-          const raw = await readFile(filePath, 'utf8');
-          const parsed: unknown = JSON.parse(raw);
-          if (!Array.isArray(parsed)) {
-            const validated = AwsTargetsSchema.parse(parsed);
-            setEnvironments(validated.environments);
-          }
+          const full = await configIO.readAwsTargetsFull();
+          if (full.environments) setEnvironments(full.environments);
         } catch {
-          // Legacy array shape, missing file, or invalid JSON \u2014 environments stay undefined.
+          // Legacy array shape (no environments) or unreadable — leave undefined.
         }
 
         if (targets.length > 1) {

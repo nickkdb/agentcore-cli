@@ -1,3 +1,5 @@
+import { ConfigIO, findConfigRoot } from '../../../../lib';
+import type { AwsDeploymentTarget } from '../../../../schema';
 import { DEFAULT_MODEL_IDS, ProjectNameSchema } from '../../../../schema';
 import { validateFolderNotExists } from '../../../commands/create/validate';
 import { VPC_ENDPOINT_WARNING } from '../../../commands/shared/vpc-utils';
@@ -19,10 +21,12 @@ import { STATUS_COLORS } from '../../theme';
 import { AddAgentScreen } from '../agent/AddAgentScreen';
 import type { AddAgentConfig } from '../agent/types';
 import { FRAMEWORK_OPTIONS } from '../agent/types';
+import { AssignTargetsPanel, type EnvironmentAssignments, buildAwsTargetsConfig } from './AssignTargetsPanel';
+import { EnvironmentStep } from './EnvironmentStep';
 import { useCreateFlow } from './useCreateFlow';
 import { Box, Text, useApp } from 'ink';
 import { join } from 'path';
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 /** Build a text representation of the completion screen for terminal output */
 function buildExitMessage(projectName: string, steps: Step[], agentConfig: AddAgentConfig | null): string {
@@ -209,6 +213,65 @@ export function CreateScreen({ cwd, isInteractive, onExit, onNavigate }: CreateS
   // Completion state for next steps
   const allSuccess = !flow.hasError && flow.isComplete;
 
+  // Optional post-scaffold environment wizard (T13/T14). Runs once after the
+  // project is created; auto-skipped when there are 0 or 1 targets in
+  // aws-targets.json. Persists via writeAwsTargetsFull when the user assigns
+  // targets to environments.
+  const [envWizardStage, setEnvWizardStage] = useState<
+    'idle' | 'env-step' | 'assign' | 'persisting' | 'done' | 'skipped'
+  >('idle');
+  const [existingTargets, setExistingTargets] = useState<AwsDeploymentTarget[]>([]);
+  const [envNamesChosen, setEnvNamesChosen] = useState<string[]>([]);
+  const [envWizardError, setEnvWizardError] = useState<string | null>(null);
+
+  // Kick the wizard off once scaffolding succeeds (interactive only).
+  useEffect(() => {
+    if (!allSuccess || envWizardStage !== 'idle' || !isInteractive) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const configRoot = findConfigRoot(projectRoot);
+        if (!configRoot) {
+          if (!cancelled) setEnvWizardStage('skipped');
+          return;
+        }
+        const configIO = new ConfigIO({ baseDir: configRoot });
+        const full = await configIO.readAwsTargetsFull();
+        if (cancelled) return;
+        setExistingTargets(full.targets);
+        setEnvWizardStage('env-step');
+      } catch {
+        if (!cancelled) setEnvWizardStage('skipped');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [allSuccess, envWizardStage, isInteractive, projectRoot]);
+
+  const writeEnvironmentsAndExit = useCallback(
+    (assignments: EnvironmentAssignments) => {
+      setEnvWizardStage('persisting');
+      void (async () => {
+        try {
+          const configRoot = findConfigRoot(projectRoot);
+          if (!configRoot) {
+            setEnvWizardStage('done');
+            return;
+          }
+          const configIO = new ConfigIO({ baseDir: configRoot });
+          const config = buildAwsTargetsConfig(existingTargets, assignments);
+          await configIO.writeAwsTargetsFull(config);
+          setEnvWizardStage('done');
+        } catch (err: unknown) {
+          setEnvWizardError(err instanceof Error ? err.message : String(err));
+          setEnvWizardStage('done');
+        }
+      })();
+    },
+    [existingTargets, projectRoot]
+  );
+
   // Handle exit - if successful, exit app completely and print completion screen
   const handleExit = useCallback(() => {
     if (allSuccess && isInteractive) {
@@ -220,12 +283,13 @@ export function CreateScreen({ cwd, isInteractive, onExit, onNavigate }: CreateS
     }
   }, [allSuccess, isInteractive, flow.projectName, flow.steps, flow.addAgentConfig, exit, onExit]);
 
-  // Auto-exit when project creation completes successfully
+  // Auto-exit when project creation completes successfully (after env wizard finishes / is skipped)
+  const wizardFinished = envWizardStage === 'done' || envWizardStage === 'skipped' || !isInteractive;
   useEffect(() => {
-    if (allSuccess) {
+    if (allSuccess && wizardFinished) {
       handleExit();
     }
-  }, [allSuccess, handleExit]);
+  }, [allSuccess, wizardFinished, handleExit]);
 
   // Create prompt navigation
   const { selectedIndex: createPromptIndex } = useListNavigation({
@@ -328,7 +392,58 @@ export function CreateScreen({ cwd, isInteractive, onExit, onNavigate }: CreateS
 
       {phase === 'running' && <StepProgress steps={flow.steps} />}
 
-      {allSuccess && flow.outputDir && (
+      {allSuccess && envWizardStage === 'env-step' && (
+        <Box marginTop={1} flexDirection="column">
+          <StepProgress steps={flow.steps} />
+          <Box marginTop={1}>
+            <EnvironmentStep
+              targetCount={existingTargets.length}
+              isActive={true}
+              onSkip={() => setEnvWizardStage('skipped')}
+              onComplete={names => {
+                setEnvNamesChosen(names);
+                if (existingTargets.length === 0) {
+                  // No targets to assign yet — environments without members
+                  // can't be persisted (EnvironmentSchema requires min 1).
+                  setEnvWizardStage('skipped');
+                } else {
+                  setEnvWizardStage('assign');
+                }
+              }}
+            />
+          </Box>
+        </Box>
+      )}
+
+      {allSuccess && envWizardStage === 'assign' && (
+        <Box marginTop={1} flexDirection="column">
+          <StepProgress steps={flow.steps} />
+          <Box marginTop={1}>
+            <AssignTargetsPanel
+              targets={existingTargets}
+              envNames={envNamesChosen}
+              isActive={true}
+              onCancel={() => setEnvWizardStage('skipped')}
+              onConfirm={writeEnvironmentsAndExit}
+            />
+          </Box>
+        </Box>
+      )}
+
+      {allSuccess && envWizardStage === 'persisting' && (
+        <Box marginTop={1} flexDirection="column">
+          <StepProgress steps={flow.steps} />
+          <Text dimColor>Writing environments to aws-targets.json…</Text>
+        </Box>
+      )}
+
+      {allSuccess && envWizardError && (
+        <Box marginTop={1}>
+          <Text color={STATUS_COLORS.error}>Environment write failed: {envWizardError}</Text>
+        </Box>
+      )}
+
+      {allSuccess && flow.outputDir && wizardFinished && (
         <Box marginTop={1} flexDirection="column">
           <StepProgress steps={flow.steps} />
           <CreatedSummary projectName={flow.projectName} agentConfig={flow.addAgentConfig} />
