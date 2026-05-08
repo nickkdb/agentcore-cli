@@ -1,5 +1,12 @@
 import { ConfigIO, SecureCredentials } from '../../../lib';
-import type { AgentCoreMcpSpec, DeployedState } from '../../../schema';
+import type {
+  AgentCoreMcpSpec,
+  AwsDeploymentTarget,
+  DeployedState,
+  EnvironmentOverrides,
+  Environments,
+} from '../../../schema';
+import { AwsTargetsSchema } from '../../../schema';
 import { applyTargetRegionToEnv } from '../../aws';
 import { validateAwsCredentials } from '../../aws/account';
 import { CdkToolkitWrapper, createSwitchableIoHost } from '../../cdk/toolkit-lib';
@@ -33,7 +40,9 @@ import {
   synthesizeCdk,
   validateProject,
 } from '../../operations/deploy';
+import { mergeOverrides, resolveEnvironment } from '../../operations/deploy/environment';
 import { formatTargetStatus, getGatewayTargetStatuses } from '../../operations/deploy/gateway-status';
+import { deployToTargets } from '../../operations/deploy/multi-target';
 import { deleteOrphanedABTests, setupABTests } from '../../operations/deploy/post-deploy-ab-tests';
 import {
   resolveConfigBundleComponentKeys,
@@ -44,6 +53,7 @@ import { enableOnlineEvalConfigs } from '../../operations/deploy/post-deploy-onl
 import { toStackName } from '../import/import-utils';
 import type { DeployResult } from './types';
 import { StackSelectionStrategy } from '@aws-cdk/toolkit-lib';
+import { readFile } from 'node:fs/promises';
 
 export interface ValidatedDeployOptions {
   target: string;
@@ -51,6 +61,12 @@ export interface ValidatedDeployOptions {
   verbose?: boolean;
   plan?: boolean;
   diff?: boolean;
+  /**
+   * Optional env-var overrides applied in-memory to every runtime in the
+   * loaded project spec just before CDK synth. Set by --env deploys; never
+   * persisted to disk.
+   */
+  envVarOverrides?: EnvironmentOverrides;
   onProgress?: (step: string, status: 'start' | 'success' | 'error') => void;
   onResourceEvent?: (message: string) => void;
 }
@@ -142,6 +158,13 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
     // Preflight: validate project
     startStep('Validate project');
     const context = await validateProject();
+    // Apply per-environment envVar overrides (in-memory only) before synth.
+    if (options.envVarOverrides && context.projectSpec.runtimes) {
+      context.projectSpec = {
+        ...context.projectSpec,
+        runtimes: context.projectSpec.runtimes.map(rt => mergeOverrides(rt, options.envVarOverrides)),
+      };
+    }
     endStep('success');
 
     // Teardown confirmation: if this is a teardown deploy, require --yes
@@ -705,3 +728,98 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
  */
 // resolveConfigBundleComponentKeys and resolveComponentKey moved to
 // src/cli/operations/deploy/post-deploy-config-bundles.ts
+
+export interface EnvDeployOptions {
+  env: string;
+  autoConfirm?: boolean;
+  verbose?: boolean;
+  plan?: boolean;
+  diff?: boolean;
+  onProgress?: (step: string, status: 'start' | 'success' | 'error') => void;
+  onResourceEvent?: (message: string) => void;
+  /** Sink for orchestrator progress + summary lines. Defaults to console.log. */
+  onLog?: (line: string) => void;
+}
+
+export interface EnvDeployResult {
+  success: boolean;
+  envName: string;
+  results: DeployResult[];
+  /** Set when the env couldn't be resolved (no per-target results available). */
+  error?: string;
+}
+
+/**
+ * Read aws-targets.json supporting both the legacy array shape and the new
+ * `{ targets, environments }` object shape. Returns environments only when
+ * the file uses the object shape; otherwise environments is undefined.
+ */
+async function readAwsTargetsWithEnvironments(
+  configIO: ConfigIO
+): Promise<{ targets: AwsDeploymentTarget[]; environments?: Environments }> {
+  const filePath = configIO.getPathResolver().getAWSTargetsConfigPath();
+  const raw = await readFile(filePath, 'utf8');
+  const parsed: unknown = JSON.parse(raw);
+  if (Array.isArray(parsed)) {
+    // Legacy shape: hand off to ConfigIO so region fallback still applies.
+    const targets = await configIO.resolveAWSDeploymentTargets();
+    return { targets };
+  }
+  // Object shape: validate and return both halves.
+  const validated = AwsTargetsSchema.parse(parsed);
+  // Region fallback for object-shape entries (mirrors resolveAWSDeploymentTargets).
+  const targets = await configIO.resolveAWSDeploymentTargets();
+  return { targets, environments: validated.environments };
+}
+
+/**
+ * Deploy a named environment: resolve the env to its targets, apply any
+ * env-level overrides per target, and run them through the multi-target
+ * orchestrator. Sequential / fail-fast for v1 (T9 adds parallel + continue-on-error).
+ */
+export async function handleEnvDeploy(options: EnvDeployOptions): Promise<EnvDeployResult> {
+  const configIO = new ConfigIO();
+
+  let resolved;
+  try {
+    const awsTargets = await readAwsTargetsWithEnvironments(configIO);
+    resolved = resolveEnvironment(options.env, awsTargets);
+  } catch (err: unknown) {
+    return {
+      success: false,
+      envName: options.env,
+      results: [],
+      error: getErrorMessage(err),
+    };
+  }
+
+  const results: DeployResult[] = [];
+  const aggregate = await deployToTargets(
+    resolved.targets,
+    { environmentName: options.env, log: options.onLog },
+    async target => {
+      const result = await handleDeploy({
+        target: target.name,
+        autoConfirm: options.autoConfirm,
+        verbose: options.verbose,
+        plan: options.plan,
+        diff: options.diff,
+        envVarOverrides: resolved.overrides,
+        onProgress: options.onProgress,
+        onResourceEvent: options.onResourceEvent,
+      });
+      results.push(result);
+      if (!result.success) {
+        // Throw so the orchestrator records this as a failure (fail-fast).
+        throw new Error(result.error ?? `Deploy failed for target ${target.name}`);
+      }
+      return result;
+    }
+  );
+
+  return {
+    success: aggregate.failures.length === 0 && results.every(r => r.success),
+    envName: options.env,
+    results,
+  };
+}

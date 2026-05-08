@@ -2,7 +2,7 @@ import { getErrorMessage } from '../../errors';
 import { COMMAND_DESCRIPTIONS } from '../../tui/copy';
 import { requireProject, requireTTY } from '../../tui/guards';
 import { DeployScreen } from '../../tui/screens/deploy/DeployScreen';
-import { handleDeploy } from './actions';
+import { handleDeploy, handleEnvDeploy } from './actions';
 import type { DeployOptions } from './types';
 import { validateDeployOptions } from './validate';
 import type { Command } from '@commander-js/extra-typings';
@@ -68,6 +68,32 @@ async function handleDeployCLI(options: DeployOptions): Promise<void> {
         console.log(message);
       }
     : undefined;
+
+  if (options.env) {
+    const envResult = await handleEnvDeploy({
+      env: options.env,
+      autoConfirm: options.yes,
+      verbose: options.verbose ?? options.diff,
+      plan: options.plan,
+      diff: options.diff,
+      onProgress,
+      onResourceEvent,
+      onLog: line => console.log(line),
+    });
+
+    if (spinner) {
+      clearInterval(spinner);
+      process.stdout.write('\r\x1b[K');
+    }
+
+    if (options.json) {
+      console.log(JSON.stringify(envResult));
+    } else if (!envResult.success) {
+      if (envResult.error) console.error(envResult.error);
+    }
+
+    process.exit(envResult.success ? 0 : 1);
+  }
 
   const result = await handleDeploy({
     target: options.target!,

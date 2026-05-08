@@ -5,7 +5,12 @@ export interface ValidationResult {
   error?: string;
 }
 
-export function validateDeployOptions(_options: DeployOptions): ValidationResult {
-  // Target should always be set (defaulted to 'default' by command handler)
+export function validateDeployOptions(options: DeployOptions): ValidationResult {
+  if (options.env && options.target) {
+    return {
+      valid: false,
+      error: 'Cannot use --env and --target together. Pick one.',
+    };
+  }
   return { valid: true };
 }
