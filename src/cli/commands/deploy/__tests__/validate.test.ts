@@ -23,4 +23,24 @@ describe('validateDeployOptions', () => {
     expect(result.valid).toBe(false);
     expect(result.error).toMatch(/--env.*--target/);
   });
+
+  it('rejects --parallel without --env', () => {
+    const result = validateDeployOptions({ parallel: true });
+    expect(result.valid).toBe(false);
+    expect(result.error).toMatch(/--parallel.*--env/);
+  });
+
+  it('rejects --continue-on-error without --env', () => {
+    const result = validateDeployOptions({ continueOnError: true });
+    expect(result.valid).toBe(false);
+    expect(result.error).toMatch(/--continue-on-error.*--env/);
+  });
+
+  it('accepts --parallel together with --env', () => {
+    expect(validateDeployOptions({ env: 'dev', parallel: true })).toEqual({ valid: true });
+  });
+
+  it('accepts --continue-on-error together with --env', () => {
+    expect(validateDeployOptions({ env: 'dev', continueOnError: true })).toEqual({ valid: true });
+  });
 });
