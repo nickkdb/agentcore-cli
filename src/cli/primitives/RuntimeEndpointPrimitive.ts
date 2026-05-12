@@ -4,7 +4,7 @@ import { RuntimeEndpointSchema } from '../../schema';
 import type { ResourceType } from '../commands/remove/types';
 import { getErrorMessage } from '../errors';
 import type { RemovalPreview, RemovalResult, SchemaChange } from '../operations/remove/types';
-import { cliCommandRun } from '../telemetry/cli-command-run.js';
+import { runCliCommand } from '../telemetry/cli-command-run.js';
 import { BasePrimitive } from './BasePrimitive';
 import { SOURCE_CODE_NOTE } from './constants';
 import type { AddResult, AddScreenComponent, RemovableResource } from './types';
@@ -254,7 +254,7 @@ export class RuntimeEndpointPrimitive extends BasePrimitive<AddRuntimeEndpointOp
             process.exit(1);
           }
 
-          await cliCommandRun('add.runtime-endpoint', !!cliOptions.json, async () => {
+          await runCliCommand('add.runtime-endpoint', !!cliOptions.json, async () => {
             const result = await this.add({
               runtime: cliOptions.runtime,
               endpoint: cliOptions.endpoint,

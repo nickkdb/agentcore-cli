@@ -47,15 +47,6 @@ export type {
   RatingScale,
 } from './primitives/evaluator';
 export { BedrockModelIdSchema, isValidBedrockModelId, EvaluatorNameSchema } from './primitives/evaluator';
-export type { HarnessGatewayOutboundAuth, HarnessSpec, HarnessModelProvider } from './primitives/harness';
-export {
-  GatewayOAuthGrantTypeSchema,
-  HarnessGatewayOutboundAuthSchema,
-  HarnessNameSchema,
-  HarnessSpecSchema,
-  HarnessToolTypeSchema,
-  HarnessModelProviderSchema,
-} from './primitives/harness';
 export { ConfigBundleSchema };
 export type { ComponentConfiguration, ComponentConfigurationMap, ConfigBundle } from './primitives/config-bundle';
 export { ConfigBundleNameSchema, ComponentConfigurationMapSchema } from './primitives/config-bundle';
@@ -68,6 +59,15 @@ export type { ABTestMode, TargetRef, GatewayFilter, PerVariantOnlineEvaluationCo
 export { ABTestModeSchema, TargetRefSchema, GatewayFilterSchema } from './primitives/ab-test';
 export type { HttpGatewayTarget } from './primitives/http-gateway';
 export { HttpGatewayTargetSchema } from './primitives/http-gateway';
+export type { HarnessGatewayOutboundAuth, HarnessSpec, HarnessModelProvider } from './primitives/harness';
+export {
+  GatewayOAuthGrantTypeSchema,
+  HarnessGatewayOutboundAuthSchema,
+  HarnessNameSchema,
+  HarnessSpecSchema,
+  HarnessToolTypeSchema,
+  HarnessModelProviderSchema,
+} from './primitives/harness';
 
 // ============================================================================
 // ManagedBy Schema
@@ -344,16 +344,6 @@ export const AgentCoreProjectSpecSchema = z
         )
       ),
 
-    harnesses: z
-      .array(HarnessRegistryEntrySchema)
-      .default([])
-      .superRefine(
-        uniqueBy(
-          harness => harness.name,
-          name => `Duplicate harness name: ${name}`
-        )
-      ),
-
     configBundles: z
       .array(ConfigBundleSchema)
       .default([])
@@ -381,6 +371,16 @@ export const AgentCoreProjectSpecSchema = z
         uniqueBy(
           gw => gw.name,
           name => `Duplicate HTTP gateway name: ${name}`
+        )
+      ),
+
+    harnesses: z
+      .array(HarnessRegistryEntrySchema)
+      .default([])
+      .superRefine(
+        uniqueBy(
+          harness => harness.name,
+          name => `Duplicate harness name: ${name}`
         )
       ),
   })

@@ -1,5 +1,4 @@
 import { ConfigIO } from '../../../../lib';
-import type { DeployedState, HarnessDeployedState } from '../../../../schema';
 import type { CdkToolkitWrapper, DeployMessage, SwitchableIoHost } from '../../../cdk/toolkit-lib';
 import {
   buildDeployedState,
@@ -16,7 +15,6 @@ import { getErrorMessage, isChangesetInProgressError, isExpiredTokenError } from
 import { ExecLogger } from '../../../logging';
 import { performStackTeardown, setupTransactionSearch } from '../../../operations/deploy';
 import { getGatewayTargetStatuses } from '../../../operations/deploy/gateway-status';
-import { createDeploymentManager } from '../../../operations/deploy/imperative';
 import { deleteOrphanedABTests, setupABTests } from '../../../operations/deploy/post-deploy-ab-tests';
 import {
   resolveConfigBundleComponentKeys,
@@ -141,7 +139,6 @@ export function useDeployFlow(options: DeployFlowOptions = {}): DeployFlowState 
   });
   const [publishAssetsStep, setPublishAssetsStep] = useState<Step>({ label: 'Publish assets', status: 'pending' });
   const [deployStep, setDeployStep] = useState<Step>({ label: 'Deploy to AWS', status: 'pending' });
-  const [postCdkStep, setPostCdkStep] = useState<Step | null>(null);
   const [diffStep, setDiffStep] = useState<Step>({ label: 'Run CDK diff', status: 'pending' });
   const [diffSummaries, setDiffSummaries] = useState<StackDiffSummary[]>([]);
   const [numStacksWithChanges, setNumStacksWithChanges] = useState<number | undefined>();
@@ -167,7 +164,6 @@ export function useDeployFlow(options: DeployFlowOptions = {}): DeployFlowState 
     setPreDeployDiffStep({ label: 'Computing diff changes...', status: 'pending' });
     setPublishAssetsStep({ label: 'Publish assets', status: 'pending' });
     setDeployStep({ label: 'Deploy to AWS', status: 'pending' });
-    setPostCdkStep(null);
     setDeployOutput(null);
     setHasTokenExpiredError(false); // Reset token expired state when retrying
     setHasStartedCfn(false);
@@ -315,41 +311,6 @@ export function useDeployFlow(options: DeployFlowOptions = {}): DeployFlowState 
     setStackOutputs(outputs);
 
     const existingState = await configIO.readDeployedState().catch(() => undefined);
-
-    // Post-CDK: deploy imperative resources (harness)
-    let deployedHarnesses: Record<string, HarnessDeployedState> | undefined;
-    const imperativeManager = createDeploymentManager();
-    const imperativeDeployedState = existingState ?? { targets: {} };
-    const imperativeContext = {
-      projectSpec: ctx.projectSpec,
-      target,
-      configIO,
-      deployedState: imperativeDeployedState,
-      cdkOutputs: outputs,
-      onProgress: (step: string, status: 'start' | 'done' | 'error') => {
-        logger.log(`${step}: ${status}`);
-      },
-    };
-
-    let harnessDeployError: string | undefined;
-    if (imperativeManager.hasDeployersForPhase('post-cdk', imperativeContext)) {
-      setPostCdkStep({ label: 'Deploy harnesses', status: 'running' });
-      logger.startStep('Deploy harnesses');
-      const postCdkResult = await imperativeManager.runPhase('post-cdk', imperativeContext);
-      const harnessResult = postCdkResult.results.get('harness');
-      if (harnessResult?.state) {
-        deployedHarnesses = harnessResult.state as Record<string, HarnessDeployedState>;
-      }
-      if (!postCdkResult.success) {
-        logger.endStep('error', postCdkResult.error);
-        harnessDeployError = postCdkResult.error;
-      } else {
-        logger.endStep('success');
-      }
-    }
-
-    // Persist state BEFORE updating React step status — React state updates can
-    // interrupt this async callback by triggering re-renders that dispose resources.
     let deployedState = buildDeployedState({
       targetName: target.name,
       stackName: currentStackName,
@@ -363,22 +324,8 @@ export function useDeployFlow(options: DeployFlowOptions = {}): DeployFlowState 
       credentials: Object.keys(allCredentials).length > 0 ? allCredentials : undefined,
       policyEngines,
       policies,
-      harnesses: deployedHarnesses,
     });
     await configIO.writeDeployedState(deployedState);
-
-    // Now safe to update React state — the file write is complete
-    if (imperativeManager.hasDeployersForPhase('post-cdk', imperativeContext)) {
-      if (harnessDeployError) {
-        setPostCdkStep({ label: 'Deploy harnesses', status: 'error', error: harnessDeployError });
-      } else {
-        setPostCdkStep({ label: 'Deploy harnesses', status: 'success' });
-      }
-    }
-
-    if (harnessDeployError) {
-      throw new Error(`Harness deployment failed: ${harnessDeployError}`);
-    }
 
     // Post-deploy: Enable online eval configs that have enableOnCreate (CFN deploys them as DISABLED).
     // Only enable configs that are newly deployed — skip configs that already existed before this
@@ -671,35 +618,6 @@ export function useDeployFlow(options: DeployFlowOptions = {}): DeployFlowState 
         await cdkToolkitWrapper.deploy();
 
         if (context?.isTeardownDeploy) {
-          // Teardown imperative resources (harnesses) before destroying the stack
-          const teardownTarget = context.awsTargets[0];
-          if (teardownTarget) {
-            const imperativeManager = createDeploymentManager();
-            const configIO = new ConfigIO();
-            const existingTeardownState = await configIO
-              .readDeployedState()
-              .catch(() => ({ targets: {} }) as DeployedState);
-            const teardownContext = {
-              projectSpec: context.projectSpec,
-              target: teardownTarget,
-              configIO,
-              deployedState: existingTeardownState,
-              onProgress: (step: string, status: 'start' | 'done' | 'error') => {
-                logger.log(`${step}: ${status}`);
-              },
-            };
-
-            if (imperativeManager.hasDeployersForPhase('post-cdk', teardownContext)) {
-              logger.startStep('Tear down imperative resources');
-              const teardownResult = await imperativeManager.teardownAll(teardownContext);
-              if (!teardownResult.success) {
-                logger.endStep('error', teardownResult.error);
-                throw new Error(`Imperative teardown failed: ${teardownResult.error}`);
-              }
-              logger.endStep('success');
-            }
-          }
-
           // After deploying the empty spec, destroy the stack entirely
           const targetName = context.awsTargets[0]?.name;
           if (targetName) {
@@ -883,36 +801,22 @@ export function useDeployFlow(options: DeployFlowOptions = {}): DeployFlowState 
     if (diffMode) {
       return skipPreflight ? [diffStep] : [...preflight.steps, diffStep];
     }
-    const deploySteps = skipPreflight
+    return skipPreflight
       ? [preDeployDiffStep, publishAssetsStep, deployStep]
       : [...preflight.steps, preDeployDiffStep, publishAssetsStep, deployStep];
-    if (postCdkStep) {
-      deploySteps.push(postCdkStep);
-    }
-    return deploySteps;
-  }, [
-    preflight.steps,
-    preDeployDiffStep,
-    publishAssetsStep,
-    deployStep,
-    diffStep,
-    skipPreflight,
-    diffMode,
-    postCdkStep,
-  ]);
+  }, [preflight.steps, preDeployDiffStep, publishAssetsStep, deployStep, diffStep, skipPreflight, diffMode]);
 
   const phase: DeployPhase = useMemo(() => {
     const activeStep = diffMode ? diffStep : deployStep;
-    const finalStep = postCdkStep ?? activeStep;
 
     if (skipPreflight) {
       if (!shouldStartDeploy && activeStep.status === 'pending') {
         return 'idle';
       }
-      if (finalStep.status === 'error') {
+      if (activeStep.status === 'error') {
         return 'error';
       }
-      if (finalStep.status === 'success') {
+      if (activeStep.status === 'success') {
         return 'complete';
       }
       return 'deploying';
@@ -936,14 +840,14 @@ export function useDeployFlow(options: DeployFlowOptions = {}): DeployFlowState 
     if (preflight.phase === 'running' || preflight.phase === 'bootstrapping' || preflight.phase === 'identity-setup') {
       return 'running';
     }
-    if (finalStep.status === 'error') {
+    if (activeStep.status === 'error') {
       return 'error';
     }
-    if (finalStep.status === 'success') {
+    if (activeStep.status === 'success') {
       return 'complete';
     }
     return 'deploying';
-  }, [preflight.phase, deployStep, diffStep, skipPreflight, shouldStartDeploy, diffMode, postCdkStep]);
+  }, [preflight.phase, deployStep, diffStep, skipPreflight, shouldStartDeploy, diffMode]);
 
   const hasError = hasStepError(steps);
   const isComplete = areStepsComplete(steps);

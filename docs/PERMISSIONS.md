@@ -39,7 +39,6 @@ Attach this to every IAM user or role that will run AgentCore CLI commands. The 
 - `sts:GetCallerIdentity`, `cloudformation:DescribeStacks`, `tag:GetResources` for basic operations
 - `bedrock-agentcore:Invoke*`, `bedrock-agentcore:Get*`, `bedrock-agentcore:List*` for invoking agents and checking
   status
-- Harness CRUD and invoke actions for `deploy`, `invoke`, and `status` when the project uses harnesses
 - Credential provider and token vault actions for `deploy` when the project uses identity features
 - CloudWatch Logs, X-Ray, and Application Signals actions for `logs`, `traces`, and observability setup
 - Bedrock actions for agent import and AI-assisted code generation (optional, see
@@ -165,7 +164,6 @@ safely removed:
 
 | If your team does not use...    | Remove from user policy                                              | Remove from CFN execution policy                                                                       |
 | ------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Harnesses                       | `HarnessManagement`                                                  | _(no change)_                                                                                          |
 | Container builds (CodeZip only) | _(no change)_                                                        | `EcrContainerBuilds`, `CodeBuildContainerBuilds`                                                       |
 | MCP Lambda compute              | _(no change)_                                                        | `LambdaMcpAndCustomResources` (keep if using container builds, which need Lambda for custom resources) |
 | Agent import from Bedrock       | `BedrockAgentImport`                                                 | _(no change)_                                                                                          |
@@ -337,20 +335,19 @@ Required for all deployment operations (`deploy`, `status`, `diff`).
 | `bedrock-agentcore:Evaluate`                     | `run evals`                               | Run on-demand evaluation against agent traces |
 | `bedrock-agentcore:UpdateOnlineEvaluationConfig` | `pause online-eval`, `resume online-eval` | Pause or resume online evaluation             |
 
-### Harness management
+### Batch evaluation and recommendations
 
-Harnesses are deployed imperatively (direct API calls, not through CloudFormation), so harness CRUD permissions must be
-on the developer's IAM principal, not just the CFN execution role.
-
-| Action                            | CLI Commands                 | Purpose                                                                                                                                       |
-| --------------------------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bedrock-agentcore:CreateHarness` | `deploy`                     | Create a new harness                                                                                                                          |
-| `bedrock-agentcore:GetHarness`    | `deploy`, `status`, `invoke` | Get harness details and deployment state                                                                                                      |
-| `bedrock-agentcore:UpdateHarness` | `deploy`                     | Update an existing harness configuration                                                                                                      |
-| `bedrock-agentcore:DeleteHarness` | `deploy`                     | Delete a harness (during removal or teardown)                                                                                                 |
-| `bedrock-agentcore:ListHarnesses` | `status`                     | List harnesses in the account                                                                                                                 |
-| `bedrock-agentcore:InvokeHarness` | `invoke`                     | Invoke a deployed harness (streaming)                                                                                                         |
-| `iam:PassRole`                    | `deploy`                     | Pass the CDK-created execution role to the CreateHarness/UpdateHarness API. Scope with `iam:PassedToService: bedrock-agentcore.amazonaws.com` |
+| Action                                    | CLI Commands     | Purpose                        |
+| ----------------------------------------- | ---------------- | ------------------------------ |
+| `bedrock-agentcore:StartBatchEvaluation`  | `run batch-eval` | Start a batch evaluation job   |
+| `bedrock-agentcore:GetBatchEvaluation`    | `run batch-eval` | Poll batch evaluation status   |
+| `bedrock-agentcore:ListBatchEvaluations`  | `evals history`  | List past batch evaluations    |
+| `bedrock-agentcore:StopBatchEvaluation`   | `run batch-eval` | Stop an in-progress batch eval |
+| `bedrock-agentcore:DeleteBatchEvaluation` | `run batch-eval` | Delete a batch evaluation      |
+| `bedrock-agentcore:StartRecommendation`   | `run recommend`  | Start a recommendation job     |
+| `bedrock-agentcore:GetRecommendation`     | `run recommend`  | Poll recommendation status     |
+| `bedrock-agentcore:ListRecommendations`   | `run recommend`  | List past recommendations      |
+| `bedrock-agentcore:DeleteRecommendation`  | `run recommend`  | Stop/delete a recommendation   |
 
 ### Identity and credential management
 
@@ -378,14 +375,19 @@ on the developer's IAM principal, not just the CFN execution role.
 
 ### Logging, traces, and observability
 
-| Action                          | CLI Commands                             | Purpose                                       |
-| ------------------------------- | ---------------------------------------- | --------------------------------------------- |
-| `logs:StartLiveTail`            | `logs`                                   | Stream agent logs in real-time                |
-| `logs:FilterLogEvents`          | `logs`                                   | Search agent logs                             |
-| `logs:StartQuery`               | `traces list`, `traces get`, `run evals` | Run CloudWatch Logs Insights queries          |
-| `logs:GetQueryResults`          | `traces list`, `traces get`, `run evals` | Retrieve query results                        |
-| `logs:DescribeResourcePolicies` | `deploy`                                 | Check for X-Ray log resource policy           |
-| `logs:PutResourcePolicy`        | `deploy`                                 | Create resource policy for X-Ray trace access |
+| Action                          | CLI Commands                             | Purpose                                                    |
+| ------------------------------- | ---------------------------------------- | ---------------------------------------------------------- |
+| `logs:StartLiveTail`            | `logs`                                   | Stream agent logs in real-time                             |
+| `logs:FilterLogEvents`          | `logs`                                   | Search agent logs                                          |
+| `logs:StartQuery`               | `traces list`, `traces get`, `run evals` | Run CloudWatch Logs Insights queries                       |
+| `logs:GetQueryResults`          | `traces list`, `traces get`, `run evals` | Retrieve query results                                     |
+| `logs:DescribeResourcePolicies` | `deploy`                                 | Check for X-Ray log resource policy                        |
+| `logs:PutResourcePolicy`        | `deploy`                                 | Create resource policy for X-Ray trace access              |
+| `logs:DescribeLogGroups`        | `run batch-eval`, `run recommend`        | Discover runtime log groups for evaluation data sources    |
+| `logs:CreateLogGroup`           | `run batch-eval`                         | Create log group for batch evaluation results output       |
+| `logs:CreateLogStream`          | `run batch-eval`                         | Create log stream for batch evaluation results             |
+| `logs:PutLogEvents`             | `run batch-eval`                         | Write batch evaluation results to CloudWatch Logs          |
+| `logs:PutRetentionPolicy`       | `run batch-eval`                         | Set retention policy on batch evaluation results log group |
 
 ### Transaction search setup
 

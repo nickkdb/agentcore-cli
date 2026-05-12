@@ -21,7 +21,6 @@ import {
   useRemoveEvaluator,
   useRemoveGateway,
   useRemoveGatewayTarget,
-  useRemoveHarness,
   useRemoveIdentity,
   useRemoveMemory,
   useRemoveOnlineEvalConfig,
@@ -61,8 +60,6 @@ type FlowState =
   | { name: 'select-online-eval' }
   | { name: 'select-policy-engine' }
   | { name: 'select-policy' }
-  | { name: 'select-harness' }
-  | { name: 'confirm-harness'; harnessName: string; preview: RemovalPreview }
   | { name: 'select-config-bundle' }
   | { name: 'select-ab-test' }
   | { name: 'select-runtime-endpoint' }
@@ -79,7 +76,6 @@ type FlowState =
   | { name: 'confirm-ab-test'; testName: string; preview: RemovalPreview }
   | { name: 'confirm-runtime-endpoint'; endpointName: string; preview: RemovalPreview }
   | { name: 'loading'; message: string }
-  | { name: 'harness-success'; harnessName: string; logFilePath?: string }
   | { name: 'agent-success'; agentName: string; logFilePath?: string }
   | { name: 'gateway-success'; gatewayName: string; logFilePath?: string }
   | { name: 'tool-success'; toolName: string; logFilePath?: string }
@@ -106,7 +102,6 @@ interface RemoveFlowProps {
   /** Initial resource type to start at (for CLI subcommands) */
   initialResourceType?:
     | 'agent'
-    | 'harness'
     | 'gateway'
     | 'gateway-target'
     | 'runtime-endpoint'
@@ -117,7 +112,8 @@ interface RemoveFlowProps {
     | 'policy-engine'
     | 'policy'
     | 'config-bundle'
-    | 'ab-test';
+    | 'ab-test'
+    | 'harness';
   /** Initial resource name to auto-select (for CLI --name flag) */
   initialResourceName?: string;
 }
@@ -149,8 +145,6 @@ export function RemoveFlow({
         return { name: 'select-online-eval' };
       case 'policy-engine':
         return { name: 'select-policy-engine' };
-      case 'harness':
-        return { name: 'select-harness' };
       case 'policy':
         return { name: 'select-policy' };
       case 'config-bundle':
@@ -167,7 +161,6 @@ export function RemoveFlow({
 
   // Data hooks - need isLoading to avoid showing screen before data loads
   const { agents, isLoading: isLoadingAgents, refresh: refreshAgents } = useRemovableAgents();
-  const { harnesses, isLoading: isLoadingHarnesses, refresh: refreshHarnesses } = useRemovableHarnesses();
   const { gateways, isLoading: isLoadingGateways, refresh: refreshGateways } = useRemovableGateways();
   const { tools: mcpTools, isLoading: isLoadingTools, refresh: refreshTools } = useRemovableGatewayTargets();
   const { memories, isLoading: isLoadingMemories, refresh: refreshMemories } = useRemovableMemories();
@@ -195,11 +188,11 @@ export function RemoveFlow({
     isLoading: isLoadingRuntimeEndpoints,
     refresh: refreshRuntimeEndpoints,
   } = useRemovableRuntimeEndpoints();
+  const { harnesses } = useRemovableHarnesses();
 
   // Check if any data is still loading
   const isLoading =
     isLoadingAgents ||
-    isLoadingHarnesses ||
     isLoadingGateways ||
     isLoadingTools ||
     isLoadingMemories ||
@@ -214,7 +207,6 @@ export function RemoveFlow({
   // Preview hook
   const {
     loadAgentPreview,
-    loadHarnessPreview,
     loadGatewayPreview,
     loadGatewayTargetPreview,
     loadMemoryPreview,
@@ -231,7 +223,6 @@ export function RemoveFlow({
 
   // Removal hooks
   const { remove: removeAgentOp, reset: resetRemoveAgent } = useRemoveAgent();
-  const { remove: removeHarnessOp, reset: resetRemoveHarness } = useRemoveHarness();
   const { remove: removeGatewayOp, reset: resetRemoveGateway } = useRemoveGateway();
   const { remove: removeGatewayTargetOp, reset: resetRemoveGatewayTarget } = useRemoveGatewayTarget();
   const { remove: removeMemoryOp, reset: resetRemoveMemory } = useRemoveMemory();
@@ -265,7 +256,6 @@ export function RemoveFlow({
     if (!isInteractive) {
       const successStates = [
         'agent-success',
-        'harness-success',
         'gateway-success',
         'tool-success',
         'memory-success',
@@ -291,9 +281,6 @@ export function RemoveFlow({
     switch (resourceType) {
       case 'agent':
         setFlow({ name: 'select-agent' });
-        break;
-      case 'harness':
-        setFlow({ name: 'select-harness' });
         break;
       case 'gateway':
         setFlow({ name: 'select-gateway' });
@@ -357,28 +344,6 @@ export function RemoveFlow({
       }
     },
     [loadAgentPreview, force, removeAgentOp]
-  );
-
-  const handleSelectHarness = useCallback(
-    async (harnessName: string) => {
-      const result = await loadHarnessPreview(harnessName);
-      if (result.ok) {
-        if (force) {
-          setFlow({ name: 'loading', message: `Removing harness ${harnessName}...` });
-          const removeResult = await removeHarnessOp(harnessName, result.preview);
-          if (removeResult.success) {
-            setFlow({ name: 'harness-success', harnessName });
-          } else {
-            setFlow({ name: 'error', message: removeResult.error });
-          }
-        } else {
-          setFlow({ name: 'confirm-harness', harnessName, preview: result.preview });
-        }
-      } else {
-        setFlow({ name: 'error', message: result.error });
-      }
-    },
-    [loadHarnessPreview, force, removeHarnessOp]
   );
 
   const handleSelectGateway = useCallback(
@@ -707,22 +672,6 @@ export function RemoveFlow({
     [removeAgentOp]
   );
 
-  const handleConfirmHarness = useCallback(
-    async (harnessName: string, preview: RemovalPreview) => {
-      pendingResultRef.current = null;
-      setResultReady(false);
-      setFlow({ name: 'loading', message: `Removing harness ${harnessName}...` });
-      const result = await removeHarnessOp(harnessName, preview);
-      if (result.success) {
-        pendingResultRef.current = { name: 'harness-success', harnessName, logFilePath: result.logFilePath };
-      } else {
-        pendingResultRef.current = { name: 'error', message: result.error };
-      }
-      setResultReady(true);
-    },
-    [removeHarnessOp]
-  );
-
   const handleConfirmGateway = useCallback(
     async (gatewayName: string, preview: RemovalPreview) => {
       pendingResultRef.current = null;
@@ -902,7 +851,6 @@ export function RemoveFlow({
   const resetAll = useCallback(() => {
     resetPreview();
     resetRemoveAgent();
-    resetRemoveHarness();
     resetRemoveGateway();
     resetRemoveGatewayTarget();
     resetRemoveMemory();
@@ -917,7 +865,6 @@ export function RemoveFlow({
   }, [
     resetPreview,
     resetRemoveAgent,
-    resetRemoveHarness,
     resetRemoveGateway,
     resetRemoveGatewayTarget,
     resetRemoveMemory,
@@ -934,7 +881,6 @@ export function RemoveFlow({
   const refreshAll = useCallback(async () => {
     await Promise.all([
       refreshAgents(),
-      refreshHarnesses(),
       refreshGateways(),
       refreshTools(),
       refreshMemories(),
@@ -948,7 +894,6 @@ export function RemoveFlow({
     ]);
   }, [
     refreshAgents,
-    refreshHarnesses,
     refreshGateways,
     refreshTools,
     refreshMemories,
@@ -971,7 +916,6 @@ export function RemoveFlow({
         onSelect={handleSelectResource}
         onExit={onExit}
         agentCount={agents.length}
-        harnessCount={harnesses.length}
         gatewayCount={gateways.length}
         mcpToolCount={mcpTools.length}
         memoryCount={memories.length}
@@ -983,6 +927,7 @@ export function RemoveFlow({
         configBundleCount={configBundles.length}
         abTestCount={abTests.length}
         runtimeEndpointCount={runtimeEndpoints.length}
+        harnessCount={harnesses.length}
       />
     );
   }
@@ -1011,19 +956,6 @@ export function RemoveFlow({
       <RemoveAgentScreen
         agents={agents}
         onSelect={(name: string) => void handleSelectAgent(name)}
-        onExit={() => setFlow({ name: 'select' })}
-      />
-    );
-  }
-
-  if (flow.name === 'select-harness') {
-    if (initialResourceName && isLoading) {
-      return null;
-    }
-    return (
-      <RemoveAgentScreen
-        agents={harnesses}
-        onSelect={(name: string) => void handleSelectHarness(name)}
         onExit={() => setFlow({ name: 'select' })}
       />
     );
@@ -1181,17 +1113,6 @@ export function RemoveFlow({
     );
   }
 
-  if (flow.name === 'confirm-harness') {
-    return (
-      <RemoveConfirmScreen
-        title={`Remove Harness: ${flow.harnessName}`}
-        preview={flow.preview}
-        onConfirm={() => void handleConfirmHarness(flow.harnessName, flow.preview)}
-        onCancel={() => setFlow({ name: 'select-harness' })}
-      />
-    );
-  }
-
   if (flow.name === 'confirm-gateway') {
     return (
       <RemoveConfirmScreen
@@ -1320,22 +1241,6 @@ export function RemoveFlow({
         isInteractive={isInteractive}
         message={`Removed agent: ${flow.agentName}`}
         detail="Agent removed from agentcore.json. Deploy with `agentcore deploy` to apply changes."
-        logFilePath={flow.logFilePath}
-        onRemoveAnother={() => {
-          resetAll();
-          void refreshAll().then(() => setFlow({ name: 'select' }));
-        }}
-        onExit={onExit}
-      />
-    );
-  }
-
-  if (flow.name === 'harness-success') {
-    return (
-      <RemoveSuccessScreen
-        isInteractive={isInteractive}
-        message={`Removed harness: ${flow.harnessName}`}
-        detail="Harness removed from agentcore.json. Deploy with `agentcore deploy` to apply changes."
         logFilePath={flow.logFilePath}
         onRemoveAnother={() => {
           resetAll();

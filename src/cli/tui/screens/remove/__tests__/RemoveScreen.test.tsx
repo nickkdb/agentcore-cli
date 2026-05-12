@@ -13,7 +13,6 @@ describe('RemoveScreen', () => {
         onSelect={onSelect}
         onExit={onExit}
         agentCount={1}
-        harnessCount={1}
         gatewayCount={1}
         mcpToolCount={1}
         memoryCount={1}
@@ -25,6 +24,7 @@ describe('RemoveScreen', () => {
         configBundleCount={1}
         abTestCount={0}
         runtimeEndpointCount={1}
+        harnessCount={0}
       />
     );
 
@@ -47,7 +47,6 @@ describe('RemoveScreen', () => {
         onSelect={onSelect}
         onExit={onExit}
         agentCount={0}
-        harnessCount={0}
         gatewayCount={0}
         mcpToolCount={0}
         memoryCount={0}
@@ -59,6 +58,7 @@ describe('RemoveScreen', () => {
         configBundleCount={0}
         abTestCount={0}
         runtimeEndpointCount={0}
+        harnessCount={0}
       />
     );
 
@@ -77,7 +77,6 @@ describe('RemoveScreen', () => {
         onSelect={onSelect}
         onExit={onExit}
         agentCount={0}
-        harnessCount={0}
         gatewayCount={0}
         mcpToolCount={0}
         memoryCount={0}
@@ -89,6 +88,7 @@ describe('RemoveScreen', () => {
         configBundleCount={0}
         abTestCount={2}
         runtimeEndpointCount={0}
+        harnessCount={0}
       />
     );
 
@@ -105,7 +105,6 @@ describe('RemoveScreen', () => {
         onSelect={onSelect}
         onExit={onExit}
         agentCount={0}
-        harnessCount={0}
         gatewayCount={0}
         mcpToolCount={0}
         memoryCount={0}
@@ -117,6 +116,7 @@ describe('RemoveScreen', () => {
         configBundleCount={0}
         abTestCount={0}
         runtimeEndpointCount={0}
+        harnessCount={0}
       />
     );
 
