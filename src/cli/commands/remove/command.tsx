@@ -1,5 +1,6 @@
 import { ConfigIO } from '../../../lib';
 import { getErrorMessage } from '../../errors';
+import { runCliCommand } from '../../telemetry/cli-command-run.js';
 import { COMMAND_DESCRIPTIONS } from '../../tui/copy';
 import { requireProject, requireTTY } from '../../tui/guards';
 import { RemoveAllScreen, RemoveFlow } from '../../tui/screens/remove';
@@ -34,7 +35,6 @@ async function handleRemoveAll(_options: RemoveAllOptions): Promise<RemoveResult
       onlineEvalConfigs: [],
       agentCoreGateways: [],
       policyEngines: [],
-      harnesses: [],
       configBundles: [],
       abTests: [],
       httpGateways: [],
@@ -55,9 +55,12 @@ async function handleRemoveAll(_options: RemoveAllOptions): Promise<RemoveResult
 
 async function handleRemoveAllCLI(options: RemoveAllOptions): Promise<void> {
   validateRemoveAllOptions(options);
-  const result = await handleRemoveAll(options);
-  console.log(JSON.stringify(result));
-  process.exit(result.success ? 0 : 1);
+  await runCliCommand('remove.all', !!options.json, async () => {
+    const result = await handleRemoveAll(options);
+    if (!result.success) throw new Error(result.error);
+    console.log(JSON.stringify(result));
+    return {};
+  });
 }
 
 export const registerRemove = (program: Command): Command => {

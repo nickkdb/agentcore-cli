@@ -1,7 +1,6 @@
 import { getWorkingDirectory } from '../../../lib';
 import type {
   BuildType,
-  HarnessModelProvider,
   ModelProvider,
   NetworkMode,
   ProtocolMode,
@@ -10,41 +9,27 @@ import type {
 } from '../../../schema';
 import { LIFECYCLE_TIMEOUT_MAX, LIFECYCLE_TIMEOUT_MIN } from '../../../schema';
 import { getErrorMessage } from '../../errors';
-import { harnessPrimitive } from '../../primitives/registry';
+import { runCliCommand } from '../../telemetry/cli-command-run.js';
+import {
+  AgentType,
+  Build,
+  Framework,
+  Language,
+  Memory,
+  ModelProvider as ModelProviderEnum,
+  NetworkMode as NetworkModeEnum,
+  Protocol,
+  standardize,
+} from '../../telemetry/schemas/common-shapes.js';
 import { COMMAND_DESCRIPTIONS } from '../../tui/copy';
 import { requireTTY } from '../../tui/guards';
 import { CreateScreen } from '../../tui/screens/create';
 import { parseCommaSeparatedList } from '../shared/vpc-utils';
 import { type ProgressCallback, createProject, createProjectWithAgent, getDryRunInfo } from './action';
-import { createProjectWithHarness } from './harness-action';
-import { normalizeHarnessModelProvider, validateCreateHarnessOptions } from './harness-validate';
 import type { CreateOptions } from './types';
 import { validateCreateOptions } from './validate';
 import type { Command } from '@commander-js/extra-typings';
 import { Text, render } from 'ink';
-
-/** Flags that trigger the agent/runtime path */
-const AGENT_PATH_FLAGS = ['framework', 'language', 'build', 'protocol', 'type', 'agentId', 'agentAliasId'] as const;
-
-/** Flags that are harness-only */
-const HARNESS_ONLY_FLAGS = [
-  'modelId',
-  'apiKeyArn',
-  'maxIterations',
-  'maxTokens',
-  'timeout',
-  'truncationStrategy',
-] as const;
-
-/** Determines if the agent path should be taken based on provided flags */
-function isAgentPath(options: CreateOptions): boolean {
-  return AGENT_PATH_FLAGS.some(flag => options[flag] !== undefined);
-}
-
-/** Determines if any harness-only flags are present */
-function hasHarnessOnlyFlags(options: CreateOptions): boolean {
-  return HARNESS_ONLY_FLAGS.some(flag => options[flag] !== undefined);
-}
 
 /** Render CreateScreen for interactive TUI mode */
 function handleCreateTUI(): void {
@@ -100,132 +85,24 @@ function printCreateSummary(
   console.log('');
 }
 
-/** Print completion summary after successful harness create */
-function printCreateHarnessSummary(projectName: string, harnessName: string): void {
-  const green = '\x1b[32m';
-  const cyan = '\x1b[36m';
-  const dim = '\x1b[2m';
-  const reset = '\x1b[0m';
-
-  console.log('');
-
-  // Created summary
-  console.log(`${dim}Created:${reset}`);
-  console.log(`  ${projectName}/`);
-  console.log(`    agentcore/              ${dim}Config and CDK project${reset}`);
-  console.log(`    app/${harnessName}/  ${dim}Harness config${reset}`);
-  console.log('');
-
-  // Success and next steps
-  console.log(`${green}Harness project created successfully!${reset}`);
-  console.log('');
-  console.log('To continue:');
-  console.log(`  ${cyan}cd ${projectName}${reset}`);
-  console.log(`  ${cyan}agentcore deploy${reset}`);
-  console.log('');
-}
-
-/** Handle CLI mode for the harness path */
-async function handleCreateHarnessCLI(options: CreateOptions): Promise<void> {
+/** Handle CLI mode with progress output */
+async function handleCreateCLI(options: CreateOptions): Promise<void> {
   const cwd = options.outputDir ?? getWorkingDirectory();
   const name = options.name ?? options.projectName;
   const projectName = options.projectName ?? name;
 
-  const validation = validateCreateHarnessOptions(
-    {
-      name,
-      projectName,
-      modelProvider: options.modelProvider,
-      modelId: options.modelId,
-      apiKeyArn: options.apiKeyArn,
-    },
-    cwd
-  );
-  if (!validation.valid) {
-    if (options.json) {
-      console.log(JSON.stringify({ success: false, error: validation.error }));
-    } else {
-      console.error(validation.error);
-    }
-    process.exit(1);
-  }
-
-  // Progress callback
-  const green = '\x1b[32m';
-  const reset = '\x1b[0m';
-  const onProgress: ProgressCallback | undefined = options.json
-    ? undefined
-    : (step, status) => {
-        if (status === 'done') console.log(`${green}[done]${reset}  ${step}`);
-        else if (status === 'error') console.log(`\x1b[31m[error]${reset} ${step}`);
-      };
-
-  const provider = (
-    options.modelProvider ? normalizeHarnessModelProvider(options.modelProvider) : 'bedrock'
-  ) as HarnessModelProvider;
-  const defaultModelIds: Record<string, string> = {
-    bedrock: 'global.anthropic.claude-sonnet-4-6',
-    open_ai: 'gpt-5',
-    gemini: 'gemini-2.5-flash',
-  };
-  const modelId = options.modelId ?? defaultModelIds[provider] ?? 'global.anthropic.claude-sonnet-4-6';
-
-  const containerOption = harnessPrimitive.parseContainerFlag(options.container);
-
-  const result = await createProjectWithHarness({
-    name: name!,
-    projectName: projectName!,
-    cwd,
-    modelProvider: provider,
-    modelId,
-    apiKeyArn: options.apiKeyArn,
-    containerUri: containerOption.containerUri,
-    dockerfilePath: containerOption.dockerfilePath,
-    skipMemory: options.harnessMemory === false,
-    maxIterations: options.maxIterations ? Number(options.maxIterations) : undefined,
-    maxTokens: options.maxTokens ? Number(options.maxTokens) : undefined,
-    timeoutSeconds: options.timeout ? Number(options.timeout) : undefined,
-    truncationStrategy: options.truncationStrategy as 'sliding_window' | 'summarization' | undefined,
-    networkMode: options.networkMode as NetworkMode | undefined,
-    subnets: parseCommaSeparatedList(options.subnets),
-    securityGroups: parseCommaSeparatedList(options.securityGroups),
-    idleTimeout: options.idleTimeout ? Number(options.idleTimeout) : undefined,
-    maxLifetime: options.maxLifetime ? Number(options.maxLifetime) : undefined,
-    sessionStoragePath: options.sessionStorageMountPath,
-    skipGit: options.skipGit,
-    skipInstall: options.skipInstall,
-    onProgress,
-  });
-
-  if (options.json) {
-    console.log(JSON.stringify(result));
-  } else if (result.success) {
-    printCreateHarnessSummary(projectName!, name!);
-  } else {
-    console.error(result.error);
-  }
-  process.exit(result.success ? 0 : 1);
-}
-
-/** Handle CLI mode with progress output for the agent/runtime path */
-async function handleCreateAgentCLI(options: CreateOptions): Promise<void> {
-  const cwd = options.outputDir ?? getWorkingDirectory();
-  const name = options.name ?? options.projectName;
-  const projectName = options.projectName ?? name;
-
-  const validation = validateCreateOptions(options, cwd);
-  if (!validation.valid) {
-    if (options.json) {
-      console.log(JSON.stringify({ success: false, error: validation.error }));
-    } else {
-      console.error(validation.error);
-    }
-    process.exit(1);
-  }
-
-  // Handle dry-run mode
+  // Handle dry-run mode (no telemetry for dry-run)
   if (options.dryRun) {
-    const result = getDryRunInfo({ name: name!, projectName: projectName!, cwd, language: options.language });
+    const validation = validateCreateOptions(options, cwd);
+    if (!validation.valid) {
+      if (options.json) {
+        console.log(JSON.stringify({ success: false, error: validation.error }));
+      } else {
+        console.error(validation.error);
+      }
+      process.exit(1);
+    }
+    const result = getDryRunInfo({ name: name!, projectName, cwd, language: options.language });
     if (options.json) {
       console.log(JSON.stringify(result));
     } else {
@@ -237,74 +114,92 @@ async function handleCreateAgentCLI(options: CreateOptions): Promise<void> {
     process.exit(0);
   }
 
-  const green = '\x1b[32m';
-  const reset = '\x1b[0m';
-
-  // Progress callback for real-time output
-  const onProgress: ProgressCallback | undefined = options.json
-    ? undefined
-    : (step, status) => {
-        if (status === 'done') {
-          console.log(`${green}[done]${reset}  ${step}`);
-        } else if (status === 'error') {
-          console.log(`\x1b[31m[error]${reset} ${step}`);
-        }
-        // 'start' is silent - we only show when done
-      };
-
-  // Commander.js --no-agent sets agent=false, not noAgent=true
-  const skipAgent = options.agent === false;
-
-  const result = skipAgent
-    ? await createProject({
-        name: projectName!,
-        cwd,
-        skipGit: options.skipGit,
-        skipInstall: options.skipInstall,
-        onProgress,
-      })
-    : await createProjectWithAgent({
-        name: name!,
-        projectName: projectName!,
-        cwd,
-        type: options.type as 'create' | 'import' | undefined,
-        buildType: (options.build as BuildType) ?? 'CodeZip',
-        language: (options.language as TargetLanguage) ?? (options.type === 'import' ? 'Python' : undefined),
-        framework: options.framework as SDKFramework | undefined,
-        modelProvider: options.modelProvider as ModelProvider | undefined,
-        apiKey: options.apiKey,
-        memory: (options.memory as 'none' | 'shortTerm' | 'longAndShortTerm') ?? 'none',
-        protocol: options.protocol as ProtocolMode | undefined,
-        agentId: options.agentId,
-        agentAliasId: options.agentAliasId,
-        region: options.region,
-        networkMode: options.networkMode as NetworkMode | undefined,
-        subnets: parseCommaSeparatedList(options.subnets),
-        securityGroups: parseCommaSeparatedList(options.securityGroups),
-        idleTimeout: options.idleTimeout ? Number(options.idleTimeout) : undefined,
-        maxLifetime: options.maxLifetime ? Number(options.maxLifetime) : undefined,
-        sessionStorageMountPath: options.sessionStorageMountPath,
-        withConfigBundle: options.withConfigBundle,
-        skipGit: options.skipGit,
-        skipInstall: options.skipInstall,
-        skipPythonSetup: options.skipPythonSetup,
-        onProgress,
-      });
-
-  if (options.json) {
-    console.log(JSON.stringify(result));
-  } else if (result.success) {
-    printCreateSummary(projectName!, result.agentName, options.language, options.framework);
-    if (options.skipInstall) {
-      console.log(
-        "\nDependency installation was skipped. Run 'npm install' in agentcore/cdk/ and 'uv sync' in your agent directory manually."
-      );
+  await runCliCommand('create', !!options.json, async () => {
+    const validation = validateCreateOptions(options, cwd);
+    if (!validation.valid) {
+      throw new Error(validation.error);
     }
-  } else {
-    console.error(result.error);
-  }
+    const green = '\x1b[32m';
+    const reset = '\x1b[0m';
 
-  process.exit(result.success ? 0 : 1);
+    // Progress callback for real-time output
+    const onProgress: ProgressCallback | undefined = options.json
+      ? undefined
+      : (step, status) => {
+          if (status === 'done') {
+            console.log(`${green}[done]${reset}  ${step}`);
+          } else if (status === 'error') {
+            console.log(`\x1b[31m[error]${reset} ${step}`);
+          }
+          // 'start' is silent - we only show when done
+        };
+
+    // Commander.js --no-agent sets agent=false, not noAgent=true
+    const skipAgent = options.agent === false;
+
+    const result = skipAgent
+      ? await createProject({
+          name: projectName!,
+          cwd,
+          skipGit: options.skipGit,
+          skipInstall: options.skipInstall,
+          onProgress,
+        })
+      : await createProjectWithAgent({
+          name: name!,
+          projectName,
+          cwd,
+          type: options.type as 'create' | 'import' | undefined,
+          buildType: (options.build as BuildType) ?? 'CodeZip',
+          language: (options.language as TargetLanguage) ?? (options.type === 'import' ? 'Python' : undefined),
+          framework: options.framework as SDKFramework | undefined,
+          modelProvider: options.modelProvider as ModelProvider | undefined,
+          apiKey: options.apiKey,
+          memory: (options.memory as 'none' | 'shortTerm' | 'longAndShortTerm') ?? 'none',
+          protocol: options.protocol as ProtocolMode | undefined,
+          agentId: options.agentId,
+          agentAliasId: options.agentAliasId,
+          region: options.region,
+          networkMode: options.networkMode as NetworkMode | undefined,
+          subnets: parseCommaSeparatedList(options.subnets),
+          securityGroups: parseCommaSeparatedList(options.securityGroups),
+          idleTimeout: options.idleTimeout ? Number(options.idleTimeout) : undefined,
+          maxLifetime: options.maxLifetime ? Number(options.maxLifetime) : undefined,
+          sessionStorageMountPath: options.sessionStorageMountPath,
+          withConfigBundle: options.withConfigBundle,
+          skipGit: options.skipGit,
+          skipInstall: options.skipInstall,
+          skipPythonSetup: options.skipPythonSetup,
+          onProgress,
+        });
+
+    if (!result.success) {
+      throw new Error(result.error);
+    }
+
+    if (options.json) {
+      console.log(JSON.stringify(result));
+    } else {
+      printCreateSummary(projectName!, result.agentName, options.language, options.framework);
+      if (options.skipInstall) {
+        console.log(
+          "\nDependency installation was skipped. Run 'npm install' in agentcore/cdk/ and 'uv sync' in your agent directory manually."
+        );
+      }
+    }
+
+    return {
+      language: standardize(Language, options.language),
+      framework: standardize(Framework, options.framework),
+      model_provider: standardize(ModelProviderEnum, options.modelProvider),
+      memory: standardize(Memory, options.memory ?? 'none'),
+      protocol: standardize(Protocol, options.protocol ?? 'http'),
+      build: standardize(Build, options.build ?? 'codezip'),
+      agent_type: standardize(AgentType, options.type ?? 'create'),
+      network_mode: standardize(NetworkModeEnum, options.networkMode ?? 'public'),
+      has_agent: options.agent !== false,
+    };
+  });
 }
 
 export const registerCreate = (program: Command) => {
@@ -317,14 +212,14 @@ export const registerCreate = (program: Command) => {
       'Project name (start with letter, alphanumeric only, max 23 chars) [non-interactive]'
     )
     .option('--no-agent', 'Skip agent creation [non-interactive]')
-    .option('--defaults', 'Use defaults [non-interactive]')
+    .option('--defaults', 'Use defaults (Python, Strands, Bedrock, no memory) [non-interactive]')
     .option('--build <type>', 'Build type: CodeZip or Container (default: CodeZip) [non-interactive]')
     .option('--language <language>', 'Target language (default: Python) [non-interactive]')
     .option(
       '--framework <framework>',
-      'Agent framework (Strands, LangChain_LangGraph, GoogleADK, OpenAIAgents); triggers agent/runtime path [non-interactive]'
+      'Agent framework (Strands, LangChain_LangGraph, GoogleADK, OpenAIAgents) [non-interactive]'
     )
-    .option('--model-provider <provider>', 'Model provider: bedrock, open_ai, gemini (harness path) [non-interactive]')
+    .option('--model-provider <provider>', 'Model provider (Bedrock, Anthropic, OpenAI, Gemini) [non-interactive]')
     .option('--api-key <key>', 'API key for non-Bedrock providers [non-interactive]')
     .option('--memory <option>', 'Memory option (none, shortTerm, longAndShortTerm) [non-interactive]')
     .option('--protocol <protocol>', 'Protocol: HTTP, MCP, A2A, AGUI (default: HTTP) [non-interactive]')
@@ -354,19 +249,17 @@ export const registerCreate = (program: Command) => {
     .option('--skip-install', 'Skip all dependency installation (npm install, uv sync) [non-interactive]')
     .option('--dry-run', 'Preview what would be created without making changes [non-interactive]')
     .option('--json', 'Output as JSON [non-interactive]')
-    .option('--model-id <id>', 'Model ID for harness [non-interactive]')
-    .option('--api-key-arn <arn>', 'API key ARN for non-Bedrock harness providers [non-interactive]')
-    .option('--no-harness-memory', 'Skip auto-creating memory for harness [non-interactive]')
-    .option('--max-iterations <n>', 'Max agent loop iterations (harness) [non-interactive]')
-    .option('--max-tokens <n>', 'Max tokens per iteration (harness) [non-interactive]')
-    .option('--timeout <seconds>', 'Max execution duration in seconds (harness) [non-interactive]')
-    .option(
-      '--truncation-strategy <strategy>',
-      'Truncation strategy: sliding_window or summarization (harness) [non-interactive]'
-    )
-    .option('--container <uri-or-path>', 'Container image URI or Dockerfile path (harness) [non-interactive]')
     .action(async options => {
       try {
+        // Apply defaults if --defaults flag is set
+        if (options.defaults) {
+          options.language = options.language ?? 'Python';
+          options.build = options.build ?? 'CodeZip';
+          options.framework = options.framework ?? 'Strands';
+          options.modelProvider = options.modelProvider ?? 'Bedrock';
+          options.memory = options.memory ?? 'none';
+        }
+
         // Any flag triggers non-interactive CLI mode
         const hasAnyFlag = Boolean(
           options.name ??
@@ -379,78 +272,22 @@ export const registerCreate = (program: Command) => {
           options.modelProvider ??
           options.apiKey ??
           options.memory ??
-          options.protocol ??
-          options.type ??
-          options.agentId ??
-          options.agentAliasId ??
-          options.region ??
-          options.networkMode ??
-          options.subnets ??
-          options.securityGroups ??
-          options.idleTimeout ??
-          options.maxLifetime ??
           options.outputDir ??
           options.skipGit ??
           options.skipPythonSetup ??
           options.skipInstall ??
           options.dryRun ??
-          options.json ??
-          options.modelId ??
-          options.apiKeyArn ??
-          (options.harnessMemory === false ? true : null) ??
-          options.maxIterations ??
-          options.maxTokens ??
-          options.timeout ??
-          options.truncationStrategy
+          options.json
         );
 
-        if (!hasAnyFlag) {
+        if (hasAnyFlag) {
+          // Default language to Python (only supported option) for CLI mode
+          options.language = options.language ?? 'Python';
+          await handleCreateCLI(options as CreateOptions);
+        } else {
           requireTTY();
           handleCreateTUI();
-          return;
         }
-
-        // CLI mode: fork between harness and agent paths
-        const opts = options as CreateOptions;
-
-        // Conflict detection: agent-path flags + harness-only flags
-        if (isAgentPath(opts) && hasHarnessOnlyFlags(opts)) {
-          const error =
-            'Cannot mix agent-path flags (--framework, --language, etc.) with harness-only flags (--model-id, --max-iterations, etc.)';
-          if (opts.json) {
-            console.log(JSON.stringify({ success: false, error }));
-          } else {
-            console.error(error);
-          }
-          process.exit(1);
-        }
-
-        // --no-agent: bare project (no harness, no agent)
-        if (opts.agent === false) {
-          await handleCreateAgentCLI(opts);
-          return;
-        }
-
-        // Agent path: any agent-specific flag triggers it
-        if (isAgentPath(opts)) {
-          // Apply agent defaults if --defaults
-          if (opts.defaults) {
-            opts.language = opts.language ?? 'Python';
-            opts.build = opts.build ?? 'CodeZip';
-            opts.framework = opts.framework ?? 'Strands';
-            opts.modelProvider = opts.modelProvider ?? 'Bedrock';
-            opts.memory = opts.memory ?? 'none';
-          }
-          opts.language = opts.language ?? 'Python';
-          await handleCreateAgentCLI(opts);
-          return;
-        }
-
-        // Harness path (default)
-        if (!opts.json && !opts.modelProvider && !hasHarnessOnlyFlags(opts)) {
-          console.log('Creating a harness project (pass --framework to create an agent project instead).');
-        }
-        await handleCreateHarnessCLI(opts);
       } catch (error) {
         render(<Text color="red">Error: {getErrorMessage(error)}</Text>);
         process.exit(1);

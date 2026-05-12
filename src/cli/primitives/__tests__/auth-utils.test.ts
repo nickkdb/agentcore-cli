@@ -93,7 +93,6 @@ describe('createManagedOAuthCredential', () => {
     onlineEvalConfigs: [],
     agentCoreGateways: [],
     policyEngines: [],
-    harnesses: [],
     configBundles: [],
     abTests: [],
     httpGateways: [],

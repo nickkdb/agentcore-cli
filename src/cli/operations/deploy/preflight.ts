@@ -6,7 +6,7 @@ import { CdkToolkitWrapper, createCdkToolkitWrapper, silentIoHost } from '../../
 import { checkBootstrapStatus, checkStacksStatus, formatCdkEnvironment } from '../../cloudformation';
 import { cleanupStaleLockFiles } from '../../tui/utils';
 import type { IIoHost } from '@aws-cdk/toolkit-lib';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 
 export interface PreflightContext {
@@ -90,10 +90,7 @@ export async function validateProject(): Promise<PreflightContext> {
   // Check for gateways in agentcore.json
   const hasGateways = projectSpec.agentCoreGateways && projectSpec.agentCoreGateways.length > 0;
 
-  // Check for harnesses in agentcore.json
-  const hasHarnesses = projectSpec.harnesses && projectSpec.harnesses.length > 0;
-
-  if (!hasAgents && !hasGateways && !hasMemories && !hasEvaluators && !hasPolicyEngines && !hasHarnesses) {
+  if (!hasAgents && !hasGateways && !hasMemories && !hasEvaluators && !hasPolicyEngines) {
     let hasExistingStack = false;
     try {
       const deployedState = await configIO.readDeployedState();
@@ -103,24 +100,20 @@ export async function validateProject(): Promise<PreflightContext> {
     }
     if (!hasExistingStack) {
       throw new Error(
-        'No resources defined in project. Add at least one resource (agent, memory, evaluator, gateway, or harness) before deploying.'
+        'No resources defined in project. Add at least one resource (agent, memory, evaluator, or gateway) before deploying.'
       );
     }
     isTeardownDeploy = true;
   }
 
-  // Validate runtime and harness names don't exceed AWS limits
+  // Validate runtime names don't exceed AWS limits
   validateRuntimeNames(projectSpec);
-  validateHarnessNames(projectSpec);
 
   // Validate HTTP gateway names don't exceed AWS limits when combined with project name
   validateHttpGatewayNames(projectSpec);
 
   // Validate Container agents have Dockerfiles
   validateContainerAgents(projectSpec, configRoot);
-
-  // Validate harnesses with dockerfile field have actual Dockerfiles
-  validateHarnessDockerfiles(projectSpec, configRoot);
 
   // Validate AWS credentials before proceeding with build/synth.
   // Skip for teardown deploys — callers validate after teardown confirmation.
@@ -145,26 +138,6 @@ function validateRuntimeNames(projectSpec: AgentCoreProjectSpec): void {
           `Runtime name too long: "${combinedName}" (${combinedName.length} chars). ` +
             `AWS limits runtime names to ${MAX_RUNTIME_NAME_LENGTH} characters. ` +
             `Shorten the project name or agent name in agentcore.json.`
-        );
-      }
-    }
-  }
-}
-
-/**
- * Validates that combined harness names (projectName_harnessName) don't exceed AWS limits.
- */
-function validateHarnessNames(projectSpec: AgentCoreProjectSpec): void {
-  const projectName = projectSpec.name;
-  for (const harness of projectSpec.harnesses || []) {
-    const harnessName = harness.name;
-    if (harnessName) {
-      const combinedName = `${projectName}_${harnessName}`;
-      if (combinedName.length > MAX_RUNTIME_NAME_LENGTH) {
-        throw new Error(
-          `Harness name too long: "${combinedName}" (${combinedName.length} chars). ` +
-            `AWS limits harness names to ${MAX_RUNTIME_NAME_LENGTH} characters. ` +
-            `Shorten the project name or harness name in agentcore.json.`
         );
       }
     }
@@ -218,41 +191,6 @@ export function validateContainerAgents(projectSpec: AgentCoreProjectSpec, confi
       }
     }
   }
-  if (errors.length > 0) {
-    throw new Error(errors.join('\n'));
-  }
-}
-
-/**
- * Validates that harnesses specifying a dockerfile have the Dockerfile on disk.
- */
-export function validateHarnessDockerfiles(projectSpec: AgentCoreProjectSpec, configRoot: string): void {
-  const projectRoot = path.dirname(configRoot);
-  const errors: string[] = [];
-
-  for (const entry of projectSpec.harnesses || []) {
-    const harnessDir = path.join(projectRoot, entry.path);
-    const harnessJsonPath = path.join(harnessDir, 'harness.json');
-
-    let harnessSpec: { dockerfile?: string; containerUri?: string };
-    try {
-      const raw = readFileSync(harnessJsonPath, 'utf-8');
-      harnessSpec = JSON.parse(raw) as { dockerfile?: string; containerUri?: string };
-    } catch {
-      continue; // harness-deployer will report this error with full context
-    }
-
-    if (harnessSpec.dockerfile && !harnessSpec.containerUri) {
-      const dockerfilePath = getDockerfilePath(harnessDir, harnessSpec.dockerfile);
-      if (!existsSync(dockerfilePath)) {
-        errors.push(
-          `Harness "${entry.name}": ${harnessSpec.dockerfile} not found at ${dockerfilePath}. ` +
-            `Harnesses with a "dockerfile" field require the Dockerfile to exist.`
-        );
-      }
-    }
-  }
-
   if (errors.length > 0) {
     throw new Error(errors.join('\n'));
   }

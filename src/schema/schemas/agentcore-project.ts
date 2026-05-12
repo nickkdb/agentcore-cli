@@ -12,7 +12,6 @@ import { AgentCoreGatewaySchema, AgentCoreGatewayTargetSchema, AgentCoreMcpRunti
 import { ABTestSchema } from './primitives/ab-test';
 import { ConfigBundleSchema } from './primitives/config-bundle';
 import { EvaluationLevelSchema, EvaluatorConfigSchema, EvaluatorNameSchema } from './primitives/evaluator';
-import { HarnessNameSchema } from './primitives/harness';
 import { HttpGatewaySchema } from './primitives/http-gateway';
 import {
   DEFAULT_EPISODIC_REFLECTION_NAMESPACES,
@@ -47,15 +46,6 @@ export type {
   RatingScale,
 } from './primitives/evaluator';
 export { BedrockModelIdSchema, isValidBedrockModelId, EvaluatorNameSchema } from './primitives/evaluator';
-export type { HarnessGatewayOutboundAuth, HarnessSpec, HarnessModelProvider } from './primitives/harness';
-export {
-  GatewayOAuthGrantTypeSchema,
-  HarnessGatewayOutboundAuthSchema,
-  HarnessNameSchema,
-  HarnessSpecSchema,
-  HarnessToolTypeSchema,
-  HarnessModelProviderSchema,
-} from './primitives/harness';
 export { ConfigBundleSchema };
 export type { ComponentConfiguration, ComponentConfigurationMap, ConfigBundle } from './primitives/config-bundle';
 export { ConfigBundleNameSchema, ComponentConfigurationMapSchema } from './primitives/config-bundle';
@@ -226,17 +216,6 @@ export const EvaluatorSchema = z.object({
 export type Evaluator = z.infer<typeof EvaluatorSchema>;
 
 // ============================================================================
-// Harness Registry Schema
-// ============================================================================
-
-export const HarnessRegistryEntrySchema = z.object({
-  name: HarnessNameSchema,
-  path: z.string().min(1, 'Path to harness config directory is required'),
-});
-
-export type HarnessRegistryEntry = z.infer<typeof HarnessRegistryEntrySchema>;
-
-// ============================================================================
 // Project Schema (Top Level)
 // ============================================================================
 
@@ -341,16 +320,6 @@ export const AgentCoreProjectSpecSchema = z
         uniqueBy(
           engine => engine.name,
           name => `Duplicate policy engine name: ${name}`
-        )
-      ),
-
-    harnesses: z
-      .array(HarnessRegistryEntrySchema)
-      .default([])
-      .superRefine(
-        uniqueBy(
-          harness => harness.name,
-          name => `Duplicate harness name: ${name}`
         )
       ),
 

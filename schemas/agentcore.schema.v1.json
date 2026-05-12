@@ -1845,27 +1845,6 @@
         "additionalProperties": false
       }
     },
-    "harnesses": {
-      "default": [],
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 48,
-            "pattern": "^[a-zA-Z][a-zA-Z0-9_]{0,47}$"
-          },
-          "path": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "required": ["name", "path"],
-        "additionalProperties": false
-      }
-    },
     "configBundles": {
       "default": [],
       "type": "array",

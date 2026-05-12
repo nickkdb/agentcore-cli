@@ -56,30 +56,6 @@
       "Resource": "*"
     },
     {
-      "Sid": "HarnessManagement",
-      "Effect": "Allow",
-      "Action": [
-        "bedrock-agentcore:CreateHarness",
-        "bedrock-agentcore:GetHarness",
-        "bedrock-agentcore:UpdateHarness",
-        "bedrock-agentcore:DeleteHarness",
-        "bedrock-agentcore:ListHarnesses",
-        "bedrock-agentcore:InvokeHarness"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "HarnessPassRole",
-      "Effect": "Allow",
-      "Action": "iam:PassRole",
-      "Resource": "arn:aws:iam::ACCOUNT_ID:role/*",
-      "Condition": {
-        "StringEquals": {
-          "iam:PassedToService": "bedrock-agentcore.amazonaws.com"
-        }
-      }
-    },
-    {
       "Sid": "IdentityCredentialManagement",
       "Effect": "Allow",
       "Action": [
@@ -114,6 +90,22 @@
       "Resource": "*"
     },
     {
+      "Sid": "BatchEvalAndRecommendations",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock-agentcore:StartBatchEvaluation",
+        "bedrock-agentcore:GetBatchEvaluation",
+        "bedrock-agentcore:ListBatchEvaluations",
+        "bedrock-agentcore:StopBatchEvaluation",
+        "bedrock-agentcore:DeleteBatchEvaluation",
+        "bedrock-agentcore:StartRecommendation",
+        "bedrock-agentcore:GetRecommendation",
+        "bedrock-agentcore:ListRecommendations",
+        "bedrock-agentcore:DeleteRecommendation"
+      ],
+      "Resource": "*"
+    },
+    {
       "Sid": "LogsStreamingAndSearch",
       "Effect": "Allow",
       "Action": [
@@ -122,7 +114,12 @@
         "logs:StartQuery",
         "logs:GetQueryResults",
         "logs:DescribeResourcePolicies",
-        "logs:PutResourcePolicy"
+        "logs:PutResourcePolicy",
+        "logs:DescribeLogGroups",
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:PutRetentionPolicy"
       ],
       "Resource": "*"
     },
@@ -140,7 +137,7 @@
     {
       "Sid": "BedrockModelInvocation",
       "Effect": "Allow",
-      "Action": ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
+      "Action": ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream", "bedrock:CountTokens"],
       "Resource": "*"
     },
     {

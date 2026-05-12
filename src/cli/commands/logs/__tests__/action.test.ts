@@ -60,7 +60,6 @@ describe('resolveAgentContext', () => {
       onlineEvalConfigs: [],
       agentCoreGateways: [],
       policyEngines: [],
-      harnesses: [],
       configBundles: [],
       abTests: [],
       httpGateways: [],
@@ -84,8 +83,8 @@ describe('resolveAgentContext', () => {
     ...overrides,
   });
 
-  it('auto-selects single agent', async () => {
-    const result = await resolveAgentContext(makeContext(), {});
+  it('auto-selects single agent', () => {
+    const result = resolveAgentContext(makeContext(), {});
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.agentContext.agentName).toBe('MyAgent');
@@ -95,7 +94,7 @@ describe('resolveAgentContext', () => {
     }
   });
 
-  it('errors for multiple agents without --agent flag', async () => {
+  it('errors for multiple agents without --agent flag', () => {
     const context = makeContext({
       project: {
         name: 'TestProject',
@@ -125,13 +124,12 @@ describe('resolveAgentContext', () => {
         onlineEvalConfigs: [],
         agentCoreGateways: [],
         policyEngines: [],
-        harnesses: [],
         configBundles: [],
         abTests: [],
         httpGateways: [],
       },
     });
-    const result = await resolveAgentContext(context, {});
+    const result = resolveAgentContext(context, {});
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error).toContain('Multiple runtimes found');
@@ -140,7 +138,7 @@ describe('resolveAgentContext', () => {
     }
   });
 
-  it('selects correct agent with --agent flag from multiple agents', async () => {
+  it('selects correct agent with --agent flag from multiple agents', () => {
     const context = makeContext({
       project: {
         name: 'TestProject',
@@ -170,7 +168,6 @@ describe('resolveAgentContext', () => {
         onlineEvalConfigs: [],
         agentCoreGateways: [],
         policyEngines: [],
-        harnesses: [],
         configBundles: [],
         abTests: [],
         httpGateways: [],
@@ -196,7 +193,7 @@ describe('resolveAgentContext', () => {
         },
       },
     });
-    const result = await resolveAgentContext(context, { runtime: 'AgentB' });
+    const result = resolveAgentContext(context, { runtime: 'AgentB' });
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.agentContext.agentName).toBe('AgentB');
@@ -204,15 +201,15 @@ describe('resolveAgentContext', () => {
     }
   });
 
-  it('errors for unknown agent name', async () => {
-    const result = await resolveAgentContext(makeContext(), { runtime: 'UnknownAgent' });
+  it('errors for unknown agent name', () => {
+    const result = resolveAgentContext(makeContext(), { runtime: 'UnknownAgent' });
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error).toContain("Runtime 'UnknownAgent' not found");
     }
   });
 
-  it('errors when no agents defined', async () => {
+  it('errors when no agents defined', () => {
     const context = makeContext({
       project: {
         name: 'TestProject',
@@ -225,20 +222,19 @@ describe('resolveAgentContext', () => {
         onlineEvalConfigs: [],
         agentCoreGateways: [],
         policyEngines: [],
-        harnesses: [],
         configBundles: [],
         abTests: [],
         httpGateways: [],
       },
     });
-    const result = await resolveAgentContext(context, {});
+    const result = resolveAgentContext(context, {});
     expect(result.success).toBe(false);
     if (!result.success) {
-      expect(result.error).toContain('No runtimes or harnesses defined');
+      expect(result.error).toContain('No runtimes defined');
     }
   });
 
-  it('errors when agent is not deployed', async () => {
+  it('errors when agent is not deployed', () => {
     const context = makeContext({
       deployedState: {
         targets: {
@@ -250,7 +246,7 @@ describe('resolveAgentContext', () => {
         },
       },
     });
-    const result = await resolveAgentContext(context, {});
+    const result = resolveAgentContext(context, {});
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error).toContain('is not deployed');
