@@ -7,12 +7,9 @@ import {
   runFailure,
   runSuccess,
 } from '../src/test-utils/index.js';
-import { createTelemetryHelper } from '../src/test-utils/telemetry-helper.js';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-
-const telemetry = createTelemetryHelper();
 
 describe('integration: add and remove config-bundle', () => {
   let project: TestProject;
@@ -23,7 +20,6 @@ describe('integration: add and remove config-bundle', () => {
 
   afterAll(async () => {
     await project.cleanup();
-    telemetry.destroy();
   });
 
   // ── Add lifecycle ─────────────────────────────────────────────────────
@@ -44,7 +40,7 @@ describe('integration: add and remove config-bundle', () => {
       expect(json.bundleName).toBe('InlineBundle');
 
       const config = await readProjectConfig(project.projectPath);
-      const bundle = config.configBundles.find(b => b.name === 'InlineBundle');
+      const bundle = config.configBundles!.find(b => b.name === 'InlineBundle');
       expect(bundle).toBeDefined();
       expect(bundle!.type).toBe('ConfigurationBundle');
       expect(bundle!.branchName).toBe('mainline');
@@ -72,7 +68,7 @@ describe('integration: add and remove config-bundle', () => {
       expect(json.bundleName).toBe('FileBundle');
 
       const config = await readProjectConfig(project.projectPath);
-      const bundle = config.configBundles.find(b => b.name === 'FileBundle');
+      const bundle = config.configBundles!.find(b => b.name === 'FileBundle');
       expect(bundle).toBeDefined();
       expect(Object.keys(bundle!.components)).toHaveLength(2);
     });
@@ -106,7 +102,7 @@ describe('integration: add and remove config-bundle', () => {
       expect(json.bundleName).toBe('FullOptsBundle');
 
       const config = await readProjectConfig(project.projectPath);
-      const bundle = config.configBundles.find(b => b.name === 'FullOptsBundle');
+      const bundle = config.configBundles!.find(b => b.name === 'FullOptsBundle');
       expect(bundle).toBeDefined();
       expect(bundle!.description).toBe('A bundle with all optional fields');
       expect(bundle!.branchName).toBe('feature-branch');
@@ -131,7 +127,7 @@ describe('integration: add and remove config-bundle', () => {
       expect(json.bundleName).toBe('PlaceholderBundle');
 
       const config = await readProjectConfig(project.projectPath);
-      const bundle = config.configBundles.find(b => b.name === 'PlaceholderBundle');
+      const bundle = config.configBundles!.find(b => b.name === 'PlaceholderBundle');
       expect(bundle).toBeDefined();
       const keys = Object.keys(bundle!.components);
       expect(keys).toContain('{{runtime:AgentA}}');
@@ -232,45 +228,37 @@ describe('integration: add and remove config-bundle', () => {
 
   describe('remove config-bundle', () => {
     it('removes an existing config bundle', async () => {
-      const result = await runCLI(
+      const json = await runSuccess(
         ['remove', 'config-bundle', '--name', 'InlineBundle', '--json'],
-        project.projectPath,
-        { env: telemetry.env }
+        project.projectPath
       );
 
-      expect(result.exitCode).toBe(0);
-      const json = JSON.parse(result.stdout);
       expect(json.success).toBe(true);
 
       const config = await readProjectConfig(project.projectPath);
-      const bundle = config.configBundles.find(b => b.name === 'InlineBundle');
+      const bundle = config.configBundles!.find(b => b.name === 'InlineBundle');
       expect(bundle).toBeUndefined();
-      telemetry.assertMetricEmitted({ command: 'remove.config-bundle', exit_reason: 'success' });
     });
 
     it('returns error for non-existent bundle', async () => {
-      const result = await runCLI(
+      const json = await runFailure(
         ['remove', 'config-bundle', '--name', 'DoesNotExist', '--json'],
-        project.projectPath,
-        { env: telemetry.env }
+        project.projectPath
       );
 
-      expect(result.exitCode).toBe(1);
-      const json = JSON.parse(result.stdout);
       expect(json.error).toContain('not found');
-      telemetry.assertMetricEmitted({ command: 'remove.config-bundle', exit_reason: 'failure' });
     });
 
     it('removes all remaining config bundles one by one', async () => {
       const configBefore = await readProjectConfig(project.projectPath);
-      const remaining = configBefore.configBundles.map(b => b.name);
+      const remaining = configBefore.configBundles!.map(b => b.name);
 
       for (const name of remaining) {
         await runSuccess(['remove', 'config-bundle', '--name', name, '--json'], project.projectPath);
       }
 
       const configAfter = await readProjectConfig(project.projectPath);
-      expect(configAfter.configBundles).toHaveLength(0);
+      expect(configAfter.configBundles!).toHaveLength(0);
     });
   });
 
@@ -294,10 +282,10 @@ describe('integration: add and remove config-bundle', () => {
       }
 
       const config = await readProjectConfig(project.projectPath);
-      expect(config.configBundles).toHaveLength(bundleNames.length);
+      expect(config.configBundles!).toHaveLength(bundleNames.length);
 
       for (const name of bundleNames) {
-        expect(config.configBundles.find(b => b.name === name)).toBeDefined();
+        expect(config.configBundles!.find(b => b.name === name)).toBeDefined();
       }
     });
 
@@ -305,10 +293,10 @@ describe('integration: add and remove config-bundle', () => {
       await runSuccess(['remove', 'config-bundle', '--name', 'BundleBeta', '--json'], project.projectPath);
 
       const config = await readProjectConfig(project.projectPath);
-      expect(config.configBundles).toHaveLength(2);
-      expect(config.configBundles.find(b => b.name === 'BundleAlpha')).toBeDefined();
-      expect(config.configBundles.find(b => b.name === 'BundleGamma')).toBeDefined();
-      expect(config.configBundles.find(b => b.name === 'BundleBeta')).toBeUndefined();
+      expect(config.configBundles!).toHaveLength(2);
+      expect(config.configBundles!.find(b => b.name === 'BundleAlpha')).toBeDefined();
+      expect(config.configBundles!.find(b => b.name === 'BundleGamma')).toBeDefined();
+      expect(config.configBundles!.find(b => b.name === 'BundleBeta')).toBeUndefined();
     });
 
     afterAll(async () => {

@@ -1,83 +1,113 @@
-import { ONE_DAY_MS, ONE_HOUR_MS, ONE_SECOND_MS } from '../../lib/time-constants.js';
-import * as action from '../commands/update/action.js';
-import * as constants from '../constants.js';
 import { type UpdateCheckResult, checkForUpdate, printUpdateNotification } from '../update-notifier.js';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
-import { mkdir, readFile, writeFile } from 'fs/promises';
-import { tmpdir } from 'os';
-import { join } from 'path';
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const NOW = 1708646400000;
-const tmpDir = mkdtempSync(join(tmpdir(), 'update-notifier-test-'));
-const CACHE_FILE = join(tmpDir, 'update-check.json');
+const { mockReadFile, mockWriteFile, mockMkdir } = vi.hoisted(() => ({
+  mockReadFile: vi.fn(),
+  mockWriteFile: vi.fn(),
+  mockMkdir: vi.fn(),
+}));
+
+vi.mock('fs/promises', () => ({
+  readFile: mockReadFile,
+  writeFile: mockWriteFile,
+  mkdir: mockMkdir,
+}));
+
+vi.mock('../constants.js', () => ({
+  PACKAGE_VERSION: '1.0.0',
+  getDistroConfig: () => ({
+    packageName: '@aws/agentcore',
+    registryUrl: 'https://registry.npmjs.org',
+    distTag: 'latest',
+    installCommand: 'npm install -g @aws/agentcore@latest',
+  }),
+}));
+
+const { mockFetchLatestVersion, mockCompareVersions } = vi.hoisted(() => ({
+  mockFetchLatestVersion: vi.fn(),
+  mockCompareVersions: vi.fn(),
+}));
+
+vi.mock('../commands/update/action.js', () => ({
+  fetchLatestVersion: mockFetchLatestVersion,
+  compareVersions: mockCompareVersions,
+}));
 
 describe('checkForUpdate', () => {
-  let originalConfigDir: string | undefined;
-
   beforeEach(() => {
-    originalConfigDir = process.env.AGENTCORE_CONFIG_DIR;
-    process.env.AGENTCORE_CONFIG_DIR = tmpDir;
-    vi.spyOn(Date, 'now').mockReturnValue(NOW);
-    vi.spyOn(constants, 'PACKAGE_VERSION', 'get').mockReturnValue('1.0.0');
-    rmSync(tmpDir, { recursive: true, force: true });
+    vi.spyOn(Date, 'now').mockReturnValue(1708646400000);
+    mockWriteFile.mockResolvedValue(undefined);
+    mockMkdir.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
-    if (originalConfigDir === undefined) {
-      delete process.env.AGENTCORE_CONFIG_DIR;
-    } else {
-      process.env.AGENTCORE_CONFIG_DIR = originalConfigDir;
-    }
-  });
-
-  afterAll(() => {
-    rmSync(tmpDir, { recursive: true, force: true });
+    mockReadFile.mockReset();
+    mockWriteFile.mockReset();
+    mockMkdir.mockReset();
+    mockFetchLatestVersion.mockReset();
+    mockCompareVersions.mockReset();
   });
 
   it('fetches from registry when no cache exists', async () => {
-    vi.spyOn(action, 'fetchLatestVersion').mockResolvedValue('2.0.0');
+    mockReadFile.mockRejectedValue(new Error('ENOENT'));
+    mockFetchLatestVersion.mockResolvedValue('2.0.0');
+    mockCompareVersions.mockReturnValue(1);
 
     const result = await checkForUpdate();
 
     expect(result).toEqual({ updateAvailable: true, latestVersion: '2.0.0' });
+    expect(mockFetchLatestVersion).toHaveBeenCalled();
   });
 
   it('uses cache when last check was less than 24 hours ago', async () => {
-    await mkdir(tmpDir, { recursive: true });
-    await writeFile(CACHE_FILE, JSON.stringify({ lastCheck: NOW - ONE_SECOND_MS, latestVersion: '2.0.0' }), 'utf-8');
+    const cache = JSON.stringify({
+      lastCheck: 1708646400000 - 1000, // 1 second ago
+      latestVersion: '2.0.0',
+    });
+    mockReadFile.mockResolvedValue(cache);
+    mockCompareVersions.mockReturnValue(1);
 
     const result = await checkForUpdate();
 
     expect(result).toEqual({ updateAvailable: true, latestVersion: '2.0.0' });
+    expect(mockFetchLatestVersion).not.toHaveBeenCalled();
   });
 
   it('fetches from registry when cache is expired', async () => {
-    await mkdir(tmpDir, { recursive: true });
-    await writeFile(
-      CACHE_FILE,
-      JSON.stringify({ lastCheck: NOW - ONE_DAY_MS - ONE_HOUR_MS, latestVersion: '1.5.0' }),
-      'utf-8'
-    );
-    vi.spyOn(action, 'fetchLatestVersion').mockResolvedValue('2.0.0');
+    const cache = JSON.stringify({
+      lastCheck: 1708646400000 - 25 * 60 * 60 * 1000, // 25 hours ago
+      latestVersion: '1.5.0',
+    });
+    mockReadFile.mockResolvedValue(cache);
+    mockFetchLatestVersion.mockResolvedValue('2.0.0');
+    mockCompareVersions.mockReturnValue(1);
 
     const result = await checkForUpdate();
 
     expect(result).toEqual({ updateAvailable: true, latestVersion: '2.0.0' });
+    expect(mockFetchLatestVersion).toHaveBeenCalled();
   });
 
   it('writes cache after fetching', async () => {
-    vi.spyOn(action, 'fetchLatestVersion').mockResolvedValue('2.0.0');
+    mockReadFile.mockRejectedValue(new Error('ENOENT'));
+    mockFetchLatestVersion.mockResolvedValue('2.0.0');
+    mockCompareVersions.mockReturnValue(1);
 
     await checkForUpdate();
 
-    const cached = JSON.parse(await readFile(CACHE_FILE, 'utf-8'));
-    expect(cached).toEqual({ lastCheck: NOW, latestVersion: '2.0.0' });
+    expect(mockMkdir).toHaveBeenCalled();
+    expect(mockWriteFile).toHaveBeenCalledWith(
+      expect.stringContaining('update-check.json'),
+      JSON.stringify({ lastCheck: 1708646400000, latestVersion: '2.0.0' }),
+      'utf-8'
+    );
   });
 
   it('returns updateAvailable: false when versions match', async () => {
-    vi.spyOn(action, 'fetchLatestVersion').mockResolvedValue('1.0.0');
+    mockReadFile.mockRejectedValue(new Error('ENOENT'));
+    mockFetchLatestVersion.mockResolvedValue('1.0.0');
+    mockCompareVersions.mockReturnValue(0);
 
     const result = await checkForUpdate();
 
@@ -85,7 +115,9 @@ describe('checkForUpdate', () => {
   });
 
   it('returns updateAvailable: false when current is newer', async () => {
-    vi.spyOn(action, 'fetchLatestVersion').mockResolvedValue('0.9.0');
+    mockReadFile.mockRejectedValue(new Error('ENOENT'));
+    mockFetchLatestVersion.mockResolvedValue('0.9.0');
+    mockCompareVersions.mockReturnValue(-1);
 
     const result = await checkForUpdate();
 
@@ -93,7 +125,8 @@ describe('checkForUpdate', () => {
   });
 
   it('returns null on fetch error', async () => {
-    vi.spyOn(action, 'fetchLatestVersion').mockRejectedValue(new Error('network error'));
+    mockReadFile.mockRejectedValue(new Error('ENOENT'));
+    mockFetchLatestVersion.mockRejectedValue(new Error('network error'));
 
     const result = await checkForUpdate();
 
@@ -101,9 +134,8 @@ describe('checkForUpdate', () => {
   });
 
   it('returns null on cache parse error and fetch error', async () => {
-    await mkdir(tmpDir, { recursive: true });
-    await writeFile(CACHE_FILE, 'invalid json', 'utf-8');
-    vi.spyOn(action, 'fetchLatestVersion').mockRejectedValue(new Error('network error'));
+    mockReadFile.mockResolvedValue('invalid json');
+    mockFetchLatestVersion.mockRejectedValue(new Error('network error'));
 
     const result = await checkForUpdate();
 
@@ -111,14 +143,10 @@ describe('checkForUpdate', () => {
   });
 
   it('succeeds even when cache write fails', async () => {
-    // Point config dir at a regular file — mkdir/writeFile will fail because
-    // a file can't be used as a directory. Works cross-platform and as root.
-    mkdirSync(tmpDir, { recursive: true });
-    const blocker = join(tmpDir, 'not-a-dir');
-    writeFileSync(blocker, '');
-    process.env.AGENTCORE_CONFIG_DIR = blocker;
-
-    vi.spyOn(action, 'fetchLatestVersion').mockResolvedValue('2.0.0');
+    mockReadFile.mockRejectedValue(new Error('ENOENT'));
+    mockFetchLatestVersion.mockResolvedValue('2.0.0');
+    mockCompareVersions.mockReturnValue(1);
+    mockWriteFile.mockRejectedValue(new Error('EACCES'));
 
     const result = await checkForUpdate();
 
@@ -135,6 +163,7 @@ describe('printUpdateNotification', () => {
 
     const output = stderrSpy.mock.calls.map(c => c[0]).join('');
     expect(output).toContain('Update available:');
+    expect(output).toContain('1.0.0');
     expect(output).toContain('2.0.0');
     expect(output).toContain('npm install -g @aws/agentcore@latest');
 

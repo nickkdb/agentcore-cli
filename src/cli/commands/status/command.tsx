@@ -9,6 +9,7 @@ import { Box, Text, render } from 'ink';
 
 const VALID_RESOURCE_TYPES = [
   'agent',
+  'harness',
   'runtime-endpoint',
   'memory',
   'credential',
@@ -61,7 +62,7 @@ export const registerStatus = (program: Command) => {
     .option('--target <name>', 'Select deployment target')
     .option(
       '--type <type>',
-      'Filter by resource type (agent, runtime-endpoint, memory, credential, gateway, evaluator, online-eval, policy-engine, policy, config-bundle, ab-test)'
+      'Filter by resource type (agent, harness, runtime-endpoint, memory, credential, gateway, evaluator, online-eval, policy-engine, policy, config-bundle, ab-test)'
     )
     .option('--state <state>', 'Filter by deployment state (deployed, local-only, pending-removal)')
     .option('--runtime <name>', 'Filter to a specific runtime')
@@ -138,6 +139,7 @@ export const registerStatus = (program: Command) => {
 
         const filtered = filterResources(result.resources, cliOptions);
         const agents = filtered.filter(r => r.resourceType === 'agent');
+        const harnesses = filtered.filter(r => r.resourceType === 'harness');
         const runtimeEndpoints = filtered.filter(r => r.resourceType === 'runtime-endpoint');
         const credentials = filtered.filter(r => r.resourceType === 'credential');
         const memories = filtered.filter(r => r.resourceType === 'memory');
@@ -195,6 +197,15 @@ export const registerStatus = (program: Command) => {
                       [{DEPLOYMENT_STATE_LABELS[ep.deploymentState] ?? ep.deploymentState}]
                     </Text>
                   </Text>
+                ))}
+              </Box>
+            )}
+
+            {harnesses.length > 0 && (
+              <Box flexDirection="column" marginTop={1}>
+                <Text bold>Harnesses</Text>
+                {harnesses.map(entry => (
+                  <ResourceEntry key={`${entry.resourceType}-${entry.name}`} entry={entry} />
                 ))}
               </Box>
             )}
