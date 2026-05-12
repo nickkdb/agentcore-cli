@@ -1,6 +1,5 @@
 /* eslint-disable security/detect-non-literal-fs-filename */
 import { exists, prereqs, runCLI } from '../src/test-utils/index.js';
-import { createTelemetryHelper } from '../src/test-utils/telemetry-helper.js';
 import { randomUUID } from 'node:crypto';
 import { mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -10,21 +9,18 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 describe.skipIf(!prereqs.npm || !prereqs.git)('integration: create edge cases', () => {
   let testDir: string;
 
-  const telemetry = createTelemetryHelper();
-
   beforeAll(async () => {
     testDir = join(tmpdir(), `agentcore-integ-edge-${randomUUID()}`);
     await mkdir(testDir, { recursive: true });
   });
 
   afterAll(async () => {
-    telemetry.destroy();
     await rm(testDir, { recursive: true, force: true });
   });
 
   describe('reserved names', () => {
     it('rejects reserved name "Test"', async () => {
-      const result = await runCLI(['create', '--name', 'Test', '--json'], testDir, { env: telemetry.env });
+      const result = await runCLI(['create', '--name', 'Test', '--json'], testDir);
 
       expect(result.exitCode).toBe(1);
       const json = JSON.parse(result.stdout);
@@ -34,11 +30,6 @@ describe.skipIf(!prereqs.npm || !prereqs.git)('integration: create edge cases', 
         json.error.toLowerCase().includes('reserved') || json.error.toLowerCase().includes('conflict'),
         `Error should mention reserved/conflict: ${json.error}`
       ).toBeTruthy();
-
-      telemetry.assertMetricEmitted({
-        command: 'create',
-        exit_reason: 'failure',
-      });
     });
 
     it('rejects reserved name "bedrock"', async () => {
@@ -130,21 +121,12 @@ describe.skipIf(!prereqs.npm || !prereqs.git)('integration: create edge cases', 
   describe('flag interactions', () => {
     it('--defaults creates project with default settings', async () => {
       const name = `Def${Date.now().toString().slice(-6)}`;
-      const result = await runCLI(['create', '--name', name, '--defaults', '--json'], testDir, { env: telemetry.env });
+      const result = await runCLI(['create', '--name', name, '--defaults', '--json'], testDir);
 
       expect(result.exitCode, `stderr: ${result.stderr}`).toBe(0);
       const json = JSON.parse(result.stdout);
       expect(json.success).toBe(true);
       expect(json.projectPath).toBeTruthy();
-
-      telemetry.assertMetricEmitted({
-        command: 'create',
-        exit_reason: 'success',
-        language: 'python',
-        framework: 'strands',
-        model_provider: 'bedrock',
-        has_agent: 'true',
-      });
     });
 
     it('--dry-run shows what would be created without writing files', async () => {

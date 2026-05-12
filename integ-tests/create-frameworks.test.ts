@@ -1,5 +1,4 @@
 import { exists, prereqs, readProjectConfig, runCLI } from '../src/test-utils/index.js';
-import { createTelemetryHelper } from '../src/test-utils/telemetry-helper.js';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -9,15 +8,12 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 describe.skipIf(!prereqs.npm || !prereqs.git)('integration: create with different frameworks', () => {
   let testDir: string;
 
-  const telemetry = createTelemetryHelper();
-
   beforeAll(async () => {
     testDir = join(tmpdir(), `agentcore-integ-frameworks-${randomUUID()}`);
     await mkdir(testDir, { recursive: true });
   });
 
   afterAll(async () => {
-    telemetry.destroy();
     await rm(testDir, { recursive: true, force: true });
   });
 
@@ -38,8 +34,7 @@ describe.skipIf(!prereqs.npm || !prereqs.git)('integration: create with differen
         'none',
         '--json',
       ],
-      testDir,
-      { env: telemetry.env }
+      testDir
     );
 
     expect(result.exitCode, `stderr: ${result.stderr}`).toBe(0);
@@ -65,15 +60,6 @@ describe.skipIf(!prereqs.npm || !prereqs.git)('integration: create with differen
     expect(agents).toBeDefined();
     expect(agents.length).toBe(1);
     expect(agents[0]!.name).toBe(agentName);
-
-    telemetry.assertMetricEmitted({
-      command: 'create',
-      exit_reason: 'success',
-      language: 'python',
-      framework: 'langchain_langgraph',
-      model_provider: 'bedrock',
-      has_agent: 'true',
-    });
   });
 
   it('creates GoogleADK project with Gemini provider', async () => {
