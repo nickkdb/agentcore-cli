@@ -125,19 +125,32 @@ export type NetworkConfig = z.infer<typeof NetworkConfigSchema>;
 
 /**
  * Allowed request headers for the runtime.
- * Each header must be 'Authorization' or start with 'X-Amzn-Bedrock-AgentCore-Runtime-Custom-'.
+ * Per https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-header-allowlist.html
+ * any valid HTTP header name (alphanumeric, hyphens, underscores) may be allow-listed,
+ * provided it is not structurally reserved (x-amz-*, x-amzn-* except Runtime-Custom-*).
  * Maximum 20 headers.
  */
 export const HEADER_ALLOWLIST_PREFIX = 'X-Amzn-Bedrock-AgentCore-Runtime-Custom-';
+export const HEADER_NAME_PATTERN = /^[A-Za-z0-9\-_]+$/;
 export const MAX_HEADER_ALLOWLIST_SIZE = 20;
+
+function isValidAllowlistHeader(val: string): boolean {
+  if (!HEADER_NAME_PATTERN.test(val)) return false;
+  const lower = val.toLowerCase();
+  if (lower.startsWith('x-amz-') && !lower.startsWith('x-amzn-')) return false;
+  if (lower.startsWith('x-amzn-') && !lower.startsWith('x-amzn-bedrock-agentcore-runtime-custom-')) return false;
+  return true;
+}
 
 export const RequestHeaderAllowlistSchema = z
   .array(
     z
       .string()
       .refine(
-        val => val === 'Authorization' || val.startsWith(HEADER_ALLOWLIST_PREFIX),
-        `Must be "Authorization" or start with "${HEADER_ALLOWLIST_PREFIX}"`
+        isValidAllowlistHeader,
+        'Header names must contain only alphanumeric characters, hyphens, and underscores. ' +
+          'Headers starting with x-amz- are reserved. ' +
+          'Headers starting with x-amzn- are reserved except for X-Amzn-Bedrock-AgentCore-Runtime-Custom-*.'
       )
   )
   .max(MAX_HEADER_ALLOWLIST_SIZE, `Maximum ${MAX_HEADER_ALLOWLIST_SIZE} headers allowed`);
