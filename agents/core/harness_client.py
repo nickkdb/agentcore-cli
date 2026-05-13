@@ -83,7 +83,7 @@ class HarnessClient:
         body: dict = {
             "runtimeSessionId": session_id,
             "messages": [{"role": "user", "content": [{"text": message}]}],
-            "model": {"bedrockModelConfig": {"modelId": self.config.model_id}},
+            "model": {"bedrockModelConfig": {"modelId": self.config.model_id, "maxTokens": 16384}},
         }
         if system_prompt:
             body["systemPrompt"] = [{"text": system_prompt}]
