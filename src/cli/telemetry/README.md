@@ -58,6 +58,7 @@ async function withCommandRunTelemetry<C extends Command, R extends OperationRes
 
 - `command` — the registered command key (e.g. `'add.widget'`)
 - `attrs` — attribute object matching the schema registered in Step 1
+<<<<<<< HEAD
 - `fn` — async callback returning `{ success: true } | { success: false; error: string }`
 
 **Behavior:**
@@ -67,6 +68,18 @@ async function withCommandRunTelemetry<C extends Command, R extends OperationRes
 - On throw: records failure telemetry, returns `{ success: false, error }` so callers don't leak unhandled rejections.
 - If telemetry is unavailable: runs `fn()` untracked.
 
+=======
+- `fn` — async callback returning `Result<T>` (from `src/lib/result.ts`)
+
+**Behavior:**
+
+- On success: records `attrs` with `exit_reason: 'success'`, returns the result.
+- On failure/throw: records `attrs` with `exit_reason: 'failure'`, returns `{ success: false, error }`.
+- If telemetry is unavailable: runs `fn()` untracked.
+
+Since `attrs` are passed upfront, they are always recorded — even on failure.
+
+>>>>>>> origin/main
 **Example with attributes:**
 
 ```ts
@@ -95,6 +108,25 @@ await runCliCommand('add.widget', !!options.json, async () => {
 });
 ```
 
+<<<<<<< HEAD
+=======
+To record attrs on failure, pass `knownAttrs` as the fourth argument:
+
+```ts
+const knownAttrs = { widget_type: standardize(WidgetType, options.type), count: options.items.length };
+await runCliCommand(
+  'add.widget',
+  !!options.json,
+  async () => {
+    const result = await widgetPrimitive.add(options);
+    if (!result.success) throw new Error(result.error);
+    return knownAttrs;
+  },
+  knownAttrs
+);
+```
+
+>>>>>>> origin/main
 ## Key Points
 
 - Telemetry never crashes the CLI — `standardize()` falls back gracefully, `resilientParse` defaults invalid fields to

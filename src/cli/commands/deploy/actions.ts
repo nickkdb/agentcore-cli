@@ -1,5 +1,10 @@
+<<<<<<< HEAD
 import { ConfigIO, SecureCredentials } from '../../../lib';
 import type { AgentCoreMcpSpec, DeployedState, HarnessDeployedState } from '../../../schema';
+=======
+import { ConfigIO, ResourceNotFoundError, SecureCredentials, ValidationError, toError } from '../../../lib';
+import type { AgentCoreMcpSpec, DeployedState } from '../../../schema';
+>>>>>>> origin/main
 import { applyTargetRegionToEnv } from '../../aws';
 import { validateAwsCredentials } from '../../aws/account';
 import type { DeployMessage } from '../../cdk/toolkit-lib';
@@ -91,7 +96,7 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
       logger.finalize(false);
       return {
         success: false,
-        error: `Target "${options.target}" not found in aws-targets.json`,
+        error: new ResourceNotFoundError(`Target "${options.target}" not found in aws-targets.json`),
         logPath: logger.getRelativeLogPath(),
       };
     }
@@ -120,8 +125,9 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
       logger.finalize(false);
       return {
         success: false,
-        error:
-          'This will delete all deployed resources and the CloudFormation stack. Run with --yes to confirm teardown.',
+        error: new Error(
+          'This will delete all deployed resources and the CloudFormation stack. Run with --yes to confirm teardown.'
+        ),
         logPath: logger.getRelativeLogPath(),
       };
     }
@@ -175,7 +181,7 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
           errorResult?.error && typeof errorResult.error === 'string' ? errorResult.error : 'Identity setup failed';
         endStep('error', errorMsg);
         logger.finalize(false);
-        return { success: false, error: errorMsg, logPath: logger.getRelativeLogPath() };
+        return { success: false, error: new Error(errorMsg), logPath: logger.getRelativeLogPath() };
       }
       identityKmsKeyArn = identityResult.kmsKeyArn;
 
@@ -207,7 +213,7 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
         const errorMsg = 'OAuth credential setup failed. Check the log for details.';
         endStep('error', errorMsg);
         logger.finalize(false);
-        return { success: false, error: errorMsg, logPath: logger.getRelativeLogPath() };
+        return { success: false, error: new Error(errorMsg), logPath: logger.getRelativeLogPath() };
       }
 
       // Collect OAuth credential ARNs for deployed state
@@ -248,7 +254,11 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
     if (stackNames.length === 0) {
       endStep('error', 'No stacks found');
       logger.finalize(false);
-      return { success: false, error: 'No stacks found to deploy', logPath: logger.getRelativeLogPath() };
+      return {
+        success: false,
+        error: new ValidationError('No stacks found to deploy'),
+        logPath: logger.getRelativeLogPath(),
+      };
     }
     const targetStackName = toStackName(context.projectSpec.name, target.name);
     if (!stackNames.includes(targetStackName)) {
@@ -271,7 +281,7 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
         logger.finalize(false);
         return {
           success: false,
-          error: 'AWS environment needs bootstrapping. Run with --yes to auto-bootstrap.',
+          error: new Error('AWS environment needs bootstrapping. Run with --yes to auto-bootstrap.'),
           logPath: logger.getRelativeLogPath(),
         };
       }
@@ -286,7 +296,7 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
       logger.finalize(false);
       return {
         success: false,
-        error: deployabilityCheck.message ?? 'Stack is not in a deployable state',
+        error: new Error(deployabilityCheck.message ?? 'Stack is not in a deployable state'),
         logPath: logger.getRelativeLogPath(),
       };
     }
@@ -404,12 +414,12 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
       startStep('Tear down stack');
       const teardown = await performStackTeardown(target.name);
       if (!teardown.success) {
-        const teardownError = typeof teardown.error === 'string' ? teardown.error : 'Unknown teardown error';
+        const teardownError = teardown.error.message;
         endStep('error', teardownError);
         logger.finalize(false);
         return {
           success: false,
-          error: `Stack teardown failed: ${teardownError}`,
+          error: new Error(`Stack teardown failed: ${teardownError}`),
           logPath: logger.getRelativeLogPath(),
         };
       }
@@ -748,8 +758,8 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
           agentNames,
           hasGateways,
         });
-        if (tsResult.error) {
-          logger.log(`Transaction search setup warning: ${tsResult.error}`, 'warn');
+        if (!tsResult.success) {
+          logger.log(`Transaction search setup warning: ${tsResult.error.message}`, 'warn');
         } else {
           notes.push(
             'Transaction search enabled. It takes ~10 minutes for transaction search to be fully active and for traces from invocations to be indexed.'
@@ -778,7 +788,7 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
     }
     logger.log(getErrorMessage(err), 'error');
     logger.finalize(false);
-    return { success: false, error: getErrorMessage(err), logPath: logger.getRelativeLogPath() };
+    return { success: false, error: toError(err), logPath: logger.getRelativeLogPath() };
   } finally {
     if (toolkitWrapper) {
       await toolkitWrapper.dispose();

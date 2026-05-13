@@ -35,7 +35,7 @@ export const registerLogs = (program: Command) => {
         const result = await handleLogs(cliOptions);
 
         if (!result.success) {
-          render(<Text color="red">{result.error}</Text>);
+          render(<Text color="red">{result.error.message}</Text>);
           process.exit(1);
         }
       } catch (error) {
@@ -60,7 +60,7 @@ export const registerLogs = (program: Command) => {
         const result = await handleLogsEval(cliOptions);
 
         if (!result.success) {
-          render(<Text color="red">{result.error}</Text>);
+          render(<Text color="red">{result.error.message}</Text>);
           process.exit(1);
         }
       } catch (error) {

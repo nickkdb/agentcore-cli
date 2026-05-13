@@ -1,3 +1,4 @@
+import { serializeResult } from '../../../lib';
 import { getErrorMessage } from '../../errors';
 import { COMMAND_DESCRIPTIONS } from '../../tui/copy';
 import { requireProject } from '../../tui/guards';
@@ -101,12 +102,12 @@ export const registerStatus = (program: Command) => {
           });
 
           if (cliOptions.json) {
-            console.log(JSON.stringify(result, null, 2));
+            console.log(JSON.stringify(serializeResult(result), null, 2));
             return;
           }
 
           if (!result.success) {
-            render(<Text color="red">{result.error}</Text>);
+            render(<Text color="red">{result.error.message}</Text>);
             return;
           }
 
@@ -127,13 +128,17 @@ export const registerStatus = (program: Command) => {
         });
 
         if (cliOptions.json) {
-          const filtered = filterResources(result.resources, cliOptions);
-          console.log(JSON.stringify({ ...result, resources: filtered }, null, 2));
+          if (result.success) {
+            const filtered = filterResources(result.resources, cliOptions);
+            console.log(JSON.stringify({ ...result, resources: filtered }, null, 2));
+          } else {
+            console.log(JSON.stringify(serializeResult(result), null, 2));
+          }
           return;
         }
 
         if (!result.success) {
-          render(<Text color="red">{result.error}</Text>);
+          render(<Text color="red">{result.error.message}</Text>);
           return;
         }
 
@@ -155,7 +160,7 @@ export const registerStatus = (program: Command) => {
         render(
           <Box flexDirection="column">
             <Text bold>
-              AgentCore Status (target: {result.targetName || 'No target configured'}
+              AgentCore Status (target: {result.targetName ?? 'No target configured'}
               {result.targetRegion ? `, ${result.targetRegion}` : ''})
             </Text>
 

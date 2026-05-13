@@ -26,5 +26,9 @@ export {
   getPrimitive,
 } from './registry';
 export { SOURCE_CODE_NOTE } from './constants';
+<<<<<<< HEAD
 export type { AddResult, AddScreenComponent, RemovableResource, RemovalPreview, RemovalResult } from './types';
 export type { AddHarnessOptions } from './HarnessPrimitive';
+=======
+export type { AddResult, AddScreenComponent, RemovableResource, RemovalPreview, Result } from './types';
+>>>>>>> origin/main

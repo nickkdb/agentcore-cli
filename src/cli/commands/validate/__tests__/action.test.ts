@@ -1,4 +1,5 @@
 import { handleValidate } from '../action.js';
+import assert from 'node:assert';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const {
@@ -77,7 +78,8 @@ describe('handleValidate', () => {
     const result = await handleValidate({});
 
     expect(result.success).toBe(false);
-    expect(result.error).toContain('No agentcore project found');
+    assert(!result.success);
+    expect(result.error.message).toContain('No agentcore project found');
   });
 
   it('returns success when all configs are valid', async () => {
@@ -98,7 +100,8 @@ describe('handleValidate', () => {
     const result = await handleValidate({});
 
     expect(result.success).toBe(false);
-    expect(result.error).toContain('invalid project');
+    assert(!result.success);
+    expect(result.error.message).toContain('invalid project');
   });
 
   it('returns error when AWS targets fails', async () => {
@@ -109,7 +112,8 @@ describe('handleValidate', () => {
     const result = await handleValidate({});
 
     expect(result.success).toBe(false);
-    expect(result.error).toContain('bad targets');
+    assert(!result.success);
+    expect(result.error.message).toContain('bad targets');
   });
 
   it('validates state file when it exists', async () => {
@@ -135,7 +139,8 @@ describe('handleValidate', () => {
     const result = await handleValidate({});
 
     expect(result.success).toBe(false);
-    expect(result.error).toContain('bad state');
+    assert(!result.success);
+    expect(result.error.message).toContain('bad state');
   });
 
   it('uses custom directory when provided', async () => {
@@ -158,7 +163,8 @@ describe('handleValidate', () => {
     const result = await handleValidate({});
 
     expect(result.success).toBe(false);
-    expect(result.error).toBe('field "name" is required');
+    assert(!result.success);
+    expect(result.error.message).toBe('field "name" is required');
   });
 
   it('formats ConfigParseError with cause', async () => {
@@ -169,8 +175,9 @@ describe('handleValidate', () => {
     const result = await handleValidate({});
 
     expect(result.success).toBe(false);
-    expect(result.error).toContain('Invalid JSON in agentcore.json');
-    expect(result.error).toContain('Unexpected token');
+    assert(!result.success);
+    expect(result.error.message).toContain('Invalid JSON in agentcore.json');
+    expect(result.error.message).toContain('Unexpected token');
   });
 
   it('formats ConfigReadError with cause', async () => {
@@ -183,8 +190,9 @@ describe('handleValidate', () => {
     const result = await handleValidate({});
 
     expect(result.success).toBe(false);
-    expect(result.error).toContain('Failed to read agentcore.json');
-    expect(result.error).toContain('EACCES');
+    assert(!result.success);
+    expect(result.error.message).toContain('Failed to read agentcore.json');
+    expect(result.error.message).toContain('EACCES');
   });
 
   it('formats ConfigNotFoundError with file name', async () => {
@@ -195,7 +203,8 @@ describe('handleValidate', () => {
     const result = await handleValidate({});
 
     expect(result.success).toBe(false);
-    expect(result.error).toBe('Required file not found: agentcore.json');
+    assert(!result.success);
+    expect(result.error.message).toBe('Required file not found: agentcore.json');
   });
 
   it('formats non-Error values as strings', async () => {
@@ -205,7 +214,8 @@ describe('handleValidate', () => {
     const result = await handleValidate({});
 
     expect(result.success).toBe(false);
-    expect(result.error).toBe('string error');
+    assert(!result.success);
+    expect(result.error.message).toBe('string error');
   });
 
   describe('harness validation', () => {

@@ -1,4 +1,15 @@
-import { APP_DIR, ConfigIO, NoProjectError, findConfigRoot, setEnvVar } from '../../lib';
+import {
+  APP_DIR,
+  ConfigIO,
+  ConflictError,
+  NoProjectError,
+  ResourceNotFoundError,
+  findConfigRoot,
+  serializeResult,
+  setEnvVar,
+  toError,
+} from '../../lib';
+import type { Result } from '../../lib/result';
 import type {
   AgentEnvSpec,
   BuildType,
@@ -34,7 +45,7 @@ import {
 } from '../operations/agent/generate';
 import { executeImportAgent } from '../operations/agent/import';
 import { setupPythonProject } from '../operations/python';
-import type { RemovalPreview, RemovalResult, SchemaChange } from '../operations/remove/types';
+import type { RemovalPreview, SchemaChange } from '../operations/remove/types';
 import { runCliCommand } from '../telemetry/cli-command-run.js';
 import {
   AgentType,
@@ -119,13 +130,13 @@ export class AgentPrimitive extends BasePrimitive<AddAgentOptions, RemovableReso
     try {
       const configBaseDir = findConfigRoot();
       if (!configBaseDir) {
-        return { success: false, error: new NoProjectError().message };
+        return { success: false, error: new NoProjectError() };
       }
 
       const configIO = new ConfigIO({ baseDir: configBaseDir });
 
       if (!configIO.configExists('project')) {
-        return { success: false, error: new NoProjectError().message };
+        return { success: false, error: new NoProjectError() };
       }
 
       const project = await configIO.readProjectSpec();
@@ -133,7 +144,9 @@ export class AgentPrimitive extends BasePrimitive<AddAgentOptions, RemovableReso
       if (existingAgent) {
         return {
           success: false,
-          error: `Agent "${options.name}" already exists. To update its configuration, edit agentcore/agentcore.json directly.`,
+          error: new ConflictError(
+            `Agent "${options.name}" already exists. To update its configuration, edit agentcore/agentcore.json directly.`
+          ),
         };
       }
 
@@ -145,17 +158,17 @@ export class AgentPrimitive extends BasePrimitive<AddAgentOptions, RemovableReso
         return await this.handleCreatePath(options, configBaseDir);
       }
     } catch (err) {
-      return { success: false, error: getErrorMessage(err) };
+      return { success: false, error: toError(err) };
     }
   }
 
-  async remove(agentName: string): Promise<RemovalResult> {
+  async remove(agentName: string): Promise<Result> {
     try {
       const project = await this.readProjectSpec();
 
       const agentIndex = project.runtimes.findIndex(a => a.name === agentName);
       if (agentIndex === -1) {
-        return { success: false, error: `Agent "${agentName}" not found.` };
+        return { success: false, error: new ResourceNotFoundError(`Agent "${agentName}" not found.`) };
       }
 
       // Remove agent (credentials preserved for potential reuse)
@@ -164,8 +177,7 @@ export class AgentPrimitive extends BasePrimitive<AddAgentOptions, RemovableReso
 
       return { success: true };
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      return { success: false, error: message };
+      return { success: false, error: toError(err) };
     }
   }
 
@@ -254,7 +266,7 @@ export class AgentPrimitive extends BasePrimitive<AddAgentOptions, RemovableReso
       .option('--client-secret <secret>', 'OAuth client secret [non-interactive]')
       .option(
         '--request-header-allowlist <headers>',
-        'Comma-separated list of custom header names to allow (auto-prefixed with X-Amzn-Bedrock-AgentCore-Runtime-Custom-) [non-interactive]'
+        'Comma-separated list of header names to allow. X-prefixed names (e.g. Authorization, X-Api-Key, X-Custom-Signature) pass through unchanged; bare names without X- prefix are auto-prefixed with X-Amzn-Bedrock-AgentCore-Runtime-Custom- for backward compatibility. [non-interactive]'
       )
       .option(
         '--idle-timeout <seconds>',
@@ -333,11 +345,11 @@ export class AgentPrimitive extends BasePrimitive<AddAgentOptions, RemovableReso
             });
 
             if (!result.success) {
-              throw new Error(result.error);
+              throw result.error;
             }
 
             if (cliOptions.json) {
-              console.log(JSON.stringify(result));
+              console.log(JSON.stringify(serializeResult(result)));
             } else {
               console.log(`Added agent '${result.agentName}'`);
               if (result.agentPath) {

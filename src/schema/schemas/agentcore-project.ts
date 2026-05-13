@@ -17,7 +17,10 @@ import {
   EvaluatorNameSchema,
   KmsKeyArnSchema,
 } from './primitives/evaluator';
+<<<<<<< HEAD
 import { HarnessNameSchema } from './primitives/harness';
+=======
+>>>>>>> origin/main
 import { HttpGatewaySchema } from './primitives/http-gateway';
 import {
   DEFAULT_EPISODIC_REFLECTION_NAMESPACES,

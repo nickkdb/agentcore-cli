@@ -38,7 +38,7 @@ export const registerTraces = (program: Command) => {
         if (!result.success) {
           render(
             <Box flexDirection="column">
-              <Text color="red">Error: {result.error}</Text>
+              <Text color="red">Error: {result.error.message}</Text>
               {result.consoleUrl && <Text color="gray">Console: {result.consoleUrl}</Text>}
             </Box>
           );
@@ -111,7 +111,7 @@ export const registerTraces = (program: Command) => {
         if (!result.success) {
           render(
             <Box flexDirection="column">
-              <Text color="red">Error: {result.error}</Text>
+              <Text color="red">Error: {result.error.message}</Text>
               {result.consoleUrl && <Text color="gray">Console: {result.consoleUrl}</Text>}
             </Box>
           );

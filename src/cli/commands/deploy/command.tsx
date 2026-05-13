@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import { ConfigIO } from '../../../lib';
+=======
+import { ConfigIO, serializeResult } from '../../../lib';
+>>>>>>> origin/main
 import { getErrorMessage } from '../../errors';
 import { withCommandRunTelemetry } from '../../telemetry/cli-command-run.js';
 import { COMMAND_DESCRIPTIONS } from '../../tui/copy';
@@ -50,10 +54,17 @@ async function handleDeployCLI(options: DeployOptions): Promise<void> {
 
   const { deployResult } = await withCommandRunTelemetry('deploy', attrs, async () => {
     const result = await executeDeploy(options).catch(
+<<<<<<< HEAD
       (e): DeployResult => ({ success: false, error: getErrorMessage(e) })
     );
     if (!result.success) {
       return { success: false as const, error: result.error ?? 'Deploy failed', deployResult: result };
+=======
+      (e): DeployResult => ({ success: false, error: e instanceof Error ? e : new Error(getErrorMessage(e)) })
+    );
+    if (!result.success) {
+      return { success: false as const, error: result.error, deployResult: result };
+>>>>>>> origin/main
     }
     return { success: true as const, deployResult: result };
   });
@@ -61,9 +72,15 @@ async function handleDeployCLI(options: DeployOptions): Promise<void> {
   // ALL output happens here, after telemetry
   if (!deployResult.success) {
     if (options.json) {
+<<<<<<< HEAD
       console.log(JSON.stringify(deployResult));
     } else {
       console.error(deployResult.error);
+=======
+      console.log(JSON.stringify(serializeResult(deployResult)));
+    } else {
+      console.error(deployResult.error.message);
+>>>>>>> origin/main
       if (deployResult.logPath) {
         console.error(`Log: ${deployResult.logPath}`);
       }
@@ -71,7 +88,11 @@ async function handleDeployCLI(options: DeployOptions): Promise<void> {
     process.exit(1);
   }
 
+<<<<<<< HEAD
   printDeployResult(deployResult as DeployResult & { success: true }, options);
+=======
+  printDeployResult(deployResult, options);
+>>>>>>> origin/main
 
   if (deployResult.postDeployWarnings && deployResult.postDeployWarnings.length > 0) {
     process.exit(2);

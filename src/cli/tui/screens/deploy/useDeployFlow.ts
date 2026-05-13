@@ -25,7 +25,11 @@ import {
 } from '../../../operations/deploy/post-deploy-config-bundles';
 import { setupHttpGateways } from '../../../operations/deploy/post-deploy-http-gateways';
 import { enableOnlineEvalConfigs } from '../../../operations/deploy/post-deploy-online-evals';
+<<<<<<< HEAD
 import { type OperationResult, withCommandRunTelemetry } from '../../../telemetry/cli-command-run.js';
+=======
+import { withCommandRunTelemetry } from '../../../telemetry/cli-command-run.js';
+>>>>>>> origin/main
 import {
   type StackDiffSummary,
   type Step,
@@ -607,7 +611,11 @@ export function useDeployFlow(options: DeployFlowOptions = {}): DeployFlowState 
 
     const attrs = context ? computeDeployAttrs(context.projectSpec, 'deploy') : { ...DEFAULT_DEPLOY_ATTRS };
 
+<<<<<<< HEAD
     const run = async (): Promise<OperationResult> => {
+=======
+    const run = async (): Promise<{ success: true } | { success: false; error: Error }> => {
+>>>>>>> origin/main
       // Run diff before deploy to capture pre-deploy differences
       if (!isDiffRunningRef.current) {
         isDiffRunningRef.current = true;
@@ -709,7 +717,7 @@ export function useDeployFlow(options: DeployFlowOptions = {}): DeployFlowState 
           if (targetName) {
             const teardown = await performStackTeardown(targetName);
             if (!teardown.success) {
-              throw new Error(`Stack teardown failed: ${teardown.error}`);
+              throw new Error(`Stack teardown failed: ${teardown.error.message}`);
             }
           }
         } else {
@@ -734,8 +742,8 @@ export function useDeployFlow(options: DeployFlowOptions = {}): DeployFlowState 
                 agentNames,
                 hasGateways,
               });
-              if (tsResult.error) {
-                logger.log(`Transaction search setup warning: ${tsResult.error}`, 'warn');
+              if (!tsResult.success) {
+                logger.log(`Transaction search setup warning: ${tsResult.error.message}`, 'warn');
               } else {
                 setDeployNotes(prev => [
                   ...prev,
@@ -787,7 +795,11 @@ export function useDeployFlow(options: DeployFlowOptions = {}): DeployFlowState 
             error: logger.getFailureMessage('Publish assets'),
           }));
         }
+<<<<<<< HEAD
         return { success: false, error: errorMsg };
+=======
+        return { success: false, error: err instanceof Error ? err : new Error(errorMsg) } as const;
+>>>>>>> origin/main
       } finally {
         // Disable verbose output and clear callback after deploy
         switchableIoHost?.setVerbose(false);
@@ -826,7 +838,11 @@ export function useDeployFlow(options: DeployFlowOptions = {}): DeployFlowState 
       ? computeDeployAttrs(context.projectSpec, 'diff')
       : { ...DEFAULT_DEPLOY_ATTRS, mode: 'diff' as const };
 
+<<<<<<< HEAD
     const run = async (): Promise<OperationResult> => {
+=======
+    const run = async (): Promise<{ success: true } | { success: false; error: Error }> => {
+>>>>>>> origin/main
       setDiffStep(prev => ({ ...prev, status: 'running' }));
       setShouldStartDeploy(false);
       setDiffSummaries([]);
@@ -862,7 +878,11 @@ export function useDeployFlow(options: DeployFlowOptions = {}): DeployFlowState 
           status: 'error',
           error: logger.getFailureMessage('Run CDK diff'),
         }));
+<<<<<<< HEAD
         return { success: false, error: errorMsg };
+=======
+        return { success: false, error: err instanceof Error ? err : new Error(errorMsg) };
+>>>>>>> origin/main
       } finally {
         switchableIoHost?.setVerbose(false);
         switchableIoHost?.setOnRawMessage(null);

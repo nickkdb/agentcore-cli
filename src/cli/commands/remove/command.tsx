@@ -1,4 +1,4 @@
-import { ConfigIO } from '../../../lib';
+import { ConfigIO, serializeResult, toError } from '../../../lib';
 import { getErrorMessage } from '../../errors';
 import { COMMAND_DESCRIPTIONS } from '../../tui/copy';
 import { requireProject, requireTTY } from '../../tui/guards';
@@ -49,15 +49,24 @@ async function handleRemoveAll(_options: RemoveAllOptions): Promise<RemoveResult
       note: 'Your source code has not been modified. Run `agentcore deploy` to apply changes to AWS.',
     };
   } catch (err) {
-    return { success: false, error: getErrorMessage(err) };
+    return { success: false, error: toError(err) };
   }
 }
 
 async function handleRemoveAllCLI(options: RemoveAllOptions): Promise<void> {
   validateRemoveAllOptions(options);
+<<<<<<< HEAD
   const result = await handleRemoveAll(options);
   console.log(JSON.stringify(result));
   process.exit(result.success ? 0 : 1);
+=======
+  await runCliCommand('remove.all', !!options.json, async () => {
+    const result = await handleRemoveAll(options);
+    if (!result.success) throw result.error;
+    console.log(JSON.stringify(serializeResult(result)));
+    return {};
+  });
+>>>>>>> origin/main
 }
 
 export const registerRemove = (program: Command): Command => {

@@ -347,7 +347,7 @@ export function RemoveFlow({
           if (removeResult.success) {
             setFlow({ name: 'agent-success', agentName });
           } else {
-            setFlow({ name: 'error', message: removeResult.error });
+            setFlow({ name: 'error', message: removeResult.error.message });
           }
         } else {
           setFlow({ name: 'confirm-agent', agentName, preview: result.preview });
@@ -391,7 +391,7 @@ export function RemoveFlow({
           if (removeResult.success) {
             setFlow({ name: 'gateway-success', gatewayName });
           } else {
-            setFlow({ name: 'error', message: removeResult.error });
+            setFlow({ name: 'error', message: removeResult.error.message });
           }
         } else {
           setFlow({ name: 'confirm-gateway', gatewayName, preview: result.preview });
@@ -413,7 +413,7 @@ export function RemoveFlow({
           if (removeResult.success) {
             setFlow({ name: 'tool-success', toolName: tool.name });
           } else {
-            setFlow({ name: 'error', message: removeResult.error });
+            setFlow({ name: 'error', message: removeResult.error.message });
           }
         } else {
           setFlow({ name: 'confirm-gateway-target', tool, preview: result.preview });
@@ -435,7 +435,7 @@ export function RemoveFlow({
           if (removeResult.success) {
             setFlow({ name: 'memory-success', memoryName });
           } else {
-            setFlow({ name: 'error', message: removeResult.error });
+            setFlow({ name: 'error', message: removeResult.error.message });
           }
         } else {
           setFlow({ name: 'confirm-memory', memoryName, preview: result.preview });
@@ -457,7 +457,7 @@ export function RemoveFlow({
           if (removeResult.success) {
             setFlow({ name: 'identity-success', identityName });
           } else {
-            setFlow({ name: 'error', message: removeResult.error });
+            setFlow({ name: 'error', message: removeResult.error.message });
           }
         } else {
           setFlow({ name: 'confirm-identity', identityName, preview: result.preview });
@@ -479,7 +479,7 @@ export function RemoveFlow({
           if (removeResult.success) {
             setFlow({ name: 'evaluator-success', evaluatorName });
           } else {
-            setFlow({ name: 'error', message: removeResult.error });
+            setFlow({ name: 'error', message: removeResult.error.message });
           }
         } else {
           setFlow({ name: 'confirm-evaluator', evaluatorName, preview: result.preview });
@@ -501,7 +501,7 @@ export function RemoveFlow({
           if (removeResult.success) {
             setFlow({ name: 'online-eval-success', configName });
           } else {
-            setFlow({ name: 'error', message: removeResult.error });
+            setFlow({ name: 'error', message: removeResult.error.message });
           }
         } else {
           setFlow({ name: 'confirm-online-eval', configName, preview: result.preview });
@@ -523,7 +523,7 @@ export function RemoveFlow({
           if (removeResult.success) {
             setFlow({ name: 'policy-engine-success', engineName });
           } else {
-            setFlow({ name: 'error', message: removeResult.error });
+            setFlow({ name: 'error', message: removeResult.error.message });
           }
         } else {
           setFlow({ name: 'confirm-policy-engine', engineName, preview: result.preview });
@@ -548,7 +548,7 @@ export function RemoveFlow({
           if (removeResult.success) {
             setFlow({ name: 'policy-success', policyName });
           } else {
-            setFlow({ name: 'error', message: removeResult.error });
+            setFlow({ name: 'error', message: removeResult.error.message });
           }
         } else {
           setFlow({ name: 'confirm-policy', compositeKey, policyName, preview: result.preview });
@@ -570,7 +570,7 @@ export function RemoveFlow({
           if (removeResult.success) {
             setFlow({ name: 'config-bundle-success', bundleName });
           } else {
-            setFlow({ name: 'error', message: removeResult.error });
+            setFlow({ name: 'error', message: removeResult.error.message });
           }
         } else {
           setFlow({ name: 'confirm-config-bundle', bundleName, preview: result.preview });
@@ -592,7 +592,7 @@ export function RemoveFlow({
           if (removeResult.success) {
             setFlow({ name: 'ab-test-success', testName });
           } else {
-            setFlow({ name: 'error', message: removeResult.error });
+            setFlow({ name: 'error', message: removeResult.error.message });
           }
         } else {
           setFlow({ name: 'confirm-ab-test', testName, preview: result.preview });
@@ -614,7 +614,7 @@ export function RemoveFlow({
           if (removeResult.success) {
             setFlow({ name: 'runtime-endpoint-success', endpointName });
           } else {
-            setFlow({ name: 'error', message: removeResult.error });
+            setFlow({ name: 'error', message: removeResult.error.message });
           }
         } else {
           setFlow({ name: 'confirm-runtime-endpoint', endpointName, preview: result.preview });
@@ -700,7 +700,7 @@ export function RemoveFlow({
       if (result.success) {
         pendingResultRef.current = { name: 'agent-success', agentName, logFilePath: result.logFilePath };
       } else {
-        pendingResultRef.current = { name: 'error', message: result.error };
+        pendingResultRef.current = { name: 'error', message: result.error.message };
       }
       setResultReady(true);
     },
@@ -732,7 +732,7 @@ export function RemoveFlow({
       if (result.success) {
         pendingResultRef.current = { name: 'gateway-success', gatewayName, logFilePath: result.logFilePath };
       } else {
-        pendingResultRef.current = { name: 'error', message: result.error };
+        pendingResultRef.current = { name: 'error', message: result.error.message };
       }
       setResultReady(true);
     },
@@ -748,7 +748,7 @@ export function RemoveFlow({
       if (result.success) {
         pendingResultRef.current = { name: 'tool-success', toolName: tool.name, logFilePath: result.logFilePath };
       } else {
-        pendingResultRef.current = { name: 'error', message: result.error };
+        pendingResultRef.current = { name: 'error', message: result.error.message };
       }
       setResultReady(true);
     },
@@ -764,7 +764,7 @@ export function RemoveFlow({
       if (result.success) {
         pendingResultRef.current = { name: 'memory-success', memoryName, logFilePath: result.logFilePath };
       } else {
-        pendingResultRef.current = { name: 'error', message: result.error };
+        pendingResultRef.current = { name: 'error', message: result.error.message };
       }
       setResultReady(true);
     },
@@ -780,7 +780,7 @@ export function RemoveFlow({
       if (result.success) {
         pendingResultRef.current = { name: 'identity-success', identityName, logFilePath: result.logFilePath };
       } else {
-        pendingResultRef.current = { name: 'error', message: result.error };
+        pendingResultRef.current = { name: 'error', message: result.error.message };
       }
       setResultReady(true);
     },
@@ -796,7 +796,7 @@ export function RemoveFlow({
       if (result.success) {
         pendingResultRef.current = { name: 'evaluator-success', evaluatorName, logFilePath: result.logFilePath };
       } else {
-        pendingResultRef.current = { name: 'error', message: result.error };
+        pendingResultRef.current = { name: 'error', message: result.error.message };
       }
       setResultReady(true);
     },
@@ -812,7 +812,7 @@ export function RemoveFlow({
       if (result.success) {
         pendingResultRef.current = { name: 'online-eval-success', configName, logFilePath: result.logFilePath };
       } else {
-        pendingResultRef.current = { name: 'error', message: result.error };
+        pendingResultRef.current = { name: 'error', message: result.error.message };
       }
       setResultReady(true);
     },
@@ -828,7 +828,7 @@ export function RemoveFlow({
       if (result.success) {
         pendingResultRef.current = { name: 'policy-engine-success', engineName, logFilePath: result.logFilePath };
       } else {
-        pendingResultRef.current = { name: 'error', message: result.error };
+        pendingResultRef.current = { name: 'error', message: result.error.message };
       }
       setResultReady(true);
     },
@@ -844,7 +844,7 @@ export function RemoveFlow({
       if (result.success) {
         pendingResultRef.current = { name: 'policy-success', policyName, logFilePath: result.logFilePath };
       } else {
-        pendingResultRef.current = { name: 'error', message: result.error };
+        pendingResultRef.current = { name: 'error', message: result.error.message };
       }
       setResultReady(true);
     },
@@ -860,7 +860,7 @@ export function RemoveFlow({
       if (result.success) {
         pendingResultRef.current = { name: 'config-bundle-success', bundleName, logFilePath: result.logFilePath };
       } else {
-        pendingResultRef.current = { name: 'error', message: result.error };
+        pendingResultRef.current = { name: 'error', message: result.error.message };
       }
       setResultReady(true);
     },
@@ -876,7 +876,7 @@ export function RemoveFlow({
       if (result.success) {
         pendingResultRef.current = { name: 'ab-test-success', testName, logFilePath: result.logFilePath };
       } else {
-        pendingResultRef.current = { name: 'error', message: result.error };
+        pendingResultRef.current = { name: 'error', message: result.error.message };
       }
       setResultReady(true);
     },
@@ -892,7 +892,7 @@ export function RemoveFlow({
       if (result.success) {
         pendingResultRef.current = { name: 'runtime-endpoint-success', endpointName, logFilePath: result.logFilePath };
       } else {
-        pendingResultRef.current = { name: 'error', message: result.error };
+        pendingResultRef.current = { name: 'error', message: result.error.message };
       }
       setResultReady(true);
     },

@@ -37,8 +37,7 @@ jobs:
 
       - name: Sync main with public/main
         run: |
-          git checkout main
-          git reset --hard origin/main
+          git checkout -B main origin/main
 
           # Check if public/main is already merged
           if git merge-base --is-ancestor public/main HEAD; then
@@ -137,8 +136,7 @@ jobs:
 
       - name: Sync preview with public/preview
         run: |
-          git checkout preview
-          git reset --hard origin/preview
+          git checkout -B preview origin/preview
 
           # Check if public/preview is already merged
           if git merge-base --is-ancestor public/preview HEAD; then

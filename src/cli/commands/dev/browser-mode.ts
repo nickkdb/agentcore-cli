@@ -68,24 +68,26 @@ async function resolveDeployedHandlers(
       result.onListMemoryRecords = async (memoryName, namespace, strategyId) => {
         const memory = memories.find(m => m.name === memoryName);
         if (!memory) return { success: false, error: `Memory "${memoryName}" not found in deployed state` };
-        return listMemoryRecords({
+        const res = await listMemoryRecords({
           region: memory.region,
           memoryId: memory.memoryId,
           namespace,
           memoryStrategyId: strategyId,
         });
+        return res.success ? res : { success: false as const, error: res.error.message };
       };
 
       result.onRetrieveMemoryRecords = async (memoryName, namespace, searchQuery, strategyId) => {
         const memory = memories.find(m => m.name === memoryName);
         if (!memory) return { success: false, error: `Memory "${memoryName}" not found in deployed state` };
-        return retrieveMemoryRecords({
+        const res = await retrieveMemoryRecords({
           region: memory.region,
           memoryId: memory.memoryId,
           namespace,
           searchQuery,
           memoryStrategyId: strategyId,
         });
+        return res.success ? res : { success: false as const, error: res.error.message };
       };
     }
 
@@ -254,13 +256,14 @@ export async function runBrowserMode(opts: BrowserModeOptions): Promise<void> {
           const context = await loadDeployedProjectConfig(configIO);
           const resolved = await resolveAgentOrHarness(context, { runtime: agentName, harness: harnessName });
           if (!resolved.success) return { success: false, error: resolved.error };
-          return listTraces({
+          const res = await listTraces({
             region: resolved.agent.region,
             runtimeId: resolved.agent.runtimeId,
             agentName: resolved.agent.agentName,
             startTime,
             endTime,
           });
+          return res.success ? res : { success: false as const, error: res.error.message };
         } catch (err) {
           return {
             success: false,
@@ -274,7 +277,7 @@ export async function runBrowserMode(opts: BrowserModeOptions): Promise<void> {
           const context = await loadDeployedProjectConfig(configIO);
           const resolved = await resolveAgentOrHarness(context, { runtime: agentName, harness: harnessName });
           if (!resolved.success) return { success: false, error: resolved.error };
-          return fetchTraceRecords({
+          const res = await fetchTraceRecords({
             region: resolved.agent.region,
             runtimeId: resolved.agent.runtimeId,
             traceId,
@@ -282,6 +285,7 @@ export async function runBrowserMode(opts: BrowserModeOptions): Promise<void> {
             endTime,
             includeSpans: true,
           });
+          return res.success ? res : { success: false as const, error: res.error.message };
         } catch (err) {
           return {
             success: false,
