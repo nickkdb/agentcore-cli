@@ -43,7 +43,9 @@ import {
 } from '../../operations/deploy/post-deploy-config-bundles';
 import { setupHttpGateways } from '../../operations/deploy/post-deploy-http-gateways';
 import { enableOnlineEvalConfigs } from '../../operations/deploy/post-deploy-online-evals';
+import { toStackName } from '../import/import-utils';
 import type { DeployResult } from './types';
+import { StackSelectionStrategy } from '@aws-cdk/toolkit-lib';
 
 export interface ValidatedDeployOptions {
   target: string;
@@ -251,6 +253,8 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
     const stackName = stackNames[0]!;
     endStep('success');
 
+    const targetStackName = toStackName(context.projectSpec.name, target.name);
+
     // Check if bootstrap needed
     startStep('Check bootstrap status');
     const bootstrapCheck = await checkBootstrapNeeded(context.awsTargets);
@@ -311,7 +315,9 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
         }
       });
       diffIoHost.setVerbose(true);
-      await toolkitWrapper.diff();
+      await toolkitWrapper.diff({
+        stacks: { strategy: StackSelectionStrategy.PATTERN_MUST_MATCH, patterns: [targetStackName] },
+      });
       if (!hasDiffContent) {
         console.log('No stack differences detected.');
       }
@@ -349,7 +355,9 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
       switchableIoHost.setVerbose(true);
     }
 
-    await toolkitWrapper.deploy();
+    await toolkitWrapper.deploy({
+      stacks: { strategy: StackSelectionStrategy.PATTERN_MUST_MATCH, patterns: [targetStackName] },
+    });
 
     // Disable verbose output
     if (switchableIoHost) {
