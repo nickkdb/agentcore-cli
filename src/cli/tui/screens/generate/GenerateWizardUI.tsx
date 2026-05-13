@@ -307,8 +307,8 @@ export function GenerateWizardUI({
           />
           <Box marginTop={1}>
             <Text dimColor>
-              Enter header suffixes or full names. We auto-prefix with X-Amzn-Bedrock-AgentCore-Runtime-Custom- if
-              needed. &apos;Authorization&apos; is also accepted.
+              Enter header names (e.g. Authorization, X-Api-Key, X-Custom-Signature). Bare names without X- prefix are
+              auto-prefixed with X-Amzn-Bedrock-AgentCore-Runtime-Custom- for backward compatibility.
             </Text>
           </Box>
         </Box>
