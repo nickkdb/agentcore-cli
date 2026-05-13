@@ -38,6 +38,15 @@ describe('normalizeHeaderName', () => {
     expect(normalizeHeaderName('X-Request-Id')).toBe('X-Request-Id');
   });
 
+  it('canonicalizes Runtime-Custom- prefix casing but preserves suffix as-typed', () => {
+    expect(normalizeHeaderName('x-amzn-bedrock-agentcore-runtime-custom-myheader')).toBe(
+      'X-Amzn-Bedrock-AgentCore-Runtime-Custom-myheader'
+    );
+    expect(normalizeHeaderName('X-AMZN-BEDROCK-AGENTCORE-RUNTIME-CUSTOM-MyHeader')).toBe(
+      'X-Amzn-Bedrock-AgentCore-Runtime-Custom-MyHeader'
+    );
+  });
+
   it('auto-prefixes a bare suffix like "MyHeader" (no X- prefix, backward compat)', () => {
     expect(normalizeHeaderName('MyHeader')).toBe('X-Amzn-Bedrock-AgentCore-Runtime-Custom-MyHeader');
   });
@@ -156,19 +165,19 @@ describe('validateHeaderAllowlist', () => {
   it('returns error for header names containing whitespace', () => {
     const result = validateHeaderAllowlist('My Header');
     expect(result.success).toBe(false);
-    expect(result.error).toContain('Invalid header name');
+    expect(result.error).toContain('must contain only');
   });
 
   it('returns error for header names with special characters', () => {
     const result = validateHeaderAllowlist('My@Header');
     expect(result.success).toBe(false);
-    expect(result.error).toContain('Invalid header name');
+    expect(result.error).toContain('must contain only');
   });
 
   it('returns error for header with dots', () => {
     const result = validateHeaderAllowlist('My.Header');
     expect(result.success).toBe(false);
-    expect(result.error).toContain('Invalid header name');
+    expect(result.error).toContain('must contain only');
   });
 });
 

@@ -134,24 +134,35 @@ export const HEADER_ALLOWLIST_PREFIX = 'X-Amzn-Bedrock-AgentCore-Runtime-Custom-
 export const HEADER_NAME_PATTERN = /^[A-Za-z0-9\-_]+$/;
 export const MAX_HEADER_ALLOWLIST_SIZE = 20;
 
-function isValidAllowlistHeader(val: string): boolean {
-  if (!HEADER_NAME_PATTERN.test(val)) return false;
+/**
+ * Validate a single allowlist header name. Returns null if valid, or a specific
+ * error message describing which rule the input violated.
+ *
+ * Note: 'x-amz-' and 'x-amzn-' are disjoint prefixes (position 5 differs: '-' vs 'n'),
+ * so the two checks below are independent.
+ */
+export function checkAllowlistHeader(val: string): string | null {
+  if (!HEADER_NAME_PATTERN.test(val)) {
+    return `Header name "${val}" must contain only alphanumeric characters, hyphens, and underscores.`;
+  }
   const lower = val.toLowerCase();
-  if (lower.startsWith('x-amz-') && !lower.startsWith('x-amzn-')) return false;
-  if (lower.startsWith('x-amzn-') && !lower.startsWith('x-amzn-bedrock-agentcore-runtime-custom-')) return false;
-  return true;
+  if (lower.startsWith('x-amz-')) {
+    return `Header "${val}" is not allowed. Headers starting with "x-amz-" are reserved for AWS request signing.`;
+  }
+  if (lower.startsWith('x-amzn-') && !lower.startsWith('x-amzn-bedrock-agentcore-runtime-custom-')) {
+    return `Header "${val}" is not allowed. Headers starting with "x-amzn-" are reserved, except for "X-Amzn-Bedrock-AgentCore-Runtime-Custom-*".`;
+  }
+  return null;
 }
 
 export const RequestHeaderAllowlistSchema = z
   .array(
-    z
-      .string()
-      .refine(
-        isValidAllowlistHeader,
-        'Header names must contain only alphanumeric characters, hyphens, and underscores. ' +
-          'Headers starting with x-amz- are reserved. ' +
-          'Headers starting with x-amzn- are reserved except for X-Amzn-Bedrock-AgentCore-Runtime-Custom-*.'
-      )
+    z.string().superRefine((val, ctx) => {
+      const error = checkAllowlistHeader(val);
+      if (error) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: error });
+      }
+    })
   )
   .max(MAX_HEADER_ALLOWLIST_SIZE, `Maximum ${MAX_HEADER_ALLOWLIST_SIZE} headers allowed`);
 

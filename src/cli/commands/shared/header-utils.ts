@@ -2,6 +2,7 @@ import {
   HEADER_ALLOWLIST_PREFIX as HEADER_ALLOWLIST_PREFIX_FROM_SCHEMA,
   HEADER_NAME_PATTERN as HEADER_NAME_PATTERN_FROM_SCHEMA,
   MAX_HEADER_ALLOWLIST_SIZE as MAX_HEADER_ALLOWLIST_SIZE_FROM_SCHEMA,
+  checkAllowlistHeader,
 } from '../../../schema/schemas/agent-env';
 
 export const HEADER_ALLOWLIST_PREFIX = HEADER_ALLOWLIST_PREFIX_FROM_SCHEMA;
@@ -70,25 +71,9 @@ export function validateHeaderAllowlist(value: string): { success: boolean; erro
     .filter(Boolean);
 
   for (const name of rawNames) {
-    if (!HEADER_NAME_PATTERN.test(name)) {
-      return {
-        success: false,
-        error: `Invalid header name "${name}". Header names may only contain letters, numbers, hyphens, and underscores.`,
-      };
-    }
-
-    const lower = name.toLowerCase();
-    if (lower.startsWith('x-amz-') && !lower.startsWith('x-amzn-')) {
-      return {
-        success: false,
-        error: `Header "${name}" is not allowed. Headers starting with "x-amz-" are reserved for AWS request signing.`,
-      };
-    }
-    if (lower.startsWith('x-amzn-') && !lower.startsWith('x-amzn-bedrock-agentcore-runtime-custom-')) {
-      return {
-        success: false,
-        error: `Header "${name}" is not allowed. Headers starting with "x-amzn-" are reserved, except for "X-Amzn-Bedrock-AgentCore-Runtime-Custom-*".`,
-      };
+    const error = checkAllowlistHeader(name);
+    if (error) {
+      return { success: false, error };
     }
   }
 
