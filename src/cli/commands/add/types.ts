@@ -41,13 +41,6 @@ export interface AddAgentOptions extends VpcOptions {
   json?: boolean;
 }
 
-export interface AddAgentResult {
-  success: boolean;
-  agentName?: string;
-  agentPath?: string;
-  error?: string;
-}
-
 // Gateway types
 export interface AddGatewayOptions {
   name?: string;
@@ -66,12 +59,6 @@ export interface AddGatewayOptions {
   policyEngine?: string;
   policyEngineMode?: string;
   json?: boolean;
-}
-
-export interface AddGatewayResult {
-  success: boolean;
-  gatewayName?: string;
-  error?: string;
 }
 
 // Gateway Target types
@@ -100,6 +87,7 @@ export interface AddGatewayTargetOptions {
   json?: boolean;
 }
 
+<<<<<<< HEAD
 export interface AddGatewayTargetResult {
   success: boolean;
   toolName?: string;
@@ -145,6 +133,8 @@ export interface AddHarnessCliOptions {
   json?: boolean;
 }
 
+=======
+>>>>>>> origin/main
 // Memory types (v2: no owner/user concept)
 export interface AddMemoryOptions {
   name?: string;
@@ -155,12 +145,6 @@ export interface AddMemoryOptions {
   contentLevel?: string;
   streamDeliveryResources?: string;
   json?: boolean;
-}
-
-export interface AddMemoryResult {
-  success: boolean;
-  memoryName?: string;
-  error?: string;
 }
 
 // Credential types (v2: credential, no owner/user concept)
@@ -177,9 +161,3 @@ export interface AddCredentialOptions {
 
 /** @deprecated Use AddCredentialOptions */
 export type AddIdentityOptions = AddCredentialOptions;
-
-export interface AddCredentialResult {
-  success: boolean;
-  credentialName?: string;
-  error?: string;
-}

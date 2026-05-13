@@ -1,6 +1,10 @@
 /**
  * Shared types for the recommendation feature.
  */
+<<<<<<< HEAD
+=======
+import type { Result } from '../../../lib/result';
+>>>>>>> origin/main
 import type { RecommendationResult, RecommendationType } from '../../aws/agentcore-recommendation';
 
 export type { RecommendationType } from '../../aws/agentcore-recommendation';
@@ -56,6 +60,7 @@ export interface RunRecommendationCommandOptions {
   onStarted?: (info: { recommendationId: string; region: string }) => void;
 }
 
+<<<<<<< HEAD
 export interface RunRecommendationCommandResult {
   success: boolean;
   error?: string;
@@ -70,3 +75,11 @@ export interface RunRecommendationCommandResult {
   /** Path to the execution log file */
   logFilePath?: string;
 }
+=======
+export type RunRecommendationCommandResult = Result<{
+  result?: RecommendationResult;
+  region?: string;
+  startedAt?: string;
+  completedAt?: string;
+}> & { recommendationId?: string; status?: string; logFilePath?: string };
+>>>>>>> origin/main

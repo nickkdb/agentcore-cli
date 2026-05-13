@@ -1,3 +1,7 @@
+<<<<<<< HEAD
+=======
+import { serializeResult } from '../../../lib';
+>>>>>>> origin/main
 import type { RecommendationType } from '../../aws/agentcore-recommendation';
 import { getErrorMessage } from '../../errors';
 import { handleRunEval } from '../../operations/eval';
@@ -25,7 +29,7 @@ const RECOMMENDATION_TYPE_MAP: Record<string, RecommendationType> = {
 };
 
 function formatRunOutput(result: Awaited<ReturnType<typeof handleRunEval>>): void {
-  if (!result.run) return;
+  if (!result.success) return;
 
   const { run } = result;
   const date = new Date(run.timestamp).toLocaleString([], {
@@ -56,7 +60,7 @@ function formatRunOutput(result: Awaited<ReturnType<typeof handleRunEval>>): voi
 
   for (const r of run.results) {
     const score = r.aggregateScore.toFixed(2);
-    const errors = r.sessionScores.filter(s => s.errorMessage).length;
+    const errors = r.sessionScores.filter((s: { errorMessage?: string }) => s.errorMessage).length;
     const errorSuffix = errors > 0 ? ` (${errors} errors)` : '';
     console.log(`  ${r.evaluator}: ${score}${errorSuffix}`);
   }
@@ -146,12 +150,12 @@ export const registerRun = (program: Command) => {
           const result = await handleRunEval(options);
 
           if (cliOptions.json) {
-            console.log(JSON.stringify(result));
+            console.log(JSON.stringify(serializeResult(result)));
           } else if (result.success) {
             formatRunOutput(result);
           } else {
             formatRunOutput(result);
-            render(<Text color="red">{result.error}</Text>);
+            render(<Text color="red">{result.error.message}</Text>);
           }
 
           process.exit(result.success ? 0 : 1);
@@ -240,11 +244,19 @@ export const registerRun = (program: Command) => {
           }
 
           if (cliOptions.json) {
+<<<<<<< HEAD
             console.log(JSON.stringify(result));
           } else if (result.success) {
             formatBatchEvalOutput(result);
           } else {
             render(<Text color="red">{result.error}</Text>);
+=======
+            console.log(JSON.stringify(serializeResult(result)));
+          } else if (result.success) {
+            formatBatchEvalOutput(result);
+          } else {
+            render(<Text color="red">{result.error.message}</Text>);
+>>>>>>> origin/main
             if (result.logFilePath) {
               console.error(`\nLog: ${result.logFilePath}`);
             }
@@ -401,9 +413,15 @@ export const registerRun = (program: Command) => {
 
           if (!result.success) {
             if (cliOptions.json) {
+<<<<<<< HEAD
               console.log(JSON.stringify(result));
             } else {
               render(<Text color="red">{result.error}</Text>);
+=======
+              console.log(JSON.stringify(serializeResult(result)));
+            } else {
+              render(<Text color="red">{result.error.message}</Text>);
+>>>>>>> origin/main
               if (result.logFilePath) {
                 console.error(`\nLog: ${result.logFilePath}`);
               }
@@ -428,7 +446,11 @@ export const registerRun = (program: Command) => {
           }
 
           if (cliOptions.json) {
+<<<<<<< HEAD
             console.log(JSON.stringify(result));
+=======
+            console.log(JSON.stringify(serializeResult(result)));
+>>>>>>> origin/main
           } else {
             console.log(`\nRecommendation ID: ${result.recommendationId}`);
 
@@ -467,7 +489,11 @@ export const registerRun = (program: Command) => {
                   );
                   console.log(`Local config for "${cliOptions.bundleName}" has been updated to match.`);
                 } else {
+<<<<<<< HEAD
                   console.log(`\nCould not sync config bundle: ${applyResult.error}`);
+=======
+                  console.log(`\nCould not sync config bundle: ${applyResult.error.message}`);
+>>>>>>> origin/main
                 }
               } catch {
                 // Non-fatal — user can manually sync

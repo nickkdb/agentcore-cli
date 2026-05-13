@@ -6,7 +6,12 @@
  *   4. Poll GetBatchEvaluation until terminal status
  *   5. Return results
  */
+<<<<<<< HEAD
 import { ConfigIO } from '../../../lib';
+=======
+import { ConfigIO, ResourceNotFoundError, ValidationError, toError } from '../../../lib';
+import type { Result } from '../../../lib/result';
+>>>>>>> origin/main
 import type { DeployedState } from '../../../schema';
 import { generateClientToken, getBatchEvaluation, startBatchEvaluation } from '../../aws/agentcore-batch-evaluation';
 import type {
@@ -54,9 +59,13 @@ export interface BatchEvaluationResult {
   error?: string;
 }
 
+<<<<<<< HEAD
 export interface RunBatchEvaluationCommandResult {
   success: boolean;
   error?: string;
+=======
+export type RunBatchEvaluationCommandResult = Result & {
+>>>>>>> origin/main
   batchEvaluationId?: string;
   name?: string;
   status?: string;
@@ -65,7 +74,11 @@ export interface RunBatchEvaluationCommandResult {
   startedAt?: string;
   completedAt?: string;
   logFilePath?: string;
+<<<<<<< HEAD
 }
+=======
+};
+>>>>>>> origin/main
 
 // ============================================================================
 // Constants
@@ -116,7 +129,11 @@ export async function runBatchEvaluationCommand(
       logger?.log(error, 'error');
       logger?.endStep('error', error);
       logger?.finalize(false);
+<<<<<<< HEAD
       return { success: false, error, results: [], logFilePath: logger?.logFilePath };
+=======
+      return { success: false, error: new ResourceNotFoundError(error), results: [], logFilePath: logger?.logFilePath };
+>>>>>>> origin/main
     }
 
     const runtimeId = agentState.runtimeId;
@@ -152,7 +169,13 @@ export async function runBatchEvaluationCommand(
       if (!/^[a-zA-Z][a-zA-Z0-9_]{0,47}$/.test(options.name)) {
         return {
           success: false,
+<<<<<<< HEAD
           error: `Batch evaluation name must start with a letter and contain only letters, digits, and underscores (max 48 chars). Got: "${options.name}"`,
+=======
+          error: new ValidationError(
+            `Batch evaluation name must start with a letter and contain only letters, digits, and underscores (max 48 chars). Got: "${options.name}"`
+          ),
+>>>>>>> origin/main
           results: [],
           logFilePath: logger?.logFilePath,
         };
@@ -242,7 +265,11 @@ export async function runBatchEvaluationCommand(
       logger?.finalize(false);
       return {
         success: false,
+<<<<<<< HEAD
         error,
+=======
+        error: new Error(error),
+>>>>>>> origin/main
         batchEvaluationId: startResult.batchEvaluationId,
         name: evalName,
         status: current.status,
@@ -287,7 +314,11 @@ export async function runBatchEvaluationCommand(
     const error = err instanceof Error ? err.message : String(err);
     logger?.log(error, 'error');
     logger?.finalize(false);
+<<<<<<< HEAD
     return { success: false, error, results: [], logFilePath: logger?.logFilePath };
+=======
+    return { success: false, error: toError(err), results: [], logFilePath: logger?.logFilePath };
+>>>>>>> origin/main
   }
 }
 

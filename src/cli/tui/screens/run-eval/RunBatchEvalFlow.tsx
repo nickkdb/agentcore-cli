@@ -260,7 +260,11 @@ export function RunBatchEvalFlow({ onExit }: RunBatchEvalFlowProps) {
           setFlow(prev => {
             if (prev.name !== 'running') return prev;
             const steps = prev.steps.map(s =>
+<<<<<<< HEAD
               s.status === 'running' ? { ...s, status: 'error' as const, error: result.error } : s
+=======
+              s.status === 'running' ? { ...s, status: 'error' as const, error: result.error.message } : s
+>>>>>>> origin/main
             );
             return { ...prev, steps };
           });
@@ -268,7 +272,11 @@ export function RunBatchEvalFlow({ onExit }: RunBatchEvalFlowProps) {
           if (cancelled) return;
           setFlow({
             name: 'error',
+<<<<<<< HEAD
             message: result.error ?? 'Batch evaluation failed',
+=======
+            message: result.error?.message ?? 'Batch evaluation failed',
+>>>>>>> origin/main
             logFilePath: result.logFilePath,
           });
           return;

@@ -1,8 +1,17 @@
+<<<<<<< HEAD
 import { findConfigRoot } from '../../lib';
 import type { ABTest } from '../../schema/schemas/primitives/ab-test';
 import { ABTestSchema } from '../../schema/schemas/primitives/ab-test';
 import { getErrorMessage } from '../errors';
 import type { RemovalPreview, RemovalResult, SchemaChange } from '../operations/remove/types';
+=======
+import { ResourceNotFoundError, findConfigRoot, serializeResult, toError } from '../../lib';
+import type { Result } from '../../lib/result';
+import type { ABTest } from '../../schema/schemas/primitives/ab-test';
+import { ABTestSchema } from '../../schema/schemas/primitives/ab-test';
+import { getErrorMessage } from '../errors';
+import type { RemovalPreview, SchemaChange } from '../operations/remove/types';
+>>>>>>> origin/main
 import { withCommandRunTelemetry } from '../telemetry/cli-command-run.js';
 import { requireTTY } from '../tui/guards/tty';
 import { BasePrimitive } from './BasePrimitive';
@@ -66,17 +75,29 @@ export class ABTestPrimitive extends BasePrimitive<AddABTestOptions, RemovableAB
       const abTest = await this.createABTest(options);
       return { success: true, abTestName: abTest.name };
     } catch (err) {
+<<<<<<< HEAD
       return { success: false, error: getErrorMessage(err) };
     }
   }
 
   async remove(testName: string, options?: { deleteGateway?: boolean }): Promise<RemovalResult> {
+=======
+      return { success: false, error: toError(err) };
+    }
+  }
+
+  async remove(testName: string, options?: { deleteGateway?: boolean }): Promise<Result> {
+>>>>>>> origin/main
     try {
       const project = await this.readProjectSpec();
 
       const index = (project.abTests ?? []).findIndex(t => t.name === testName);
       if (index === -1) {
+<<<<<<< HEAD
         return { success: false, error: `AB test "${testName}" not found.` };
+=======
+        return { success: false, error: new ResourceNotFoundError(`AB test "${testName}" not found.`) };
+>>>>>>> origin/main
       }
 
       const removedTest = project.abTests[index]!;
@@ -124,7 +145,11 @@ export class ABTestPrimitive extends BasePrimitive<AddABTestOptions, RemovableAB
 
       return { success: true };
     } catch (err) {
+<<<<<<< HEAD
       return { success: false, error: getErrorMessage(err) };
+=======
+      return { success: false, error: toError(err) };
+>>>>>>> origin/main
     }
   }
 
@@ -365,11 +390,19 @@ Target-Based Mode (--mode target-based)
               });
 
               if (cliOptions.json) {
+<<<<<<< HEAD
                 console.log(JSON.stringify(result));
               } else if (result.success) {
                 console.log(`Added target-based AB test '${result.abTestName}'`);
               } else {
                 console.error(result.error);
+=======
+                console.log(JSON.stringify(serializeResult(result)));
+              } else if (result.success) {
+                console.log(`Added target-based AB test '${result.abTestName}'`);
+              } else {
+                console.error(result.error.message);
+>>>>>>> origin/main
               }
               process.exit(result.success ? 0 : 1);
               return;
@@ -412,11 +445,19 @@ Target-Based Mode (--mode target-based)
             });
 
             if (cliOptions.json) {
+<<<<<<< HEAD
               console.log(JSON.stringify(result));
             } else if (result.success) {
               console.log(`Added AB test '${result.abTestName}'`);
             } else {
               console.error(result.error);
+=======
+              console.log(JSON.stringify(serializeResult(result)));
+            } else if (result.success) {
+              console.log(`Added AB test '${result.abTestName}'`);
+            } else {
+              console.error(result.error.message);
+>>>>>>> origin/main
             }
             process.exit(result.success ? 0 : 1);
           } else {
@@ -478,7 +519,11 @@ Target-Based Mode (--mode target-based)
                 resourceType: this.kind,
                 resourceName: cliOptions.name,
                 message: result.success ? `Removed ${this.label.toLowerCase()} '${cliOptions.name}'` : undefined,
+<<<<<<< HEAD
                 error: !result.success ? result.error : undefined,
+=======
+                error: !result.success ? result.error.message : undefined,
+>>>>>>> origin/main
               })
             );
             process.exit(result.success ? 0 : 1);
@@ -606,7 +651,11 @@ Target-Based Mode (--mode target-based)
       const abTest = await this.createTargetBasedABTest(options);
       return { success: true, abTestName: abTest.name };
     } catch (err) {
+<<<<<<< HEAD
       return { success: false, error: getErrorMessage(err) };
+=======
+      return { success: false, error: toError(err) };
+>>>>>>> origin/main
     }
   }
 

@@ -18,7 +18,10 @@ export function createDefaultProjectSpec(projectName: string): AgentCoreProjectS
     onlineEvalConfigs: [],
     agentCoreGateways: [],
     policyEngines: [],
+<<<<<<< HEAD
     harnesses: [],
+=======
+>>>>>>> origin/main
     configBundles: [],
     abTests: [],
     httpGateways: [],

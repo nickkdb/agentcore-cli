@@ -1,3 +1,5 @@
+import type { Result } from '../../../lib/result';
+
 export interface InvokeOptions {
   agentName?: string;
   harnessName?: string;
@@ -51,12 +53,10 @@ export interface InvokeOptions {
   actorId?: string;
 }
 
-export interface InvokeResult {
-  success: boolean;
+export type InvokeResult = Result & {
+  logFilePath?: string;
   agentName?: string;
   targetName?: string;
   response?: string;
   sessionId?: string;
-  error?: string;
-  logFilePath?: string;
-}
+};

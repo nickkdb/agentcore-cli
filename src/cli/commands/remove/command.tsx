@@ -1,5 +1,6 @@
-import { ConfigIO } from '../../../lib';
+import { ConfigIO, serializeResult, toError } from '../../../lib';
 import { getErrorMessage } from '../../errors';
+import { runCliCommand } from '../../telemetry/cli-command-run.js';
 import { COMMAND_DESCRIPTIONS } from '../../tui/copy';
 import { requireProject, requireTTY } from '../../tui/guards';
 import { RemoveAllScreen, RemoveFlow } from '../../tui/screens/remove';
@@ -34,7 +35,10 @@ async function handleRemoveAll(_options: RemoveAllOptions): Promise<RemoveResult
       onlineEvalConfigs: [],
       agentCoreGateways: [],
       policyEngines: [],
+<<<<<<< HEAD
       harnesses: [],
+=======
+>>>>>>> origin/main
       configBundles: [],
       abTests: [],
       httpGateways: [],
@@ -49,15 +53,18 @@ async function handleRemoveAll(_options: RemoveAllOptions): Promise<RemoveResult
       note: 'Your source code has not been modified. Run `agentcore deploy` to apply changes to AWS.',
     };
   } catch (err) {
-    return { success: false, error: getErrorMessage(err) };
+    return { success: false, error: toError(err) };
   }
 }
 
 async function handleRemoveAllCLI(options: RemoveAllOptions): Promise<void> {
   validateRemoveAllOptions(options);
-  const result = await handleRemoveAll(options);
-  console.log(JSON.stringify(result));
-  process.exit(result.success ? 0 : 1);
+  await runCliCommand('remove.all', !!options.json, async () => {
+    const result = await handleRemoveAll(options);
+    if (!result.success) throw result.error;
+    console.log(JSON.stringify(serializeResult(result)));
+    return {};
+  });
 }
 
 export const registerRemove = (program: Command): Command => {

@@ -1,4 +1,5 @@
 import { ConfigIO, getWorkingDirectory } from '../../../../lib';
+import type { Result } from '../../../../lib/result';
 import { findStack } from '../../../cloudformation/stack-discovery';
 import { getErrorMessage } from '../../../errors';
 import type { RemovalResult } from '../../../operations/remove/types';
@@ -151,7 +152,11 @@ export function useRemoveFlow({ force, dryRun }: RemoveFlowOptions): RemoveFlowS
           const res = await withCommandRunTelemetry(
             'remove.all',
             {},
+<<<<<<< HEAD
             (): Promise<RemovalResult> =>
+=======
+            (): Promise<Result> =>
+>>>>>>> origin/main
               withMinDuration(async () => {
                 const configIO = new ConfigIO();
 
@@ -164,7 +169,11 @@ export function useRemoveFlow({ force, dryRun }: RemoveFlowOptions): RemoveFlowS
                 return { success: true };
               })
           );
+<<<<<<< HEAD
           if (!res.success) throw new Error(res.error);
+=======
+          if (!res.success) throw res.error;
+>>>>>>> origin/main
           updateStep(0, { status: 'success' });
         } catch (err) {
           updateStep(0, { status: 'error', error: getErrorMessage(err) });

@@ -1845,6 +1845,7 @@
         "additionalProperties": false
       }
     },
+<<<<<<< HEAD
     "harnesses": {
       "default": [],
       "type": "array",
@@ -1866,6 +1867,8 @@
         "additionalProperties": false
       }
     },
+=======
+>>>>>>> origin/main
     "configBundles": {
       "default": [],
       "type": "array",

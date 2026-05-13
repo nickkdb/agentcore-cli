@@ -1,3 +1,5 @@
+import { ResourceNotFoundError, ValidationError } from '../../../lib';
+import type { Result } from '../../../lib/result';
 import { parseTimeString } from '../../../lib/utils';
 import { searchLogs, streamLogs } from '../../aws/cloudwatch';
 import { DEFAULT_ENDPOINT_NAME } from '../../constants';
@@ -15,11 +17,6 @@ export interface AgentContext {
   region: string;
   endpointName: string;
   logGroupName: string;
-}
-
-export interface LogsResult {
-  success: boolean;
-  error?: string;
 }
 
 /**
@@ -50,10 +47,15 @@ export function formatLogLine(event: { timestamp: number; message: string }, jso
 export async function resolveAgentContext(
   context: DeployedProjectConfig,
   options: LogsOptions
+<<<<<<< HEAD
 ): Promise<{ success: true; agentContext: AgentContext } | { success: false; error: string }> {
   const result = await resolveAgentOrHarness(context, options);
+=======
+): Result<{ agentContext: AgentContext }> {
+  const result = resolveAgent(context, options);
+>>>>>>> origin/main
   if (!result.success) {
-    return { success: false, error: result.error };
+    return { success: false, error: new ResourceNotFoundError(result.error) };
   }
   const { agent } = result;
   const endpointName = DEFAULT_ENDPOINT_NAME;
@@ -74,12 +76,12 @@ export async function resolveAgentContext(
 /**
  * Main logs handler
  */
-export async function handleLogs(options: LogsOptions): Promise<LogsResult> {
+export async function handleLogs(options: LogsOptions): Promise<Result> {
   // Validate level early
   if (options.level && !VALID_LEVELS.includes(options.level.toLowerCase())) {
     return {
       success: false,
-      error: `Invalid log level: "${options.level}". Valid levels: ${VALID_LEVELS.join(', ')}`,
+      error: new ValidationError(`Invalid log level: "${options.level}". Valid levels: ${VALID_LEVELS.join(', ')}`),
     };
   }
 
@@ -97,7 +99,7 @@ export async function handleLogs(options: LogsOptions): Promise<LogsResult> {
   try {
     filterPattern = buildFilterPattern({ level: options.level, query: options.query });
   } catch (err) {
-    return { success: false, error: (err as Error).message };
+    return { success: false, error: err instanceof Error ? err : new Error(String(err)) };
   }
 
   const mode = detectMode(options);
@@ -144,7 +146,9 @@ export async function handleLogs(options: LogsOptions): Promise<LogsResult> {
     if (errorName === 'ResourceNotFoundException') {
       return {
         success: false,
-        error: `No logs found for agent '${agentContext.agentName}'. Has the agent been invoked?`,
+        error: new ResourceNotFoundError(
+          `No logs found for agent '${agentContext.agentName}'. Has the agent been invoked?`
+        ),
       };
     }
 

@@ -1,6 +1,10 @@
 import type { ConfigIO } from '../../../../lib';
 import type { RecommendationResult } from '../../../aws/agentcore-recommendation';
 import { applyRecommendationToBundle } from '../apply-to-bundle';
+<<<<<<< HEAD
+=======
+import assert from 'node:assert';
+>>>>>>> origin/main
 import { describe, expect, it, vi } from 'vitest';
 
 const { RUNTIME_ARN, BUNDLE_ARN, NEW_VERSION_ID } = vi.hoisted(() => ({
@@ -98,7 +102,11 @@ describe('applyRecommendationToBundle', () => {
       configIO
     );
 
+<<<<<<< HEAD
     expect(applyResult.success).toBe(true);
+=======
+    assert(applyResult.success);
+>>>>>>> origin/main
     expect(applyResult.newVersionId).toBe(NEW_VERSION_ID);
 
     // Verify spec was written with server components
@@ -132,7 +140,11 @@ describe('applyRecommendationToBundle', () => {
       configIO
     );
 
+<<<<<<< HEAD
     expect(applyResult.success).toBe(true);
+=======
+    assert(applyResult.success);
+>>>>>>> origin/main
     expect(applyResult.newVersionId).toBe(NEW_VERSION_ID);
   });
 
@@ -152,7 +164,11 @@ describe('applyRecommendationToBundle', () => {
       configIO
     );
 
+<<<<<<< HEAD
     expect(applyResult.success).toBe(true);
+=======
+    assert(applyResult.success);
+>>>>>>> origin/main
     expect(applyResult.newVersionId).toBe(NEW_VERSION_ID);
   });
 
@@ -171,8 +187,13 @@ describe('applyRecommendationToBundle', () => {
       configIO
     );
 
+<<<<<<< HEAD
     expect(applyResult.success).toBe(false);
     expect(applyResult.error).toContain('does not contain a new config bundle version');
+=======
+    assert(!applyResult.success);
+    expect(applyResult.error.message).toContain('does not contain a new config bundle version');
+>>>>>>> origin/main
     expect(writeSpecSpy).not.toHaveBeenCalled();
   });
 
@@ -192,8 +213,13 @@ describe('applyRecommendationToBundle', () => {
       configIO
     );
 
+<<<<<<< HEAD
     expect(applyResult.success).toBe(false);
     expect(applyResult.error).toContain('NonExistent');
+=======
+    assert(!applyResult.success);
+    expect(applyResult.error.message).toContain('NonExistent');
+>>>>>>> origin/main
     expect(writeSpecSpy).not.toHaveBeenCalled();
   });
 });

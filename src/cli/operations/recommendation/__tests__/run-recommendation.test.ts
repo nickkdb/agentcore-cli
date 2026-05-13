@@ -1,4 +1,8 @@
 import { runRecommendationCommand } from '../run-recommendation';
+<<<<<<< HEAD
+=======
+import assert from 'node:assert';
+>>>>>>> origin/main
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock dependencies — paths are relative to the file under test (run-recommendation.ts)
@@ -29,6 +33,28 @@ vi.mock('../../../../lib', () => ({
     readDeployedState = mockReadDeployedState;
     resolveAWSDeploymentTargets = vi.fn().mockResolvedValue([{ region: 'us-east-1' }]);
   },
+<<<<<<< HEAD
+=======
+  toError: (err: unknown) => (err instanceof Error ? err : new Error(String(err))),
+  ResourceNotFoundError: class extends Error {
+    constructor(m: string) {
+      super(m);
+      this.name = 'ResourceNotFoundError';
+    }
+  },
+  ValidationError: class extends Error {
+    constructor(m: string) {
+      super(m);
+      this.name = 'ValidationError';
+    }
+  },
+  TimeoutError: class extends Error {
+    constructor(m: string) {
+      super(m);
+      this.name = 'TimeoutError';
+    }
+  },
+>>>>>>> origin/main
 }));
 
 vi.mock('../../../aws/region', () => ({
@@ -71,9 +97,15 @@ describe('runRecommendationCommand', () => {
       traceSource: 'cloudwatch',
     });
 
+<<<<<<< HEAD
     expect(result.success).toBe(false);
     expect(result.error).toContain('NonExistentAgent');
     expect(result.error).toContain('not deployed');
+=======
+    assert(!result.success);
+    expect(result.error.message).toContain('NonExistentAgent');
+    expect(result.error.message).toContain('not deployed');
+>>>>>>> origin/main
   });
 
   it('returns error when evaluator cannot be resolved', async () => {
@@ -86,9 +118,15 @@ describe('runRecommendationCommand', () => {
       traceSource: 'cloudwatch',
     });
 
+<<<<<<< HEAD
     expect(result.success).toBe(false);
     expect(result.error).toContain('UnknownEvaluator');
     expect(result.error).toContain('not found');
+=======
+    assert(!result.success);
+    expect(result.error.message).toContain('UnknownEvaluator');
+    expect(result.error.message).toContain('not found');
+>>>>>>> origin/main
   });
 
   it('returns result on COMPLETED status', async () => {
@@ -123,7 +161,11 @@ describe('runRecommendationCommand', () => {
       pollIntervalMs: 0,
     });
 
+<<<<<<< HEAD
     expect(result.success).toBe(true);
+=======
+    assert(result.success);
+>>>>>>> origin/main
     expect(result.recommendationId).toBe('rec-001');
     expect(result.status).toBe('COMPLETED');
     expect(result.result?.systemPromptRecommendationResult?.recommendedSystemPrompt).toBe('Optimized prompt');
@@ -153,8 +195,13 @@ describe('runRecommendationCommand', () => {
       pollIntervalMs: 0,
     });
 
+<<<<<<< HEAD
     expect(result.success).toBe(false);
     expect(result.error).toContain('FAILED');
+=======
+    assert(!result.success);
+    expect(result.error.message).toContain('FAILED');
+>>>>>>> origin/main
     expect(result.recommendationId).toBe('rec-002');
   });
 
@@ -287,8 +334,13 @@ describe('runRecommendationCommand', () => {
       traceSource: 'cloudwatch',
     });
 
+<<<<<<< HEAD
     expect(result.success).toBe(false);
     expect(result.error).toContain('API timeout');
+=======
+    assert(!result.success);
+    expect(result.error.message).toContain('API timeout');
+>>>>>>> origin/main
   });
 
   it('retries transient poll failures and succeeds', async () => {
@@ -345,10 +397,17 @@ describe('runRecommendationCommand', () => {
       pollIntervalMs: 0,
     });
 
+<<<<<<< HEAD
     expect(result.success).toBe(false);
     expect(result.error).toContain('consecutive errors');
     expect(result.error).toContain('fetch failed');
     expect(result.error).toContain('rec-retry-fail');
+=======
+    assert(!result.success);
+    expect(result.error.message).toContain('consecutive errors');
+    expect(result.error.message).toContain('fetch failed');
+    expect(result.error.message).toContain('rec-retry-fail');
+>>>>>>> origin/main
     expect(mockGetRecommendation).toHaveBeenCalledTimes(3);
   });
 
@@ -377,9 +436,15 @@ describe('runRecommendationCommand', () => {
       maxPollDurationMs: 0, // Immediately timeout
     });
 
+<<<<<<< HEAD
     expect(result.success).toBe(false);
     expect(result.error).toContain('Polling timed out');
     expect(result.error).toContain('rec-timeout');
+=======
+    assert(!result.success);
+    expect(result.error.message).toContain('Polling timed out');
+    expect(result.error.message).toContain('rec-timeout');
+>>>>>>> origin/main
   });
 
   it('reads system prompt from file when inputSource is file', async () => {
@@ -538,8 +603,13 @@ describe('runRecommendationCommand', () => {
       pollIntervalMs: 0,
     });
 
+<<<<<<< HEAD
     expect(result.success).toBe(false);
     expect(result.error).toContain('No spans found');
+=======
+    assert(!result.success);
+    expect(result.error.message).toContain('No spans found');
+>>>>>>> origin/main
   });
 
   it('derives service name from runtimeId by stripping hash suffix', async () => {
@@ -664,10 +734,17 @@ describe('runRecommendationCommand', () => {
       pollIntervalMs: 0,
     });
 
+<<<<<<< HEAD
     expect(result.success).toBe(false);
     expect(result.error).toContain('Insufficient trace data');
     expect(result.error).toContain('INSUFFICIENT_DATA');
     expect(result.error).toContain('Not enough traces');
+=======
+    assert(!result.success);
+    expect(result.error.message).toContain('Insufficient trace data');
+    expect(result.error.message).toContain('INSUFFICIENT_DATA');
+    expect(result.error.message).toContain('Not enough traces');
+>>>>>>> origin/main
     // Request IDs are logged to file only, not included in the error message
   });
 

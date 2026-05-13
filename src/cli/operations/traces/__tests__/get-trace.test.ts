@@ -1,5 +1,9 @@
 import { fetchTraceRecords, getTrace } from '../get-trace';
 import type { FetchTraceRecordsOptions } from '../types';
+<<<<<<< HEAD
+=======
+import assert from 'node:assert';
+>>>>>>> origin/main
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -57,14 +61,14 @@ describe('fetchTraceRecords', () => {
 
     const result = await fetchTraceRecords(baseOptions);
 
-    expect(result.success).toBe(true);
+    assert(result.success);
     expect(result.records).toHaveLength(2);
-    expect(result.records![0]).toEqual({
+    expect(result.records[0]).toEqual({
       '@timestamp': '2024-01-01T00:00:00Z',
       '@message': { traceId: 'abc123', spanId: 'span1' },
       '@ptr': 'ptr-value-1',
     });
-    expect(result.records![1]).toEqual({
+    expect(result.records[1]).toEqual({
       '@timestamp': '2024-01-01T00:00:01Z',
       '@message': { traceId: 'abc123', spanId: 'span2' },
     });
@@ -76,8 +80,8 @@ describe('fetchTraceRecords', () => {
       traceId: 'invalid!@#$',
     });
 
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('Invalid trace ID format');
+    assert(!result.success);
+    expect(result.error.message).toContain('Invalid trace ID format');
     expect(mockSend).not.toHaveBeenCalled();
   });
 
@@ -89,8 +93,8 @@ describe('fetchTraceRecords', () => {
 
     const result = await fetchTraceRecords(baseOptions);
 
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('No trace data found');
+    assert(!result.success);
+    expect(result.error.message).toContain('No trace data found');
   });
 
   it('returns error when query fails to start', async () => {
@@ -98,8 +102,8 @@ describe('fetchTraceRecords', () => {
 
     const result = await fetchTraceRecords(baseOptions);
 
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('Failed to start CloudWatch Logs Insights query');
+    assert(!result.success);
+    expect(result.error.message).toContain('Failed to start CloudWatch Logs Insights query');
   });
 
   it('returns error when query status is Failed', async () => {
@@ -107,8 +111,8 @@ describe('fetchTraceRecords', () => {
 
     const result = await fetchTraceRecords(baseOptions);
 
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('failed');
+    assert(!result.success);
+    expect(result.error.message).toContain('failed');
   });
 
   it('preserves @ptr when present in CloudWatch response', async () => {
@@ -125,9 +129,9 @@ describe('fetchTraceRecords', () => {
 
     const result = await fetchTraceRecords(baseOptions);
 
-    expect(result.success).toBe(true);
+    assert(result.success);
     expect(result.records).toHaveLength(1);
-    expect(result.records![0]!['@ptr']).toBe('cw-ptr-123');
+    expect(result.records[0]!['@ptr']).toBe('cw-ptr-123');
   });
 
   it('omits @ptr when not present in CloudWatch response', async () => {
@@ -143,8 +147,8 @@ describe('fetchTraceRecords', () => {
 
     const result = await fetchTraceRecords(baseOptions);
 
-    expect(result.success).toBe(true);
-    expect(result.records![0]).not.toHaveProperty('@ptr');
+    assert(result.success);
+    expect(result.records[0]).not.toHaveProperty('@ptr');
   });
 
   it('handles non-JSON @message gracefully', async () => {
@@ -160,9 +164,9 @@ describe('fetchTraceRecords', () => {
 
     const result = await fetchTraceRecords(baseOptions);
 
-    expect(result.success).toBe(true);
+    assert(result.success);
     expect(result.records).toHaveLength(1);
-    expect(result.records![0]!['@message']).toBe('plain text message');
+    expect(result.records[0]!['@message']).toBe('plain text message');
   });
 
   it('handles ResourceNotFoundException', async () => {
@@ -172,9 +176,9 @@ describe('fetchTraceRecords', () => {
 
     const result = await fetchTraceRecords(baseOptions);
 
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('Log group');
-    expect(result.error).toContain('not found');
+    assert(!result.success);
+    expect(result.error.message).toContain('Log group');
+    expect(result.error.message).toContain('not found');
   });
 });
 
@@ -212,7 +216,7 @@ describe('getTrace', () => {
       endTime: 2000000,
     });
 
-    expect(result.success).toBe(true);
+    assert(result.success);
     expect(result.filePath).toContain('test-trace.json');
     const content = JSON.parse(readFileSync(outputPath, 'utf-8'));
     expect(content).toHaveLength(1);
@@ -231,8 +235,13 @@ describe('getTrace', () => {
       endTime: 2000000,
     });
 
+<<<<<<< HEAD
     expect(result.success).toBe(false);
     expect(result.error).toContain('Invalid trace ID format');
+=======
+    assert(!result.success);
+    expect(result.error.message).toContain('Invalid trace ID format');
+>>>>>>> origin/main
     expect(existsSync(outputPath)).toBe(false);
   });
 });

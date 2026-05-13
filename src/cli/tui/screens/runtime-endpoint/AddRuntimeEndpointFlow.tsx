@@ -95,7 +95,11 @@ export function AddRuntimeEndpointFlow({
         });
         return;
       }
+<<<<<<< HEAD
       setFlow({ name: 'error', message: result.error ?? 'Unknown error' });
+=======
+      setFlow({ name: 'error', message: result.error?.message ?? 'Unknown error' });
+>>>>>>> origin/main
     });
   }, []);
 

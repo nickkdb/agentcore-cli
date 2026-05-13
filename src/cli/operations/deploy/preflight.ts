@@ -116,6 +116,9 @@ export async function validateProject(): Promise<PreflightContext> {
   // Validate HTTP gateway names don't exceed AWS limits when combined with project name
   validateHttpGatewayNames(projectSpec);
 
+  // Validate HTTP gateway names don't exceed AWS limits when combined with project name
+  validateHttpGatewayNames(projectSpec);
+
   // Validate Container agents have Dockerfiles
   validateContainerAgents(projectSpec, configRoot);
 
@@ -152,6 +155,7 @@ function validateRuntimeNames(projectSpec: AgentCoreProjectSpec): void {
 }
 
 /**
+<<<<<<< HEAD
  * Validates that combined harness names (projectName_harnessName) don't exceed AWS limits.
  */
 function validateHarnessNames(projectSpec: AgentCoreProjectSpec): void {
@@ -172,6 +176,8 @@ function validateHarnessNames(projectSpec: AgentCoreProjectSpec): void {
 }
 
 /**
+=======
+>>>>>>> origin/main
  * Validates that combined HTTP gateway names (projectName-gatewayName) don't exceed AWS limits.
  */
 function validateHttpGatewayNames(projectSpec: AgentCoreProjectSpec): void {

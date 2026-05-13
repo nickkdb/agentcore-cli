@@ -43,7 +43,11 @@ export function useCreateABTest() {
         enableOnCreate: config.enableOnCreate,
       });
       if (!addResult.success) {
+<<<<<<< HEAD
         throw new Error(addResult.error ?? 'Failed to create AB test');
+=======
+        throw new Error(addResult.error?.message ?? 'Failed to create AB test');
+>>>>>>> origin/main
       }
       setStatus({ state: 'success' });
       return { ok: true as const, testName: config.name };
@@ -59,7 +63,11 @@ export function useCreateABTest() {
     try {
       const addResult = await abTestPrimitive.addTargetBased(config);
       if (!addResult.success) {
+<<<<<<< HEAD
         throw new Error(addResult.error ?? 'Failed to create target-based AB test');
+=======
+        throw new Error(addResult.error?.message ?? 'Failed to create target-based AB test');
+>>>>>>> origin/main
       }
       setStatus({ state: 'success' });
       return { ok: true as const, testName: config.name };

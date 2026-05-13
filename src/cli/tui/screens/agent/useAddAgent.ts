@@ -1,4 +1,12 @@
-import { APP_DIR, ConfigIO, NoProjectError, findConfigRoot, setEnvVar } from '../../../../lib';
+import {
+  APP_DIR,
+  AgentAlreadyExistsError,
+  ConfigIO,
+  NoProjectError,
+  type Result,
+  findConfigRoot,
+  setEnvVar,
+} from '../../../../lib';
 import type { AgentEnvSpec, DirectoryPath, FilePath } from '../../../../schema';
 import { type PythonSetupResult, setupPythonProject } from '../../../operations';
 import { createConfigBundleForAgent } from '../../../operations/agent/config-bundle-defaults';
@@ -165,7 +173,11 @@ export function useAddAgent() {
         () => addAgentInner(config)
       );
       if (!result.success) {
+<<<<<<< HEAD
         return { ok: false, error: result.error };
+=======
+        return { ok: false, error: result.error.message };
+>>>>>>> origin/main
       }
       return result.outcome;
     } finally {
@@ -180,26 +192,42 @@ export function useAddAgent() {
   return { addAgent, isLoading, reset };
 }
 
+<<<<<<< HEAD
 type AddAgentInnerResult =
   | { success: true; outcome: AddAgentCreateResult | AddAgentByoResult }
   | { success: false; error: string };
+=======
+type AddAgentInnerResult = Result<{ outcome: AddAgentCreateResult | AddAgentByoResult }>;
+>>>>>>> origin/main
 
 async function addAgentInner(config: AddAgentConfig): Promise<AddAgentInnerResult> {
   const configBaseDir = findConfigRoot();
   if (!configBaseDir) {
+<<<<<<< HEAD
     return { success: false, error: new NoProjectError().message };
+=======
+    return { success: false, error: new NoProjectError() };
+>>>>>>> origin/main
   }
 
   const configIO = new ConfigIO({ baseDir: configBaseDir });
 
   if (!configIO.configExists('project')) {
+<<<<<<< HEAD
     return { success: false, error: new NoProjectError().message };
+=======
+    return { success: false, error: new NoProjectError() };
+>>>>>>> origin/main
   }
 
   const project = await configIO.readProjectSpec();
   const existingAgent = project.runtimes.find(agent => agent.name === config.name);
   if (existingAgent) {
+<<<<<<< HEAD
     return { success: false, error: `Agent "${config.name}" already exists in this project.` };
+=======
+    return { success: false, error: new AgentAlreadyExistsError(config.name) };
+>>>>>>> origin/main
   }
 
   let outcome: AddAgentCreateResult | AddAgentByoResult | AddAgentError;
@@ -212,7 +240,11 @@ async function addAgentInner(config: AddAgentConfig): Promise<AddAgentInnerResul
   }
 
   if (!outcome.ok) {
+<<<<<<< HEAD
     return { success: false, error: outcome.error };
+=======
+    return { success: false, error: new Error(outcome.error) };
+>>>>>>> origin/main
   }
   return { success: true, outcome };
 }
@@ -344,7 +376,7 @@ async function handleImportPath(
   });
 
   if (!result.success) {
-    return { ok: false, error: result.error ?? 'Unknown error' };
+    return { ok: false, error: result.error?.message ?? 'Unknown error' };
   }
 
   return {

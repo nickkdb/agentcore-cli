@@ -1,7 +1,10 @@
 import { getOrCreateInstallationId } from '../lib/schemas/io/global-config';
 import { registerABTestCommand } from './commands/abtest';
 import { registerAdd } from './commands/add';
+<<<<<<< HEAD
 import { registerAddTool } from './commands/add/tool-command';
+=======
+>>>>>>> origin/main
 import { registerArchive } from './commands/archive';
 import { registerConfigBundle } from './commands/config-bundle';
 import { registerCreate } from './commands/create';
@@ -208,10 +211,13 @@ export function registerCommands(program: Command) {
     primitive.registerCommands(addCmd, removeCmd);
   }
 
+<<<<<<< HEAD
   // Register standalone add/remove subcommands
   registerAddTool(addCmd);
   registerRemoveTool(removeCmd);
 
+=======
+>>>>>>> origin/main
   // Register AB test detail command
   registerABTestCommand(program);
 }

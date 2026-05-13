@@ -53,7 +53,10 @@ describe('requiresUv', () => {
       onlineEvalConfigs: [],
       agentCoreGateways: [],
       policyEngines: [],
+<<<<<<< HEAD
       harnesses: [],
+=======
+>>>>>>> origin/main
       configBundles: [],
       abTests: [],
       httpGateways: [],
@@ -82,7 +85,10 @@ describe('requiresUv', () => {
       onlineEvalConfigs: [],
       agentCoreGateways: [],
       policyEngines: [],
+<<<<<<< HEAD
       harnesses: [],
+=======
+>>>>>>> origin/main
       configBundles: [],
       abTests: [],
       httpGateways: [],
@@ -102,7 +108,10 @@ describe('requiresUv', () => {
       onlineEvalConfigs: [],
       agentCoreGateways: [],
       policyEngines: [],
+<<<<<<< HEAD
       harnesses: [],
+=======
+>>>>>>> origin/main
       configBundles: [],
       abTests: [],
       httpGateways: [],
@@ -133,7 +142,10 @@ describe('requiresContainerRuntime', () => {
       onlineEvalConfigs: [],
       agentCoreGateways: [],
       policyEngines: [],
+<<<<<<< HEAD
       harnesses: [],
+=======
+>>>>>>> origin/main
       configBundles: [],
       abTests: [],
       httpGateways: [],
@@ -162,7 +174,10 @@ describe('requiresContainerRuntime', () => {
       onlineEvalConfigs: [],
       agentCoreGateways: [],
       policyEngines: [],
+<<<<<<< HEAD
       harnesses: [],
+=======
+>>>>>>> origin/main
       configBundles: [],
       abTests: [],
       httpGateways: [],
@@ -182,7 +197,10 @@ describe('requiresContainerRuntime', () => {
       onlineEvalConfigs: [],
       agentCoreGateways: [],
       policyEngines: [],
+<<<<<<< HEAD
       harnesses: [],
+=======
+>>>>>>> origin/main
       configBundles: [],
       abTests: [],
       httpGateways: [],
@@ -219,7 +237,10 @@ describe('requiresContainerRuntime', () => {
       onlineEvalConfigs: [],
       agentCoreGateways: [],
       policyEngines: [],
+<<<<<<< HEAD
       harnesses: [],
+=======
+>>>>>>> origin/main
       configBundles: [],
       abTests: [],
       httpGateways: [],
@@ -290,7 +311,10 @@ describe('checkDependencyVersions', () => {
       onlineEvalConfigs: [],
       agentCoreGateways: [],
       policyEngines: [],
+<<<<<<< HEAD
       harnesses: [],
+=======
+>>>>>>> origin/main
       configBundles: [],
       abTests: [],
       httpGateways: [],
@@ -314,7 +338,10 @@ describe('checkDependencyVersions', () => {
       onlineEvalConfigs: [],
       agentCoreGateways: [],
       policyEngines: [],
+<<<<<<< HEAD
       harnesses: [],
+=======
+>>>>>>> origin/main
       configBundles: [],
       abTests: [],
       httpGateways: [],
@@ -346,7 +373,10 @@ describe('checkDependencyVersions', () => {
       onlineEvalConfigs: [],
       agentCoreGateways: [],
       policyEngines: [],
+<<<<<<< HEAD
       harnesses: [],
+=======
+>>>>>>> origin/main
       configBundles: [],
       abTests: [],
       httpGateways: [],

@@ -88,7 +88,10 @@ describe('RemoveScreen', () => {
         configBundleCount={0}
         abTestCount={2}
         runtimeEndpointCount={0}
+<<<<<<< HEAD
         harnessCount={0}
+=======
+>>>>>>> origin/main
       />
     );
 
@@ -116,7 +119,10 @@ describe('RemoveScreen', () => {
         configBundleCount={0}
         abTestCount={0}
         runtimeEndpointCount={0}
+<<<<<<< HEAD
         harnessCount={0}
+=======
+>>>>>>> origin/main
       />
     );
 

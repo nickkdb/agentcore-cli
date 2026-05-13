@@ -2,6 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
+<<<<<<< HEAD
 ## [1.0.0-preview.8] - 2026-05-06
 
 ### Added
@@ -80,14 +81,50 @@ All notable changes to this project will be documented in this file.
 - chore: merge main into preview (9f2702a)
 
 ## [1.0.0-preview.4] - 2026-04-29
+=======
+## [0.13.1] - 2026-05-06
 
 ### Added
-- feat: add CloudWatch traces API for web UI (#997) (76b07aa)
+- feat: add archive command for batch evaluations and recommendations (#1112) (7586092e)
 
 ### Fixed
-- fix: remove CONFIG_DIR exclusion from zip stage to preserve dependency agentcore/ packages (#1015) (d1e5241)
+- fix: correct AB test execution role IAM policy and promote stability (#1120) (9f231d00)
+- fix: set iamRoleFallback to true for lambda gateway targets (#1086) (639adf1b)
+- fix: prefix HTTP gateway names with project name to prevent cross-project collisions (#1105) (e9066ce0)
+- fix: use correct resourceType for config bundle in E2E status test (#1094) (7fb8a636)
+- fix: align E2E batch eval and recommendation tests with current API (#1093) (f1d046cf)
+- fix: sync e2e IAM policy and fix run eval flag (#1092) (78b3bd15)
+- fix: address formatting failure in docs (#1080) (162afd45)
+
+### Documentation
+- docs: clarify integration vs e2e test boundaries and add e2e README (#1111) (bb69aa53)
+- docs: remove CrewAI from supported frameworks (#1059) (a91d8882)
 
 ### Other Changes
+- test: collapse schema enumeration tests and remove duplicates (#1087) (4f464d77)
+- test: remove http-gateway-targets e2e test (#1090) (5ce18744)
+- chore(deps): override glob to ^13 to silence install deprecation warning (#1008) (3b7a0a5b)
+
+## [0.13.0] - 2026-05-01
+>>>>>>> origin/main
+
+### Added
+- feat: evo preview features — config bundles, batch evaluation, recommendations, AB testing (#1068) (9ccf802)
+- feat: wire telemetry into all add.* commands (#1050) (e9dfc16)
+- feat: make parsing resilient to individual failures (#1062) (a4c37a2)
+- feat: update @aws/agent-inspector to 0.3.0 (90f17b4)
+- feat: update @aws/agent-inspector to 0.3.0 (278783a)
+
+### Fixed
+- fix: remove unnecessary non-null assertions after .default([]) revert (#1075) (eab8c87)
+- fix: revert .optional() to .default([]) and strip empty evo arrays on write (#1074) (8c5cdfe)
+- fix: remove dead preflight patch, proper teardown, optional evo schema fields (#1073) (839b32b)
+- fix: remove dead preflight patch and use proper teardown for evo resources (#1072) (0e38e9e)
+- fix: resolve e2e import test concurrency races (#1067) (bd6f841)
+- fix: forward custom headers in bearer token invoke paths (#1065) (3dccd97)
+
+### Other Changes
+<<<<<<< HEAD
 - Merge pull request #1040 from aws/sync-preview/merge-main-20260429-v5 (dd76d17)
 - chore: merge main into preview (ecda10c)
 - fix(ci): install uv in release workflow prepare steps (#1038) (#1039) (01b3b7d)
@@ -162,6 +199,10 @@ All notable changes to this project will be documented in this file.
 - chore: bump version to 0.11.0 (#967) (f8dc490)
 - test: add browser tests for agent inspector (#938) (7a4104d)
 - chore: bump version to 0.10.0 (#944) (12275c3)
+=======
+- refactor: consolidate cli-config into global-config (#802) (3aec000)
+- ci: cut full e2e time in half via vitest sharding (#1016) (4daca83)
+>>>>>>> origin/main
 
 ## [0.11.0] - 2026-04-24
 

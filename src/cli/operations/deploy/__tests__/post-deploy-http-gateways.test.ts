@@ -78,7 +78,10 @@ function makeProjectSpec(httpGateways: AgentCoreProjectSpec['httpGateways'] = []
     onlineEvalConfigs: [],
     agentCoreGateways: [],
     policyEngines: [],
+<<<<<<< HEAD
     harnesses: [],
+=======
+>>>>>>> origin/main
     configBundles: [],
     abTests: [],
     httpGateways,

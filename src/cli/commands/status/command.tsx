@@ -1,3 +1,4 @@
+import { serializeResult } from '../../../lib';
 import { getErrorMessage } from '../../errors';
 import { COMMAND_DESCRIPTIONS } from '../../tui/copy';
 import { requireProject } from '../../tui/guards';
@@ -62,7 +63,11 @@ export const registerStatus = (program: Command) => {
     .option('--target <name>', 'Select deployment target')
     .option(
       '--type <type>',
+<<<<<<< HEAD
       'Filter by resource type (agent, harness, runtime-endpoint, memory, credential, gateway, evaluator, online-eval, policy-engine, policy, config-bundle, ab-test)'
+=======
+      'Filter by resource type (agent, runtime-endpoint, memory, credential, gateway, evaluator, online-eval, policy-engine, policy, config-bundle, ab-test)'
+>>>>>>> origin/main
     )
     .option('--state <state>', 'Filter by deployment state (deployed, local-only, pending-removal)')
     .option('--runtime <name>', 'Filter to a specific runtime')
@@ -101,12 +106,12 @@ export const registerStatus = (program: Command) => {
           });
 
           if (cliOptions.json) {
-            console.log(JSON.stringify(result, null, 2));
+            console.log(JSON.stringify(serializeResult(result), null, 2));
             return;
           }
 
           if (!result.success) {
-            render(<Text color="red">{result.error}</Text>);
+            render(<Text color="red">{result.error.message}</Text>);
             return;
           }
 
@@ -127,13 +132,17 @@ export const registerStatus = (program: Command) => {
         });
 
         if (cliOptions.json) {
-          const filtered = filterResources(result.resources, cliOptions);
-          console.log(JSON.stringify({ ...result, resources: filtered }, null, 2));
+          if (result.success) {
+            const filtered = filterResources(result.resources, cliOptions);
+            console.log(JSON.stringify({ ...result, resources: filtered }, null, 2));
+          } else {
+            console.log(JSON.stringify(serializeResult(result), null, 2));
+          }
           return;
         }
 
         if (!result.success) {
-          render(<Text color="red">{result.error}</Text>);
+          render(<Text color="red">{result.error.message}</Text>);
           return;
         }
 
@@ -155,7 +164,11 @@ export const registerStatus = (program: Command) => {
         render(
           <Box flexDirection="column">
             <Text bold>
+<<<<<<< HEAD
               AgentCore Status (target: {result.targetName || 'No target configured'}
+=======
+              AgentCore Status (target: {result.targetName ?? 'No target configured'}
+>>>>>>> origin/main
               {result.targetRegion ? `, ${result.targetRegion}` : ''})
             </Text>
 

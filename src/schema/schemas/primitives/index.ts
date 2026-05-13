@@ -66,6 +66,7 @@ export {
   ValidationModeSchema,
 } from './policy';
 
+<<<<<<< HEAD
 export type {
   HarnessGatewayOutboundAuth,
   HarnessMemoryRef,
@@ -93,5 +94,7 @@ export {
   HarnessTruncationStrategySchema,
 } from './harness';
 
+=======
+>>>>>>> origin/main
 export type { HttpGateway } from './http-gateway';
 export { HttpGatewayNameSchema, HttpGatewaySchema } from './http-gateway';

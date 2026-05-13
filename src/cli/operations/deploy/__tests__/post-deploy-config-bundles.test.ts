@@ -504,7 +504,10 @@ describe('resolveConfigBundleComponentKeys', () => {
       onlineEvalConfigs: [],
       agentCoreGateways: [],
       policyEngines: [],
+<<<<<<< HEAD
       harnesses: [],
+=======
+>>>>>>> origin/main
       configBundles,
       httpGateways: [],
       abTests: [],
