@@ -322,7 +322,11 @@ export const registerCreate = (program: Command) => {
     .option('--language <language>', 'Target language: Python or TypeScript (default: Python) [non-interactive]')
     .option(
       '--framework <framework>',
+<<<<<<< HEAD
       'Agent framework (Strands, LangChain_LangGraph, GoogleADK, OpenAIAgents, VercelAI) triggers agent/runtime path [non-interactive]'
+=======
+      'Agent framework (Strands, LangChain_LangGraph, GoogleADK, OpenAIAgents, VercelAI) [non-interactive]'
+>>>>>>> origin/main
     )
     .option('--model-provider <provider>', 'Model provider: bedrock, open_ai, gemini (harness path) [non-interactive]')
     .option('--api-key <key>', 'API key for non-Bedrock providers [non-interactive]')

@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import { type Result, ValidationError } from '../../../lib';
+=======
+import { type Result, ValidationError, serializeResult } from '../../../lib';
+>>>>>>> origin/main
 import { getErrorMessage } from '../../errors';
 import { withCommandRunTelemetry } from '../../telemetry/cli-command-run.js';
 import { AuthType, Protocol, standardize } from '../../telemetry/schemas/common-shapes.js';
@@ -6,7 +10,11 @@ import { COMMAND_DESCRIPTIONS } from '../../tui/copy';
 import { requireProject, requireTTY } from '../../tui/guards';
 import { InvokeScreen } from '../../tui/screens/invoke';
 import { parseHeaderFlags } from '../shared/header-utils';
+<<<<<<< HEAD
 import { type InvokeContext, handleHarnessInvokeByArn, handleInvoke, loadInvokeConfig } from './action';
+=======
+import { type InvokeContext, handleInvoke, loadInvokeConfig } from './action';
+>>>>>>> origin/main
 import { resolvePrompt } from './resolve-prompt';
 import type { InvokeOptions, InvokeResult } from './types';
 import { validateInvokeOptions } from './validate';
@@ -30,6 +38,7 @@ function stopSpinner(spinner: NodeJS.Timeout): void {
   process.stderr.write('\r\x1b[K'); // Clear line
 }
 
+<<<<<<< HEAD
 function redactSensitiveText(value: string): string {
   return value
     .replace(/(bearer\s+)[a-z0-9\-._~+/]+=*/gi, '$1[REDACTED]')
@@ -47,6 +56,8 @@ function toSafeJsonResult(result: InvokeResult): Record<string, unknown> {
   };
 }
 
+=======
+>>>>>>> origin/main
 function resolveProtocol(options: InvokeOptions, projectProtocol?: string): string {
   if (projectProtocol) return projectProtocol.toLowerCase();
   if (options.tool) return 'mcp';
@@ -56,6 +67,7 @@ function resolveProtocol(options: InvokeOptions, projectProtocol?: string): stri
 async function handleInvokeCLI(options: InvokeOptions, preloadedContext?: InvokeContext): Promise<InvokeResult> {
   const validation = validateInvokeOptions(options);
   if (!validation.valid) {
+<<<<<<< HEAD
     const result: InvokeResult = { success: false, error: validation.error ?? 'Validation failed' };
     if (options.json) {
       console.log(JSON.stringify(toSafeJsonResult(result)));
@@ -63,11 +75,15 @@ async function handleInvokeCLI(options: InvokeOptions, preloadedContext?: Invoke
       console.error(result.error);
     }
     return result;
+=======
+    return { success: false, error: new ValidationError(validation.error ?? 'Validation failed') };
+>>>>>>> origin/main
   }
 
   let spinner: NodeJS.Timeout | undefined;
 
   try {
+<<<<<<< HEAD
     if (options.harnessArn) {
       const region = options.region ?? process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION;
       if (!region) {
@@ -88,6 +104,8 @@ async function handleInvokeCLI(options: InvokeOptions, preloadedContext?: Invoke
       process.exit(result.success ? 0 : 1);
     }
 
+=======
+>>>>>>> origin/main
     const context = preloadedContext ?? (await loadInvokeConfig());
 
     // Show spinner for non-streaming, non-json, non-exec invocations
@@ -105,6 +123,7 @@ async function handleInvokeCLI(options: InvokeOptions, preloadedContext?: Invoke
       stopSpinner(spinner);
     }
 
+<<<<<<< HEAD
     if (options.json) {
       console.log(JSON.stringify(toSafeJsonResult(result)));
     } else if (options.stream) {
@@ -132,12 +151,46 @@ async function handleInvokeCLI(options: InvokeOptions, preloadedContext?: Invoke
       }
     }
 
+=======
+>>>>>>> origin/main
     return result;
   } catch (err) {
     if (spinner) {
       stopSpinner(spinner);
     }
     throw err;
+<<<<<<< HEAD
+=======
+  }
+}
+
+function printInvokeResult(result: InvokeResult, options: InvokeOptions): void {
+  if (options.json) {
+    console.log(JSON.stringify(serializeResult(result)));
+  } else if (options.stream) {
+    // Streaming already wrote to stdout, just show session and log path
+    if (result.sessionId) {
+      console.error(`\nSession: ${result.sessionId}`);
+      console.error(`To resume: agentcore invoke --session-id ${result.sessionId}`);
+    }
+    if (result.logFilePath) {
+      console.error(`Log: ${result.logFilePath}`);
+    }
+  } else {
+    // Non-streaming, non-json: print provider info and response or error
+    if (result.success && result.response) {
+      console.log(result.response);
+    } else if (!result.success && result.error) {
+      console.error(result.error.message);
+    }
+    if (result.sessionId) {
+      console.error(`\nSession: ${result.sessionId}`);
+      console.error(`To resume: agentcore invoke --session-id ${result.sessionId}`);
+    }
+    if (result.logFilePath) {
+      console.error(`Log: ${result.logFilePath}`);
+    }
+>>>>>>> origin/main
   }
 }
 
@@ -271,6 +324,7 @@ export const registerInvoke = (program: Command) => {
                 has_stream: cliOptions.stream ?? false,
                 has_session_id: !!cliOptions.sessionId,
                 auth_type: standardize(AuthType, cliOptions.bearerToken ? 'bearer_token' : 'sigv4'),
+<<<<<<< HEAD
                 protocol: standardize(Protocol, resolveProtocol({ tool: cliOptions.tool }, agentProtocol)),
               },
               async (): Promise<Result> => {
@@ -282,6 +336,16 @@ export const registerInvoke = (program: Command) => {
                     console.error(error);
                   }
                   return { success: false, error: new ValidationError(error) };
+=======
+                protocol: standardize(
+                  Protocol,
+                  resolveProtocol({ tool: cliOptions.tool } as InvokeOptions, agentProtocol)
+                ),
+              },
+              async (): Promise<InvokeResult> => {
+                if (!resolved.success) {
+                  return { success: false, error: new ValidationError(resolved.error ?? 'Prompt resolution failed') };
+>>>>>>> origin/main
                 }
 
                 // Parse custom headers
@@ -304,6 +368,7 @@ export const registerInvoke = (program: Command) => {
                   timeout: cliOptions.timeout,
                   headers,
                   bearerToken: cliOptions.bearerToken,
+<<<<<<< HEAD
                   harnessName: cliOptions.harness,
                   harnessArn: cliOptions.harnessArn,
                   region: cliOptions.region,
@@ -340,6 +405,18 @@ export const registerInvoke = (program: Command) => {
               }
             );
 
+=======
+                };
+
+                return handleInvokeCLI(options, invokeContext);
+              }
+            );
+
+            printInvokeResult(result, {
+              json: cliOptions.json,
+              stream: cliOptions.stream,
+            });
+>>>>>>> origin/main
             process.exit(result.success ? 0 : 1);
           } else {
             // No CLI options - interactive TUI mode (headers still passed if provided)
@@ -351,6 +428,7 @@ export const registerInvoke = (program: Command) => {
               headers = parseHeaderFlags(cliOptions.header);
             }
 
+<<<<<<< HEAD
             const ENTER_ALT_SCREEN = '\x1B[?1049h\x1B[H';
             const EXIT_ALT_SCREEN = '\x1B[?1049l';
             const SHOW_CURSOR = '\x1B[?25h';
@@ -362,6 +440,8 @@ export const registerInvoke = (program: Command) => {
               process.stdout.write(SHOW_CURSOR);
             };
 
+=======
+>>>>>>> origin/main
             const tuiResult = await withCommandRunTelemetry(
               'invoke',
               {
@@ -374,10 +454,14 @@ export const registerInvoke = (program: Command) => {
                 const { waitUntilExit, unmount } = render(
                   <InvokeScreen
                     isInteractive={true}
+<<<<<<< HEAD
                     onExit={() => {
                       exitAltScreen();
                       unmount();
                     }}
+=======
+                    onExit={() => unmount()}
+>>>>>>> origin/main
                     initialSessionId={cliOptions.sessionId}
                     initialUserId={cliOptions.userId}
                     initialHeaders={headers}

@@ -64,7 +64,13 @@ async function invokeDevServer(
     }
   } catch (err) {
     throw isConnectionRefused(err)
+<<<<<<< HEAD
       ? new ConnectionError(`Dev server not running on port ${port}. Start it with: agentcore dev --logs`)
+=======
+      ? new ConnectionError(`Dev server not running on port ${port}. Start it with: agentcore dev --logs`, {
+          cause: err,
+        })
+>>>>>>> origin/main
       : err;
   }
 }
@@ -77,7 +83,13 @@ async function invokeA2ADevServer(port: number, prompt: string, headers?: Record
     process.stdout.write('\n');
   } catch (err) {
     throw isConnectionRefused(err)
+<<<<<<< HEAD
       ? new ConnectionError(`Dev server not running on port ${port}. Start it with: agentcore dev --logs`)
+=======
+      ? new ConnectionError(`Dev server not running on port ${port}. Start it with: agentcore dev --logs`, {
+          cause: err,
+        })
+>>>>>>> origin/main
       : err;
   }
 }
@@ -133,7 +145,13 @@ async function handleMcpInvoke(
     }
   } catch (err) {
     throw isConnectionRefused(err)
+<<<<<<< HEAD
       ? new ConnectionError(`Dev server not running on port ${port}. Start it with: agentcore dev --logs`)
+=======
+      ? new ConnectionError(`Dev server not running on port ${port}. Start it with: agentcore dev --logs`, {
+          cause: err,
+        })
+>>>>>>> origin/main
       : err;
   }
 }
@@ -313,10 +331,15 @@ export const registerDev = (program: Command) => {
         }
 
         const supportedAgents = getDevSupportedAgents(project);
+<<<<<<< HEAD
         if (supportedAgents.length === 0 && !hasHarnesses) {
           render(
             <FatalError message="No agents support dev mode. Dev mode requires an agent with an entrypoint or a harness." />
           );
+=======
+        if (supportedAgents.length === 0) {
+          render(<FatalError message="No agents support dev mode. Dev mode requires an agent with an entrypoint." />);
+>>>>>>> origin/main
           process.exit(1);
         }
 
@@ -487,7 +510,10 @@ export const registerDev = (program: Command) => {
                     port={port}
                     agentName={opts.runtime}
                     headers={headers}
+<<<<<<< HEAD
                     skipDeploy={opts.skipDeploy}
+=======
+>>>>>>> origin/main
                   />
                 </LayoutProvider>
               );
@@ -502,6 +528,7 @@ export const registerDev = (program: Command) => {
           process.exit(0);
         }
 
+<<<<<<< HEAD
         // Show TUI deploy progress, then launch Agent Inspector in the browser
         const pickerResult = await launchTuiDevScreenWithPicker(workingDir, {
           skipDeploy: opts.skipDeploy,
@@ -514,6 +541,15 @@ export const registerDev = (program: Command) => {
           // We emit telemetry eagerly before the blocking call. If startup fails, the
           // error propagates to the outer catch. Prefer withCommandRunTelemetry for
           // commands that return.
+=======
+        // Default: launch web UI in browser
+        // NOTE: Do not copy this pattern. runBrowserMode blocks forever (internal
+        // await new Promise(() => {})) so we cannot use withCommandRunTelemetry here.
+        // We emit telemetry eagerly before the blocking call. If startup fails, the
+        // error propagates to the outer catch. Prefer withCommandRunTelemetry for
+        // commands that return.
+        {
+>>>>>>> origin/main
           const client = await TelemetryClientAccessor.get().catch(() => undefined);
           const devAttrs = {
             action: 'server' as const,
@@ -529,8 +565,12 @@ export const registerDev = (program: Command) => {
             workingDir,
             project,
             port,
+<<<<<<< HEAD
             agentName: pickerResult.agentName,
             harnessName: pickerResult.harnessName,
+=======
+            agentName: opts.runtime,
+>>>>>>> origin/main
             otelEnvVars,
             collector,
           });

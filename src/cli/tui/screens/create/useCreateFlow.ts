@@ -95,8 +95,11 @@ function getCreateSteps(
     if (agentConfig.language === 'TypeScript' && agentConfig.agentType === 'create') {
       steps.push({ label: 'Set up Node environment', status: 'pending' });
     }
+<<<<<<< HEAD
   } else if (harnessConfig) {
     steps.push({ label: 'Add harness to project', status: 'pending' });
+=======
+>>>>>>> origin/main
   }
 
   steps.push({ label: 'Prepare agentcore/ directory', status: 'pending' });
@@ -552,6 +555,7 @@ export function useCreateFlow(cwd: string): CreateFlowState {
             }
             stepIndex++;
           }
+<<<<<<< HEAD
         }
 
         // Step: Add harness to project (if addHarnessConfig is set)
@@ -612,6 +616,8 @@ export function useCreateFlow(cwd: string): CreateFlowState {
             logger.finalize(false);
             return { success: false, error: new Error(errMsg) };
           }
+=======
+>>>>>>> origin/main
         }
 
         // Step: Create CDK project

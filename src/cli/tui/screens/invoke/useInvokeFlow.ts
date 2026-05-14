@@ -51,11 +51,14 @@ export interface InvokeConfig {
     authorizerType?: RuntimeAuthorizerType;
     baggage?: string;
     supportsTraces: boolean;
+<<<<<<< HEAD
   }[];
   harnesses: {
     name: string;
     state: HarnessDeployedState;
     authorizerType?: RuntimeAuthorizerType;
+=======
+>>>>>>> origin/main
   }[];
   target: AwsDeploymentTarget;
   targetName: string;

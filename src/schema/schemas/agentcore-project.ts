@@ -21,7 +21,9 @@ import { HarnessNameSchema } from './primitives/harness';
 import { HttpGatewaySchema } from './primitives/http-gateway';
 import {
   DEFAULT_EPISODIC_REFLECTION_NAMESPACES,
+  DEFAULT_EPISODIC_REFLECTION_NAMESPACE_TEMPLATES,
   DEFAULT_STRATEGY_NAMESPACES,
+  DEFAULT_STRATEGY_NAMESPACE_TEMPLATES,
   MemoryStrategySchema,
   MemoryStrategyTypeSchema,
 } from './primitives/memory';
@@ -33,7 +35,9 @@ import { z } from 'zod';
 
 // Re-export for convenience
 export {
+  DEFAULT_EPISODIC_REFLECTION_NAMESPACE_TEMPLATES,
   DEFAULT_EPISODIC_REFLECTION_NAMESPACES,
+  DEFAULT_STRATEGY_NAMESPACE_TEMPLATES,
   DEFAULT_STRATEGY_NAMESPACES,
   MemoryStrategySchema,
   MemoryStrategyTypeSchema,

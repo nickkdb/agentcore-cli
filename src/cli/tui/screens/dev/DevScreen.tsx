@@ -571,7 +571,11 @@ export function DevScreen(props: DevScreenProps) {
         <Box flexDirection="column">
           <Text color="red">No agents or harnesses defined in project.</Text>
           <Text color="red">No agents defined in project.</Text>
+<<<<<<< HEAD
           <Text>Dev mode requires at least one agent with an entrypoint or a harness.</Text>
+=======
+          <Text>Dev mode requires at least one agent with an entrypoint.</Text>
+>>>>>>> origin/main
           <Text>
             Run <Text color="blue">agentcore add agent</Text> to create one.
           </Text>

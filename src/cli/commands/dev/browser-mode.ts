@@ -65,26 +65,40 @@ async function resolveDeployedHandlers(
         `Memory browsing enabled for ${memories.length} deployed memory(ies): ${memories.map(m => m.name).join(', ')}`
       );
 
+<<<<<<< HEAD
       result.onListMemoryRecords = async (memoryName, namespace, strategyId) => {
         const memory = memories.find(m => m.name === memoryName);
         if (!memory) return { success: false, error: `Memory "${memoryName}" not found in deployed state` };
         return listMemoryRecords({
+=======
+      result.onListMemoryRecords = async args => {
+        const memory = memories.find(m => m.name === args.memoryName);
+        if (!memory) return { success: false, error: `Memory "${args.memoryName}" not found in deployed state` };
+        const res = await listMemoryRecords({
+>>>>>>> origin/main
           region: memory.region,
           memoryId: memory.memoryId,
-          namespace,
-          memoryStrategyId: strategyId,
+          memoryStrategyId: args.strategyId,
+          ...(args.namespace ? { namespace: args.namespace } : { namespacePath: args.namespacePath! }),
         });
       };
 
+<<<<<<< HEAD
       result.onRetrieveMemoryRecords = async (memoryName, namespace, searchQuery, strategyId) => {
         const memory = memories.find(m => m.name === memoryName);
         if (!memory) return { success: false, error: `Memory "${memoryName}" not found in deployed state` };
         return retrieveMemoryRecords({
+=======
+      result.onRetrieveMemoryRecords = async args => {
+        const memory = memories.find(m => m.name === args.memoryName);
+        if (!memory) return { success: false, error: `Memory "${args.memoryName}" not found in deployed state` };
+        const res = await retrieveMemoryRecords({
+>>>>>>> origin/main
           region: memory.region,
           memoryId: memory.memoryId,
-          namespace,
-          searchQuery,
-          memoryStrategyId: strategyId,
+          searchQuery: args.searchQuery,
+          memoryStrategyId: args.strategyId,
+          ...(args.namespace ? { namespace: args.namespace } : { namespacePath: args.namespacePath! }),
         });
       };
     }
@@ -289,15 +303,15 @@ export async function runBrowserMode(opts: BrowserModeOptions): Promise<void> {
           };
         }
       },
-      onListMemoryRecords: async (memoryName, namespace, strategyId) => {
+      onListMemoryRecords: async args => {
         const deployed = await resolveDeployedHandlers(baseDir, onLog);
         if (!deployed.onListMemoryRecords) return { success: false, error: 'No deployed AgentCore Memory found' };
-        return deployed.onListMemoryRecords(memoryName, namespace, strategyId);
+        return deployed.onListMemoryRecords(args);
       },
-      onRetrieveMemoryRecords: async (memoryName, namespace, searchQuery, strategyId) => {
+      onRetrieveMemoryRecords: async args => {
         const deployed = await resolveDeployedHandlers(baseDir, onLog);
         if (!deployed.onRetrieveMemoryRecords) return { success: false, error: 'No deployed AgentCore Memory found' };
-        return deployed.onRetrieveMemoryRecords(memoryName, namespace, searchQuery, strategyId);
+        return deployed.onRetrieveMemoryRecords(args);
       },
     },
   });
