@@ -1,7 +1,4 @@
-<<<<<<< HEAD
-=======
 import { type Result, ValidationError, serializeResult } from '../../../lib';
->>>>>>> origin/main
 import { getErrorMessage } from '../../errors';
 import { withCommandRunTelemetry } from '../../telemetry/cli-command-run.js';
 import { AuthType, Protocol, standardize } from '../../telemetry/schemas/common-shapes.js';
@@ -9,11 +6,7 @@ import { COMMAND_DESCRIPTIONS } from '../../tui/copy';
 import { requireProject, requireTTY } from '../../tui/guards';
 import { InvokeScreen } from '../../tui/screens/invoke';
 import { parseHeaderFlags } from '../shared/header-utils';
-<<<<<<< HEAD
-import { handleHarnessInvokeByArn, handleInvoke, loadInvokeConfig } from './action';
-=======
-import { type InvokeContext, handleInvoke, loadInvokeConfig } from './action';
->>>>>>> origin/main
+import { type InvokeContext, handleHarnessInvokeByArn, handleInvoke, loadInvokeConfig } from './action';
 import { resolvePrompt } from './resolve-prompt';
 import type { InvokeOptions, InvokeResult } from './types';
 import { validateInvokeOptions } from './validate';
@@ -52,7 +45,6 @@ async function handleInvokeCLI(options: InvokeOptions, preloadedContext?: Invoke
   let spinner: NodeJS.Timeout | undefined;
 
   try {
-<<<<<<< HEAD
     if (options.harnessArn) {
       const region = options.region ?? process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION;
       if (!region) {
@@ -73,10 +65,7 @@ async function handleInvokeCLI(options: InvokeOptions, preloadedContext?: Invoke
       process.exit(result.success ? 0 : 1);
     }
 
-    const context = await loadInvokeConfig();
-=======
-    const context = preloadedContext ?? (await loadInvokeConfig());
->>>>>>> origin/main
+    const context = preloadedContext ??await loadInvokeConfig();
 
     // Show spinner for non-streaming, non-json, non-exec invocations
     // Harness invoke always streams directly to stdout, so skip spinner for harness
@@ -93,7 +82,6 @@ async function handleInvokeCLI(options: InvokeOptions, preloadedContext?: Invoke
       stopSpinner(spinner);
     }
 
-<<<<<<< HEAD
     if (options.json) {
       console.log(JSON.stringify(result));
     } else if (options.stream) {
@@ -121,10 +109,7 @@ async function handleInvokeCLI(options: InvokeOptions, preloadedContext?: Invoke
       }
     }
 
-    process.exit(result.success ? 0 : 1);
-=======
     return result;
->>>>>>> origin/main
   } catch (err) {
     if (spinner) {
       stopSpinner(spinner);
@@ -247,11 +232,6 @@ export const registerInvoke = (program: Command) => {
         }
       ) => {
         try {
-<<<<<<< HEAD
-          if (!cliOptions.harnessArn) {
-            requireProject();
-          }
-=======
           requireProject();
 
           // Load config once for protocol resolution and to pass into handleInvokeCLI
@@ -267,7 +247,6 @@ export const registerInvoke = (program: Command) => {
             // Config load failure will be caught again inside handleInvokeCLI
           }
 
->>>>>>> origin/main
           // Resolve prompt from flag / positional / --prompt-file / stdin
           const resolved = await resolvePrompt({
             flag: cliOptions.prompt,
@@ -292,37 +271,6 @@ export const registerInvoke = (program: Command) => {
             cliOptions.harnessArn ||
             cliOptions.verbose
           ) {
-<<<<<<< HEAD
-            await handleInvokeCLI({
-              prompt,
-              agentName: cliOptions.runtime,
-              harnessName: cliOptions.harness,
-              harnessArn: cliOptions.harnessArn,
-              region: cliOptions.region,
-              targetName: cliOptions.target ?? 'default',
-              sessionId: cliOptions.sessionId,
-              userId: cliOptions.userId,
-              json: cliOptions.json,
-              stream: cliOptions.stream,
-              tool: cliOptions.tool,
-              input: cliOptions.input,
-              exec: cliOptions.exec,
-              timeout: cliOptions.timeout,
-              headers,
-              bearerToken: cliOptions.bearerToken,
-              verbose: cliOptions.verbose,
-              modelId: cliOptions.modelId,
-              modelProvider: cliOptions.modelProvider,
-              apiKeyArn: cliOptions.apiKeyArn,
-              tools: cliOptions.tools,
-              maxIterations: cliOptions.maxIterations,
-              maxTokens: cliOptions.maxTokens,
-              harnessTimeout: cliOptions.harnessTimeout,
-              skills: cliOptions.skills,
-              systemPrompt: cliOptions.systemPrompt,
-              allowedTools: cliOptions.allowedTools,
-              actorId: cliOptions.actorId,
-=======
             const result = await withCommandRunTelemetry(
               'invoke',
               {
@@ -359,6 +307,21 @@ export const registerInvoke = (program: Command) => {
                   timeout: cliOptions.timeout,
                   headers,
                   bearerToken: cliOptions.bearerToken,
+                  harnessName: cliOptions.harness,
+                  harnessArn: cliOptions.harnessArn,
+                  region: cliOptions.region,
+                  verbose: cliOptions.verbose,
+                  modelId: cliOptions.modelId,
+                  modelProvider: cliOptions.modelProvider,
+                  apiKeyArn: cliOptions.apiKeyArn,
+                  tools: cliOptions.tools,
+                  maxIterations: cliOptions.maxIterations,
+                  maxTokens: cliOptions.maxTokens,
+                  harnessTimeout: cliOptions.harnessTimeout,
+                  skills: cliOptions.skills,
+                  systemPrompt: cliOptions.systemPrompt,
+                  allowedTools: cliOptions.allowedTools,
+                  actorId: cliOptions.actorId,
                 };
 
                 return handleInvokeCLI(options, invokeContext);
@@ -368,13 +331,18 @@ export const registerInvoke = (program: Command) => {
             printInvokeResult(result, {
               json: cliOptions.json,
               stream: cliOptions.stream,
->>>>>>> origin/main
             });
             process.exit(result.success ? 0 : 1);
           } else {
             // No CLI options - interactive TUI mode (headers still passed if provided)
             requireTTY();
-<<<<<<< HEAD
+
+            // Parse custom headers for TUI mode
+            let headers: Record<string, string> | undefined;
+            if (cliOptions.header && cliOptions.header.length > 0) {
+              headers = parseHeaderFlags(cliOptions.header);
+            }
+
             const ENTER_ALT_SCREEN = '\x1B[?1049h\x1B[H';
             const EXIT_ALT_SCREEN = '\x1B[?1049l';
             const SHOW_CURSOR = '\x1B[?25h';
@@ -385,26 +353,6 @@ export const registerInvoke = (program: Command) => {
               process.stdout.write(EXIT_ALT_SCREEN);
               process.stdout.write(SHOW_CURSOR);
             };
-
-            const { waitUntilExit, unmount } = render(
-              <InvokeScreen
-                isInteractive={true}
-                onExit={() => {
-                  exitAltScreen();
-                  unmount();
-                }}
-                initialSessionId={cliOptions.sessionId}
-                initialUserId={cliOptions.userId}
-                initialHeaders={headers}
-                initialBearerToken={cliOptions.bearerToken}
-              />
-=======
-
-            // Parse custom headers for TUI mode
-            let headers: Record<string, string> | undefined;
-            if (cliOptions.header && cliOptions.header.length > 0) {
-              headers = parseHeaderFlags(cliOptions.header);
-            }
 
             const tuiResult = await withCommandRunTelemetry(
               'invoke',
@@ -418,7 +366,10 @@ export const registerInvoke = (program: Command) => {
                 const { waitUntilExit, unmount } = render(
                   <InvokeScreen
                     isInteractive={true}
-                    onExit={() => unmount()}
+                    onExit={() => {
+                      exitAltScreen();
+                      unmount();
+                    }}
                     initialSessionId={cliOptions.sessionId}
                     initialUserId={cliOptions.userId}
                     initialHeaders={headers}
@@ -428,7 +379,6 @@ export const registerInvoke = (program: Command) => {
                 await waitUntilExit();
                 return { success: true };
               }
->>>>>>> origin/main
             );
             if (!tuiResult.success) {
               render(<Text color="red">Error: {getErrorMessage(tuiResult.error)}</Text>);

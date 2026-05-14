@@ -92,14 +92,11 @@ function getCreateSteps(
     if (agentConfig.language === 'Python' && agentConfig.agentType === 'create') {
       steps.push({ label: 'Set up Python environment', status: 'pending' });
     }
-<<<<<<< HEAD
-  } else if (harnessConfig) {
-    steps.push({ label: 'Add harness to project', status: 'pending' });
-=======
     if (agentConfig.language === 'TypeScript' && agentConfig.agentType === 'create') {
       steps.push({ label: 'Set up Node environment', status: 'pending' });
     }
->>>>>>> origin/main
+  } else if (harnessConfig) {
+    steps.push({ label: 'Add harness to project', status: 'pending' });
   }
 
   steps.push({ label: 'Prepare agentcore/ directory', status: 'pending' });
