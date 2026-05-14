@@ -724,7 +724,12 @@ export function useDeployFlow(options: DeployFlowOptions = {}): DeployFlowState 
           const targetRegion = context?.awsTargets[0]?.region;
           const targetAccount = context?.awsTargets[0]?.account;
           const hasGateways = (context?.projectSpec.agentCoreGateways?.length ?? 0) > 0;
-          if ((agentNames.length > 0 || hasGateways) && targetRegion && targetAccount) {
+          const hasPythonAgent =
+            context?.projectSpec.runtimes?.some(
+              (a: { entrypoint?: string }) =>
+                (a.entrypoint?.endsWith('.py') ?? false) || (a.entrypoint?.includes('.py:') ?? false)
+            ) ?? false;
+          if ((agentNames.length > 0 || hasGateways) && hasPythonAgent && targetRegion && targetAccount) {
             try {
               const tsResult = await setupTransactionSearch({
                 region: targetRegion,

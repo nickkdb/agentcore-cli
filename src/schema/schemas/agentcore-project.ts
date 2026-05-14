@@ -106,7 +106,7 @@ export const ProjectNameSchema = z
     'Project name must start with a letter and contain only alphanumeric characters'
   )
   .refine(name => !isReservedProjectName(name), {
-    message: 'This name conflicts with a Python package dependency. Please choose a different name.',
+    message: 'This name conflicts with a reserved package dependency. Please choose a different name.',
   });
 
 // ============================================================================

@@ -36,13 +36,14 @@ describe('getDevConfig', () => {
       name: 'TestProject',
       version: 1,
       managedBy: 'CDK' as const,
+      // Agent with no entrypoint — not dev-supported
       runtimes: [
         {
-          name: 'NodeAgent',
+          name: 'BrokenAgent',
           build: 'CodeZip',
-          runtimeVersion: 'NODE_20',
-          entrypoint: filePath('index.js'), // Not a Python agent
-          codeLocation: dirPath('./agents/node'),
+          runtimeVersion: 'PYTHON_3_12',
+          entrypoint: filePath(''),
+          codeLocation: dirPath('./agents/broken'),
           protocol: 'HTTP',
         },
       ],
@@ -131,18 +132,18 @@ describe('getDevConfig', () => {
     );
   });
 
-  it('throws when specified agent is not Python', () => {
+  it('returns TypeScript config when project has a Node agent with .ts entrypoint', () => {
     const project: AgentCoreProjectSpec = {
       name: 'TestProject',
       version: 1,
       managedBy: 'CDK' as const,
       runtimes: [
         {
-          name: 'NodeAgent',
+          name: 'TsAgent',
           build: 'CodeZip',
-          runtimeVersion: 'NODE_20',
-          entrypoint: filePath('index.js'),
-          codeLocation: dirPath('./agents/node'),
+          runtimeVersion: 'NODE_22',
+          entrypoint: filePath('main.ts'),
+          codeLocation: dirPath('./agents/ts'),
           protocol: 'HTTP',
         },
       ],
@@ -158,7 +159,10 @@ describe('getDevConfig', () => {
       httpGateways: [],
     };
 
-    expect(() => getDevConfig(workingDir, project, undefined, 'NodeAgent')).toThrow('Dev mode only supports Python');
+    const config = getDevConfig(workingDir, project, undefined, 'TsAgent');
+    expect(config).not.toBeNull();
+    expect(config?.agentName).toBe('TsAgent');
+    expect(config?.isPython).toBe(false);
   });
 
   it('resolves directory from codeLocation relative to configRoot', () => {
@@ -546,7 +550,7 @@ describe('getDevSupportedAgents', () => {
     expect(getDevSupportedAgents(project)).toEqual([]);
   });
 
-  it('returns empty array when no agents are Python', () => {
+  it('returns Node agents as dev-supported alongside Python', () => {
     const project: AgentCoreProjectSpec = {
       name: 'TestProject',
       version: 1,
@@ -555,46 +559,8 @@ describe('getDevSupportedAgents', () => {
         {
           name: 'NodeAgent',
           build: 'CodeZip',
-          runtimeVersion: 'NODE_20',
-          entrypoint: filePath('index.js'),
-          codeLocation: dirPath('./agents/node'),
-          protocol: 'HTTP',
-        },
-      ],
-      memories: [],
-      credentials: [],
-      evaluators: [],
-      onlineEvalConfigs: [],
-      agentCoreGateways: [],
-      policyEngines: [],
-      harnesses: [],
-      configBundles: [],
-      abTests: [],
-      httpGateways: [],
-    };
-
-    expect(getDevSupportedAgents(project)).toEqual([]);
-  });
-
-  it('returns only Python agents with entrypoints', () => {
-    const project: AgentCoreProjectSpec = {
-      name: 'TestProject',
-      version: 1,
-      managedBy: 'CDK' as const,
-      runtimes: [
-        {
-          name: 'PythonAgent',
-          build: 'CodeZip',
-          runtimeVersion: 'PYTHON_3_12',
-          entrypoint: filePath('main.py'),
-          codeLocation: dirPath('./agents/python'),
-          protocol: 'HTTP',
-        },
-        {
-          name: 'NodeAgent',
-          build: 'CodeZip',
-          runtimeVersion: 'NODE_20',
-          entrypoint: filePath('index.js'),
+          runtimeVersion: 'NODE_22',
+          entrypoint: filePath('main.ts'),
           codeLocation: dirPath('./agents/node'),
           protocol: 'HTTP',
         },
@@ -613,7 +579,46 @@ describe('getDevSupportedAgents', () => {
 
     const supported = getDevSupportedAgents(project);
     expect(supported).toHaveLength(1);
-    expect(supported[0]?.name).toBe('PythonAgent');
+    expect(supported[0]?.name).toBe('NodeAgent');
+  });
+
+  it('returns both Python and Node agents with entrypoints', () => {
+    const project: AgentCoreProjectSpec = {
+      name: 'TestProject',
+      version: 1,
+      managedBy: 'CDK' as const,
+      runtimes: [
+        {
+          name: 'PythonAgent',
+          build: 'CodeZip',
+          runtimeVersion: 'PYTHON_3_12',
+          entrypoint: filePath('main.py'),
+          codeLocation: dirPath('./agents/python'),
+          protocol: 'HTTP',
+        },
+        {
+          name: 'NodeAgent',
+          build: 'CodeZip',
+          runtimeVersion: 'NODE_22',
+          entrypoint: filePath('main.ts'),
+          codeLocation: dirPath('./agents/node'),
+          protocol: 'HTTP',
+        },
+      ],
+      memories: [],
+      credentials: [],
+      evaluators: [],
+      onlineEvalConfigs: [],
+      agentCoreGateways: [],
+      policyEngines: [],
+      configBundles: [],
+      abTests: [],
+      httpGateways: [],
+      harnesses: [],
+    };
+
+    const supported = getDevSupportedAgents(project);
+    expect(supported.map(a => a.name)).toEqual(['PythonAgent', 'NodeAgent']);
   });
 
   it('includes Container agents with entrypoints', () => {

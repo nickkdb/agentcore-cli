@@ -5,6 +5,9 @@ on:
       aws_region:
         description: 'AWS region for deployment'
         default: 'us-east-1'
+      cdk_branch:
+        description: 'CDK repo branch to build from (default: main)'
+        default: 'main'
   pull_request_target:
     branches: [main, preview]
 
@@ -78,9 +81,11 @@ jobs:
 
       # Build @aws/agentcore-cdk from source for cross-package testing.
       # Requires secrets: CDK_REPO_NAME (org/repo), CDK_REPO_TOKEN (fine-grained PAT)
-      - name: Build CDK package from main
+      - name: Build CDK package
         run: |
-          git clone --depth 1 "https://x-access-token:${CDK_REPO_TOKEN}@github.com/${CDK_REPO}.git" /tmp/cdk-repo
+          CDK_BRANCH="${{ inputs.cdk_branch || 'main' }}"
+          echo "Building CDK from branch: $CDK_BRANCH"
+          git clone --depth 1 --branch "$CDK_BRANCH" "https://x-access-token:${CDK_REPO_TOKEN}@github.com/${CDK_REPO}.git" /tmp/cdk-repo
           cd /tmp/cdk-repo
           npm ci
           npm run build

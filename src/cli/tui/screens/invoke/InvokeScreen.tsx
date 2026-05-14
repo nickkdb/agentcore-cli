@@ -406,7 +406,7 @@ export function InvokeScreen({
   const selectedHarness = isHarnessSelected ? config.harnesses[selectedAgent - config.runtimes.length] : undefined;
   const selectedName = agent?.name ?? selectedHarness?.name;
   const traceUrl =
-    mode !== 'select-agent' && agent
+    mode !== 'select-agent' && agent?.supportsTraces
       ? buildTraceConsoleUrl({
           region: config.target.region,
           accountId: config.target.account,

@@ -1,11 +1,14 @@
+import { type Result, ValidationError } from '../../../lib';
 import { getErrorMessage } from '../../errors';
+import { withCommandRunTelemetry } from '../../telemetry/cli-command-run.js';
+import { AuthType, Protocol, standardize } from '../../telemetry/schemas/common-shapes.js';
 import { COMMAND_DESCRIPTIONS } from '../../tui/copy';
 import { requireProject, requireTTY } from '../../tui/guards';
 import { InvokeScreen } from '../../tui/screens/invoke';
 import { parseHeaderFlags } from '../shared/header-utils';
-import { handleHarnessInvokeByArn, handleInvoke, loadInvokeConfig } from './action';
+import { type InvokeContext, handleHarnessInvokeByArn, handleInvoke, loadInvokeConfig } from './action';
 import { resolvePrompt } from './resolve-prompt';
-import type { InvokeOptions } from './types';
+import type { InvokeOptions, InvokeResult } from './types';
 import { validateInvokeOptions } from './validate';
 import type { Command } from '@commander-js/extra-typings';
 import { Text, render } from 'ink';
@@ -27,15 +30,39 @@ function stopSpinner(spinner: NodeJS.Timeout): void {
   process.stderr.write('\r\x1b[K'); // Clear line
 }
 
-async function handleInvokeCLI(options: InvokeOptions): Promise<void> {
+function redactSensitiveText(value: string): string {
+  return value
+    .replace(/(bearer\s+)[a-z0-9\-._~+/]+=*/gi, '$1[REDACTED]')
+    .replace(/(client[_-]?secret\s*[:=]\s*)([^,\s]+)/gi, '$1[REDACTED]')
+    .replace(/(token\s*[:=]\s*)([^,\s]+)/gi, '$1[REDACTED]');
+}
+
+function toSafeJsonResult(result: InvokeResult): Record<string, unknown> {
+  return {
+    success: result.success,
+    response: typeof result.response === 'string' ? redactSensitiveText(result.response) : result.response,
+    error: typeof result.error === 'string' ? redactSensitiveText(result.error) : result.error,
+    sessionId: result.sessionId,
+    logFilePath: result.logFilePath,
+  };
+}
+
+function resolveProtocol(options: InvokeOptions, projectProtocol?: string): string {
+  if (projectProtocol) return projectProtocol.toLowerCase();
+  if (options.tool) return 'mcp';
+  return 'http';
+}
+
+async function handleInvokeCLI(options: InvokeOptions, preloadedContext?: InvokeContext): Promise<InvokeResult> {
   const validation = validateInvokeOptions(options);
   if (!validation.valid) {
+    const result: InvokeResult = { success: false, error: validation.error ?? 'Validation failed' };
     if (options.json) {
-      console.log(JSON.stringify({ success: false, error: validation.error }));
+      console.log(JSON.stringify(toSafeJsonResult(result)));
     } else {
-      console.error(validation.error);
+      console.error(result.error);
     }
-    process.exit(1);
+    return result;
   }
 
   let spinner: NodeJS.Timeout | undefined;
@@ -54,14 +81,14 @@ async function handleInvokeCLI(options: InvokeOptions): Promise<void> {
       }
       const result = await handleHarnessInvokeByArn(options.harnessArn, region, options);
       if (options.json) {
-        console.log(JSON.stringify(result));
+        console.log(JSON.stringify(toSafeJsonResult(result)));
       } else if (!result.success && result.error) {
-        console.error(result.error);
+        console.error(redactSensitiveText(result.error));
       }
       process.exit(result.success ? 0 : 1);
     }
 
-    const context = await loadInvokeConfig();
+    const context = preloadedContext ?? (await loadInvokeConfig());
 
     // Show spinner for non-streaming, non-json, non-exec invocations
     // Harness invoke always streams directly to stdout, so skip spinner for harness
@@ -79,7 +106,7 @@ async function handleInvokeCLI(options: InvokeOptions): Promise<void> {
     }
 
     if (options.json) {
-      console.log(JSON.stringify(result));
+      console.log(JSON.stringify(toSafeJsonResult(result)));
     } else if (options.stream) {
       // Streaming already wrote to stdout, just show session and log path
       if (result.sessionId) {
@@ -92,9 +119,9 @@ async function handleInvokeCLI(options: InvokeOptions): Promise<void> {
     } else {
       // Non-streaming, non-json: print provider info and response or error
       if (result.success && result.response) {
-        console.log(result.response);
+        console.log(redactSensitiveText(result.response));
       } else if (!result.success && result.error) {
-        console.error(result.error);
+        console.error(redactSensitiveText(result.error));
       }
       if (result.sessionId) {
         console.error(`\nSession: ${result.sessionId}`);
@@ -105,17 +132,12 @@ async function handleInvokeCLI(options: InvokeOptions): Promise<void> {
       }
     }
 
-    process.exit(result.success ? 0 : 1);
+    return result;
   } catch (err) {
     if (spinner) {
       stopSpinner(spinner);
     }
-    if (options.json) {
-      console.log(JSON.stringify({ success: false, error: getErrorMessage(err) }));
-    } else {
-      console.error(getErrorMessage(err));
-    }
-    process.exit(1);
+    throw err;
   }
 }
 
@@ -204,9 +226,21 @@ export const registerInvoke = (program: Command) => {
         }
       ) => {
         try {
-          if (!cliOptions.harnessArn) {
-            requireProject();
+          requireProject();
+
+          // Load config once for protocol resolution and to pass into handleInvokeCLI
+          let invokeContext: InvokeContext | undefined;
+          let agentProtocol: string | undefined;
+          try {
+            invokeContext = await loadInvokeConfig();
+            const agent = cliOptions.runtime
+              ? invokeContext.project.runtimes.find(a => a.name === cliOptions.runtime)
+              : invokeContext.project.runtimes[0];
+            agentProtocol = agent?.protocol;
+          } catch {
+            // Config load failure will be caught again inside handleInvokeCLI
           }
+
           // Resolve prompt from flag / positional / --prompt-file / stdin
           const resolved = await resolvePrompt({
             flag: cliOptions.prompt,
@@ -214,25 +248,12 @@ export const registerInvoke = (program: Command) => {
             file: cliOptions.promptFile,
             stdinPiped: !process.stdin.isTTY,
           });
-          if (!resolved.success) {
-            if (cliOptions.json) {
-              console.log(JSON.stringify({ success: false, error: resolved.error }));
-            } else {
-              console.error(resolved.error);
-            }
-            process.exit(1);
-          }
-          const prompt = resolved.prompt;
 
-          // Parse custom headers
-          let headers: Record<string, string> | undefined;
-          if (cliOptions.header && cliOptions.header.length > 0) {
-            headers = parseHeaderFlags(cliOptions.header);
-          }
-
-          // CLI mode if any CLI-specific options provided (follows deploy command pattern)
+          // CLI mode if any CLI-specific options provided, prompt resolved, or prompt resolution failed
+          // (follows deploy command pattern)
           if (
-            prompt !== undefined ||
+            !resolved.success ||
+            resolved.prompt !== undefined ||
             cliOptions.json ||
             cliOptions.target ||
             cliOptions.stream ||
@@ -244,39 +265,92 @@ export const registerInvoke = (program: Command) => {
             cliOptions.harnessArn ||
             cliOptions.verbose
           ) {
-            await handleInvokeCLI({
-              prompt,
-              agentName: cliOptions.runtime,
-              harnessName: cliOptions.harness,
-              harnessArn: cliOptions.harnessArn,
-              region: cliOptions.region,
-              targetName: cliOptions.target ?? 'default',
-              sessionId: cliOptions.sessionId,
-              userId: cliOptions.userId,
-              json: cliOptions.json,
-              stream: cliOptions.stream,
-              tool: cliOptions.tool,
-              input: cliOptions.input,
-              exec: cliOptions.exec,
-              timeout: cliOptions.timeout,
-              headers,
-              bearerToken: cliOptions.bearerToken,
-              verbose: cliOptions.verbose,
-              modelId: cliOptions.modelId,
-              modelProvider: cliOptions.modelProvider,
-              apiKeyArn: cliOptions.apiKeyArn,
-              tools: cliOptions.tools,
-              maxIterations: cliOptions.maxIterations,
-              maxTokens: cliOptions.maxTokens,
-              harnessTimeout: cliOptions.harnessTimeout,
-              skills: cliOptions.skills,
-              systemPrompt: cliOptions.systemPrompt,
-              allowedTools: cliOptions.allowedTools,
-              actorId: cliOptions.actorId,
-            });
+            const result = await withCommandRunTelemetry(
+              'invoke',
+              {
+                has_stream: cliOptions.stream ?? false,
+                has_session_id: !!cliOptions.sessionId,
+                auth_type: standardize(AuthType, cliOptions.bearerToken ? 'bearer_token' : 'sigv4'),
+                protocol: standardize(Protocol, resolveProtocol({ tool: cliOptions.tool }, agentProtocol)),
+              },
+              async (): Promise<Result> => {
+                if (!resolved.success) {
+                  const error = resolved.error ?? 'Prompt resolution failed';
+                  if (cliOptions.json) {
+                    console.log(JSON.stringify({ success: false, error }));
+                  } else {
+                    console.error(error);
+                  }
+                  return { success: false, error: new ValidationError(error) };
+                }
+
+                // Parse custom headers
+                let headers: Record<string, string> | undefined;
+                if (cliOptions.header && cliOptions.header.length > 0) {
+                  headers = parseHeaderFlags(cliOptions.header);
+                }
+
+                const options: InvokeOptions = {
+                  prompt: resolved.prompt,
+                  agentName: cliOptions.runtime,
+                  targetName: cliOptions.target ?? 'default',
+                  sessionId: cliOptions.sessionId,
+                  userId: cliOptions.userId,
+                  json: cliOptions.json,
+                  stream: cliOptions.stream,
+                  tool: cliOptions.tool,
+                  input: cliOptions.input,
+                  exec: cliOptions.exec,
+                  timeout: cliOptions.timeout,
+                  headers,
+                  bearerToken: cliOptions.bearerToken,
+                  harnessName: cliOptions.harness,
+                  harnessArn: cliOptions.harnessArn,
+                  region: cliOptions.region,
+                  verbose: cliOptions.verbose,
+                  modelId: cliOptions.modelId,
+                  modelProvider: cliOptions.modelProvider,
+                  apiKeyArn: cliOptions.apiKeyArn,
+                  tools: cliOptions.tools,
+                  maxIterations: cliOptions.maxIterations,
+                  maxTokens: cliOptions.maxTokens,
+                  harnessTimeout: cliOptions.harnessTimeout,
+                  skills: cliOptions.skills,
+                  systemPrompt: cliOptions.systemPrompt,
+                  allowedTools: cliOptions.allowedTools,
+                  actorId: cliOptions.actorId,
+                };
+
+                let invokeResult: InvokeResult;
+                try {
+                  invokeResult = await handleInvokeCLI(options, invokeContext);
+                } catch (err) {
+                  const msg = getErrorMessage(err);
+                  if (cliOptions.json) {
+                    console.log(JSON.stringify({ success: false, error: msg }));
+                  } else {
+                    console.error(msg);
+                  }
+                  return { success: false, error: err instanceof Error ? err : new Error(msg) };
+                }
+                if (invokeResult.success) {
+                  return { success: true };
+                }
+                return { success: false, error: new Error(invokeResult.error ?? 'Invoke failed') };
+              }
+            );
+
+            process.exit(result.success ? 0 : 1);
           } else {
             // No CLI options - interactive TUI mode (headers still passed if provided)
             requireTTY();
+
+            // Parse custom headers for TUI mode
+            let headers: Record<string, string> | undefined;
+            if (cliOptions.header && cliOptions.header.length > 0) {
+              headers = parseHeaderFlags(cliOptions.header);
+            }
+
             const ENTER_ALT_SCREEN = '\x1B[?1049h\x1B[H';
             const EXIT_ALT_SCREEN = '\x1B[?1049l';
             const SHOW_CURSOR = '\x1B[?25h';
@@ -288,20 +362,36 @@ export const registerInvoke = (program: Command) => {
               process.stdout.write(SHOW_CURSOR);
             };
 
-            const { waitUntilExit, unmount } = render(
-              <InvokeScreen
-                isInteractive={true}
-                onExit={() => {
-                  exitAltScreen();
-                  unmount();
-                }}
-                initialSessionId={cliOptions.sessionId}
-                initialUserId={cliOptions.userId}
-                initialHeaders={headers}
-                initialBearerToken={cliOptions.bearerToken}
-              />
+            const tuiResult = await withCommandRunTelemetry(
+              'invoke',
+              {
+                has_stream: true,
+                has_session_id: !!cliOptions.sessionId,
+                auth_type: standardize(AuthType, cliOptions.bearerToken ? 'bearer_token' : 'sigv4'),
+                protocol: standardize(Protocol, resolveProtocol({}, agentProtocol)),
+              },
+              async (): Promise<Result> => {
+                const { waitUntilExit, unmount } = render(
+                  <InvokeScreen
+                    isInteractive={true}
+                    onExit={() => {
+                      exitAltScreen();
+                      unmount();
+                    }}
+                    initialSessionId={cliOptions.sessionId}
+                    initialUserId={cliOptions.userId}
+                    initialHeaders={headers}
+                    initialBearerToken={cliOptions.bearerToken}
+                  />
+                );
+                await waitUntilExit();
+                return { success: true };
+              }
             );
-            await waitUntilExit();
+            if (!tuiResult.success) {
+              render(<Text color="red">Error: {getErrorMessage(tuiResult.error)}</Text>);
+              process.exit(1);
+            }
           }
         } catch (error) {
           if (cliOptions.json) {

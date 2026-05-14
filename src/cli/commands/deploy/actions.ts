@@ -737,7 +737,9 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
     const hasInvokable = agentNames.length > 0 || hasHarnesses;
     const nextSteps = hasInvokable ? [...AGENT_NEXT_STEPS] : [...MEMORY_ONLY_NEXT_STEPS];
     const notes: string[] = [];
-    if (agentNames.length > 0 || hasGateways) {
+    const hasPythonAgent =
+      context.projectSpec.runtimes?.some(a => a.entrypoint?.endsWith('.py') || a.entrypoint?.includes('.py:')) ?? false;
+    if ((agentNames.length > 0 || hasGateways) && hasPythonAgent) {
       try {
         const tsResult = await setupTransactionSearch({
           region: target.region,

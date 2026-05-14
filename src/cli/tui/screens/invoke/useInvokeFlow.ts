@@ -50,6 +50,7 @@ export interface InvokeConfig {
     protocol?: ProtocolMode;
     authorizerType?: RuntimeAuthorizerType;
     baggage?: string;
+    supportsTraces: boolean;
   }[];
   harnesses: {
     name: string;
@@ -169,6 +170,7 @@ export function useInvokeFlow(options: InvokeFlowOptions = {}): InvokeFlowState 
             }
           }
 
+          const supportsTraces = agent.entrypoint?.endsWith('.py') || agent.entrypoint?.includes('.py:') || false;
           runtimes.push({
             name: agent.name,
             state,
@@ -177,6 +179,7 @@ export function useInvokeFlow(options: InvokeFlowOptions = {}): InvokeFlowState 
             protocol: agent.protocol,
             authorizerType: agent.authorizerType,
             baggage,
+            supportsTraces,
           });
         }
 

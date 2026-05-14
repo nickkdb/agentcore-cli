@@ -1,9 +1,15 @@
-import { type Result, findConfigRoot, getWorkingDirectory } from '../../../lib';
+import {
+  ConnectionError,
+  ResourceNotFoundError,
+  type Result,
+  ValidationError,
+  findConfigRoot,
+  getWorkingDirectory,
+} from '../../../lib';
 import { getErrorMessage } from '../../errors';
 import { detectContainerRuntime } from '../../external-requirements';
 import { ExecLogger } from '../../logging';
 import {
-  ConnectionError,
   callMcpTool,
   createDevServer,
   findAvailablePort,
@@ -29,7 +35,6 @@ import { requireProject, requireTTY } from '../../tui/guards';
 import { runCliDeploy } from '../deploy/progress';
 import { parseHeaderFlags } from '../shared/header-utils';
 import { launchTuiDevScreenWithPicker, runBrowserMode } from './browser-mode';
-import { ResourceNotFoundError, ValidationError } from '@/lib/errors/types.js';
 import type { Command } from '@commander-js/extra-typings';
 import { spawn } from 'child_process';
 import { render } from 'ink';
@@ -59,7 +64,7 @@ async function invokeDevServer(
     }
   } catch (err) {
     throw isConnectionRefused(err)
-      ? new ConnectionError(new Error(`Dev server not running on port ${port}. Start it with: agentcore dev --logs`))
+      ? new ConnectionError(`Dev server not running on port ${port}. Start it with: agentcore dev --logs`)
       : err;
   }
 }
@@ -72,7 +77,7 @@ async function invokeA2ADevServer(port: number, prompt: string, headers?: Record
     process.stdout.write('\n');
   } catch (err) {
     throw isConnectionRefused(err)
-      ? new ConnectionError(new Error(`Dev server not running on port ${port}. Start it with: agentcore dev --logs`))
+      ? new ConnectionError(`Dev server not running on port ${port}. Start it with: agentcore dev --logs`)
       : err;
   }
 }
@@ -128,7 +133,7 @@ async function handleMcpInvoke(
     }
   } catch (err) {
     throw isConnectionRefused(err)
-      ? new ConnectionError(new Error(`Dev server not running on port ${port}. Start it with: agentcore dev --logs`))
+      ? new ConnectionError(`Dev server not running on port ${port}. Start it with: agentcore dev --logs`)
       : err;
   }
 }
@@ -310,7 +315,7 @@ export const registerDev = (program: Command) => {
         const supportedAgents = getDevSupportedAgents(project);
         if (supportedAgents.length === 0 && !hasHarnesses) {
           render(
-            <FatalError message="No agents support dev mode. Dev mode requires Python agents with an entrypoint or a harness." />
+            <FatalError message="No agents support dev mode. Dev mode requires an agent with an entrypoint or a harness." />
           );
           process.exit(1);
         }
