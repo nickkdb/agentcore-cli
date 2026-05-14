@@ -226,7 +226,9 @@ export const registerInvoke = (program: Command) => {
         }
       ) => {
         try {
-          requireProject();
+          if (!cliOptions.harnessArn) {
+            requireProject();
+          }
 
           // Load config once for protocol resolution and to pass into handleInvokeCLI
           let invokeContext: InvokeContext | undefined;
