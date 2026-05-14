@@ -30,6 +30,23 @@ function stopSpinner(spinner: NodeJS.Timeout): void {
   process.stderr.write('\r\x1b[K'); // Clear line
 }
 
+function redactSensitiveText(value: string): string {
+  return value
+    .replace(/(bearer\s+)[a-z0-9\-._~+/]+=*/gi, '$1[REDACTED]')
+    .replace(/(client[_-]?secret\s*[:=]\s*)([^,\s]+)/gi, '$1[REDACTED]')
+    .replace(/(token\s*[:=]\s*)([^,\s]+)/gi, '$1[REDACTED]');
+}
+
+function toSafeJsonResult(result: InvokeResult): Record<string, unknown> {
+  return {
+    success: result.success,
+    response: typeof result.response === 'string' ? redactSensitiveText(result.response) : result.response,
+    error: typeof result.error === 'string' ? redactSensitiveText(result.error) : result.error,
+    sessionId: result.sessionId,
+    logFilePath: result.logFilePath,
+  };
+}
+
 function resolveProtocol(options: InvokeOptions, projectProtocol?: string): string {
   if (projectProtocol) return projectProtocol.toLowerCase();
   if (options.tool) return 'mcp';
@@ -41,7 +58,7 @@ async function handleInvokeCLI(options: InvokeOptions, preloadedContext?: Invoke
   if (!validation.valid) {
     const result: InvokeResult = { success: false, error: validation.error ?? 'Validation failed' };
     if (options.json) {
-      console.log(JSON.stringify(result));
+      console.log(JSON.stringify(toSafeJsonResult(result)));
     } else {
       console.error(result.error);
     }
@@ -64,9 +81,9 @@ async function handleInvokeCLI(options: InvokeOptions, preloadedContext?: Invoke
       }
       const result = await handleHarnessInvokeByArn(options.harnessArn, region, options);
       if (options.json) {
-        console.log(JSON.stringify(result));
+        console.log(JSON.stringify(toSafeJsonResult(result)));
       } else if (!result.success && result.error) {
-        console.error(result.error);
+        console.error(redactSensitiveText(result.error));
       }
       process.exit(result.success ? 0 : 1);
     }
@@ -89,7 +106,7 @@ async function handleInvokeCLI(options: InvokeOptions, preloadedContext?: Invoke
     }
 
     if (options.json) {
-      console.log(JSON.stringify(result));
+      console.log(JSON.stringify(toSafeJsonResult(result)));
     } else if (options.stream) {
       // Streaming already wrote to stdout, just show session and log path
       if (result.sessionId) {
@@ -102,9 +119,9 @@ async function handleInvokeCLI(options: InvokeOptions, preloadedContext?: Invoke
     } else {
       // Non-streaming, non-json: print provider info and response or error
       if (result.success && result.response) {
-        console.log(result.response);
+        console.log(redactSensitiveText(result.response));
       } else if (!result.success && result.error) {
-        console.error(result.error);
+        console.error(redactSensitiveText(result.error));
       }
       if (result.sessionId) {
         console.error(`\nSession: ${result.sessionId}`);
