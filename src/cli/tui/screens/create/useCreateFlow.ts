@@ -10,7 +10,7 @@ import {
 import type { DeployedState } from '../../../../schema';
 import { getErrorMessage } from '../../../errors';
 import { CreateLogger } from '../../../logging';
-import { initGitRepo, setupPythonProject, writeEnvFile, writeGitignore } from '../../../operations';
+import { initGitRepo, setupNodeProject, setupPythonProject, writeEnvFile, writeGitignore } from '../../../operations';
 import { createConfigBundleForAgent } from '../../../operations/agent/config-bundle-defaults';
 import {
   mapGenerateConfigToRenderConfig,
@@ -92,8 +92,14 @@ function getCreateSteps(
     if (agentConfig.language === 'Python' && agentConfig.agentType === 'create') {
       steps.push({ label: 'Set up Python environment', status: 'pending' });
     }
+<<<<<<< HEAD
   } else if (harnessConfig) {
     steps.push({ label: 'Add harness to project', status: 'pending' });
+=======
+    if (agentConfig.language === 'TypeScript' && agentConfig.agentType === 'create') {
+      steps.push({ label: 'Set up Node environment', status: 'pending' });
+    }
+>>>>>>> origin/main
   }
 
   steps.push({ label: 'Prepare agentcore/ directory', status: 'pending' });
@@ -516,6 +522,36 @@ export function useCreateFlow(cwd: string): CreateFlowState {
                 status: 'warn',
                 warn: 'Failed to set up Python environment. Run "uv sync" manually to see the error.',
               });
+            }
+            stepIndex++;
+          }
+
+          // Step: Set up Node environment (if TypeScript and create path)
+          if (addAgentConfig.language === 'TypeScript' && addAgentConfig.agentType === 'create') {
+            logger.startStep('Set up Node environment');
+            updateStep(stepIndex, { status: 'running' });
+            const agentDir = join(projectRoot, APP_DIR, addAgentConfig.name);
+            logger.logSubStep(`Agent directory: ${agentDir}`);
+            logger.logSubStep('Running npm install...');
+            const result = await setupNodeProject({ projectDir: agentDir });
+
+            if (result.status === 'success') {
+              logger.endStep('success');
+              updateStep(stepIndex, { status: 'success' });
+            } else {
+              const firstLine = (result.error ?? '').split('\n').find(l => l.trim().length > 0) ?? '';
+              const shortReason = firstLine.replace(/^npm (error|warn) /i, '').slice(0, 160);
+              const warnMsg =
+                result.status === 'npm_not_found'
+                  ? 'npm not found on PATH. Install Node.js 20+ from https://nodejs.org/ and rerun `npm install` in the agent directory.'
+                  : `npm install failed${shortReason ? `: ${shortReason}` : ''}. Run \`npm install\` in ${agentDir} to see the full error.`;
+              if (result.error) {
+                for (const line of result.error.split('\n')) {
+                  if (line.trim().length > 0) logger.logSubStep(line);
+                }
+              }
+              logger.endStep('warn', warnMsg);
+              updateStep(stepIndex, { status: 'warn', warn: warnMsg });
             }
             stepIndex++;
           }

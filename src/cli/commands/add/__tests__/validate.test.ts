@@ -173,12 +173,25 @@ describe('validate', () => {
     });
 
     // AC5: Create path language restrictions
-    it('returns error for create path with TypeScript or Other', () => {
-      let result = validateAddAgentOptions({ ...validAgentOptionsCreate, language: 'TypeScript' });
-      expect(result.valid).toBe(false);
-      expect(result.error?.includes('Python')).toBeTruthy();
+    it('accepts TypeScript with Strands and rejects TypeScript with other frameworks', () => {
+      let result = validateAddAgentOptions({
+        ...validAgentOptionsCreate,
+        language: 'TypeScript',
+        framework: 'Strands',
+      });
+      expect(result.valid).toBe(true);
 
-      result = validateAddAgentOptions({ ...validAgentOptionsCreate, language: 'Other' });
+      result = validateAddAgentOptions({
+        ...validAgentOptionsCreate,
+        language: 'TypeScript',
+        framework: 'LangChain_LangGraph',
+      });
+      expect(result.valid).toBe(false);
+      expect(result.error?.includes('Strands')).toBeTruthy();
+    });
+
+    it('returns error for create path with Other language', () => {
+      const result = validateAddAgentOptions({ ...validAgentOptionsCreate, language: 'Other' });
       expect(result.valid).toBe(false);
       expect(result.error?.includes('Python')).toBeTruthy();
     });

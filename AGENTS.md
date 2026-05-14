@@ -78,7 +78,8 @@ Each primitive extends `BasePrimitive` and implements: `add()`, `remove()`, `pre
 
 Current primitives:
 
-- `AgentPrimitive` — agent creation (template + BYO), removal, credential resolution
+- `AgentPrimitive` — agent creation (template + BYO), removal, credential resolution. Template agents: Strands,
+  LangChain_LangGraph, GoogleADK, OpenAIAgents, VercelAI
 - `MemoryPrimitive` — memory creation with strategies, removal
 - `CredentialPrimitive` — credential creation, .env management, removal
 - `EvaluatorPrimitive` — custom evaluator creation/removal with cross-reference validation
