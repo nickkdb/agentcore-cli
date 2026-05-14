@@ -39,7 +39,13 @@ function resolveProtocol(options: InvokeOptions, projectProtocol?: string): stri
 async function handleInvokeCLI(options: InvokeOptions, preloadedContext?: InvokeContext): Promise<InvokeResult> {
   const validation = validateInvokeOptions(options);
   if (!validation.valid) {
-    return { success: false, error: validation.error ?? 'Validation failed' };
+    const result: InvokeResult = { success: false, error: validation.error ?? 'Validation failed' };
+    if (options.json) {
+      console.log(JSON.stringify(result));
+    } else {
+      console.error(result.error);
+    }
+    return result;
   }
 
   let spinner: NodeJS.Timeout | undefined;
@@ -115,35 +121,6 @@ async function handleInvokeCLI(options: InvokeOptions, preloadedContext?: Invoke
       stopSpinner(spinner);
     }
     throw err;
-  }
-}
-
-function printInvokeResult(result: InvokeResult, options: InvokeOptions): void {
-  if (options.json) {
-    console.log(JSON.stringify(result));
-  } else if (options.stream) {
-    // Streaming already wrote to stdout, just show session and log path
-    if (result.sessionId) {
-      console.error(`\nSession: ${result.sessionId}`);
-      console.error(`To resume: agentcore invoke --session-id ${result.sessionId}`);
-    }
-    if (result.logFilePath) {
-      console.error(`Log: ${result.logFilePath}`);
-    }
-  } else {
-    // Non-streaming, non-json: print provider info and response or error
-    if (result.success && result.response) {
-      console.log(result.response);
-    } else if (!result.success && result.error) {
-      console.error(result.error);
-    }
-    if (result.sessionId) {
-      console.error(`\nSession: ${result.sessionId}`);
-      console.error(`To resume: agentcore invoke --session-id ${result.sessionId}`);
-    }
-    if (result.logFilePath) {
-      console.error(`Log: ${result.logFilePath}`);
-    }
   }
 }
 
@@ -281,7 +258,13 @@ export const registerInvoke = (program: Command) => {
               },
               async (): Promise<Result> => {
                 if (!resolved.success) {
-                  return { success: false, error: new ValidationError(resolved.error ?? 'Prompt resolution failed') };
+                  const error = resolved.error ?? 'Prompt resolution failed';
+                  if (cliOptions.json) {
+                    console.log(JSON.stringify({ success: false, error }));
+                  } else {
+                    console.error(error);
+                  }
+                  return { success: false, error: new ValidationError(error) };
                 }
 
                 // Parse custom headers
@@ -321,8 +304,18 @@ export const registerInvoke = (program: Command) => {
                   actorId: cliOptions.actorId,
                 };
 
-                const invokeResult = await handleInvokeCLI(options, invokeContext);
-                printInvokeResult(invokeResult, options);
+                let invokeResult: InvokeResult;
+                try {
+                  invokeResult = await handleInvokeCLI(options, invokeContext);
+                } catch (err) {
+                  const msg = getErrorMessage(err);
+                  if (cliOptions.json) {
+                    console.log(JSON.stringify({ success: false, error: msg }));
+                  } else {
+                    console.error(msg);
+                  }
+                  return { success: false, error: err instanceof Error ? err : new Error(msg) };
+                }
                 if (invokeResult.success) {
                   return { success: true };
                 }
