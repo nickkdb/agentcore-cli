@@ -8,7 +8,6 @@ import type {
   SDKFramework,
   TargetLanguage,
 } from '../../../schema';
-import { getErrorMessage } from '../../errors';
 import { checkCreateDependencies } from '../../external-requirements';
 import { initGitRepo, setupPythonProject, writeEnvFile, writeGitignore } from '../../operations';
 import { createConfigBundleForAgent } from '../../operations/agent/config-bundle-defaults';
@@ -22,6 +21,7 @@ import { credentialPrimitive } from '../../primitives/registry';
 import { createDefaultProjectSpec } from '../../project';
 import { CDKRenderer, createRenderer } from '../../templates';
 import type { CreateResult } from './types';
+import { toError } from '@/lib/errors/types';
 import { mkdir } from 'fs/promises';
 import { join } from 'path';
 
@@ -57,7 +57,7 @@ export async function createProject(options: CreateProjectOptions): Promise<Crea
 
     // Fail on errors
     if (!depCheck.passed) {
-      return { success: false, error: depCheck.errors.join('\n'), warnings: depWarnings };
+      return { success: false, error: new Error(depCheck.errors.join('\n')), warnings: depWarnings };
     }
   }
 
@@ -93,7 +93,7 @@ export async function createProject(options: CreateProjectOptions): Promise<Crea
       const gitResult = await initGitRepo(projectRoot);
       if (gitResult.status === 'error') {
         onProgress?.('Initialize git repository', 'error');
-        return { success: false, error: gitResult.message, warnings: depWarnings };
+        return { success: false, error: new Error(gitResult.message), warnings: depWarnings };
       }
       onProgress?.('Initialize git repository', 'done');
     }
@@ -104,7 +104,7 @@ export async function createProject(options: CreateProjectOptions): Promise<Crea
       warnings: depWarnings.length > 0 ? depWarnings : undefined,
     };
   } catch (err) {
-    return { success: false, error: getErrorMessage(err), warnings: depWarnings };
+    return { success: false, error: toError(err), warnings: depWarnings };
   }
 }
 
@@ -174,7 +174,7 @@ export async function createProjectWithAgent(options: CreateWithAgentOptions): P
 
   // Fail on errors
   if (!depCheck.passed) {
-    return { success: false, error: depCheck.errors.join('\n'), warnings: depWarnings };
+    return { success: false, error: new Error(depCheck.errors.join('\n')), warnings: depWarnings };
   }
 
   // First create the base project (skip dependency check since we already did it)
@@ -217,7 +217,7 @@ export async function createProjectWithAgent(options: CreateWithAgentOptions): P
         warnings: depWarnings.length > 0 ? depWarnings : undefined,
       };
     } catch (err) {
-      return { success: false, error: getErrorMessage(err), warnings: depWarnings };
+      return { success: false, error: toError(err), warnings: depWarnings };
     }
   }
 
@@ -227,14 +227,12 @@ export async function createProjectWithAgent(options: CreateWithAgentOptions): P
     onProgress?.('Add agent to project', 'start');
     const agentName = name;
     const isMcp = protocol === 'MCP';
-    const resolvedFramework = isMcp ? ('Strands' as SDKFramework) : (framework ?? ('Strands' as SDKFramework));
-    const resolvedModelProvider = isMcp
-      ? ('Bedrock' as ModelProvider)
-      : (modelProvider ?? ('Bedrock' as ModelProvider));
+    const resolvedFramework = isMcp ? 'Strands' : (framework ?? 'Strands');
+    const resolvedModelProvider = isMcp ? 'Bedrock' : (modelProvider ?? 'Bedrock');
 
     const generateConfig = {
       projectName: agentName,
-      buildType: buildType ?? ('CodeZip' as BuildType),
+      buildType: buildType ?? 'CodeZip',
       sdk: resolvedFramework,
       modelProvider: resolvedModelProvider,
       apiKey,
@@ -310,7 +308,7 @@ export async function createProjectWithAgent(options: CreateWithAgentOptions): P
       warnings: depWarnings.length > 0 ? depWarnings : undefined,
     };
   } catch (err) {
-    return { success: false, error: getErrorMessage(err), warnings: depWarnings };
+    return { success: false, error: toError(err), warnings: depWarnings };
   }
 }
 

@@ -1,4 +1,4 @@
-import { APP_DIR, ConfigIO, NoProjectError, findConfigRoot, setEnvVar } from '../../../../lib';
+import { APP_DIR, ConfigIO, NoProjectError, type Result, findConfigRoot, setEnvVar } from '../../../../lib';
 import type { AgentEnvSpec, DirectoryPath, FilePath } from '../../../../schema';
 import { type PythonSetupResult, setupPythonProject } from '../../../operations';
 import { createConfigBundleForAgent } from '../../../operations/agent/config-bundle-defaults';
@@ -28,6 +28,7 @@ import {
 import { createRenderer } from '../../../templates';
 import type { GenerateConfig } from '../generate/types';
 import type { AddAgentConfig } from './types';
+import { ConflictError, ResourceNotFoundError } from '@/lib/errors/types.js';
 import { copyFileSync, existsSync, mkdirSync } from 'fs';
 import { basename, dirname, join, resolve } from 'path';
 import { useCallback, useState } from 'react';
@@ -54,7 +55,7 @@ export interface AddAgentByoResult {
 
 export interface AddAgentError {
   ok: false;
-  error: string;
+  error: Error;
 }
 
 export type AddAgentOutcome = AddAgentCreateResult | AddAgentByoResult | AddAgentError;
@@ -180,26 +181,24 @@ export function useAddAgent() {
   return { addAgent, isLoading, reset };
 }
 
-type AddAgentInnerResult =
-  | { success: true; outcome: AddAgentCreateResult | AddAgentByoResult }
-  | { success: false; error: string };
+type AddAgentInnerResult = Result<{ outcome: AddAgentCreateResult | AddAgentByoResult }>;
 
 async function addAgentInner(config: AddAgentConfig): Promise<AddAgentInnerResult> {
   const configBaseDir = findConfigRoot();
   if (!configBaseDir) {
-    return { success: false, error: new NoProjectError().message };
+    return { success: false, error: new NoProjectError() };
   }
 
   const configIO = new ConfigIO({ baseDir: configBaseDir });
 
   if (!configIO.configExists('project')) {
-    return { success: false, error: new NoProjectError().message };
+    return { success: false, error: new NoProjectError() };
   }
 
   const project = await configIO.readProjectSpec();
   const existingAgent = project.runtimes.find(agent => agent.name === config.name);
   if (existingAgent) {
-    return { success: false, error: `Agent "${config.name}" already exists in this project.` };
+    return { success: false, error: new ConflictError(`Agent "${config.name}" already exists in this project.`) };
   }
 
   let outcome: AddAgentCreateResult | AddAgentByoResult | AddAgentError;
@@ -264,7 +263,7 @@ async function handleCreatePath(
   if (generateConfig.dockerfile?.includes('/')) {
     const sourcePath = resolve(projectRoot, generateConfig.dockerfile);
     if (!existsSync(sourcePath)) {
-      return { ok: false, error: `Dockerfile not found at ${sourcePath}` };
+      return { ok: false, error: new ResourceNotFoundError(`Dockerfile not found at ${sourcePath}`) };
     }
     const filename = basename(sourcePath);
     copyFileSync(sourcePath, join(agentPath, filename));
@@ -374,7 +373,7 @@ async function handleByoPath(
   if (dockerfileName?.includes('/')) {
     const sourcePath = resolve(projectRoot, dockerfileName);
     if (!existsSync(sourcePath)) {
-      return { ok: false, error: `Dockerfile not found at ${sourcePath}` };
+      return { ok: false, error: new ResourceNotFoundError(`Dockerfile not found at ${sourcePath}`) };
     }
     dockerfileName = basename(sourcePath);
     copyFileSync(sourcePath, join(codeDir, dockerfileName));

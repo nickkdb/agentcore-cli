@@ -1,9 +1,9 @@
 import { CONFIG_DIR } from '../../../lib';
 import type { HarnessModelProvider, NetworkMode } from '../../../schema';
-import { getErrorMessage } from '../../errors';
 import { harnessPrimitive } from '../../primitives/registry';
 import { type ProgressCallback, createProject } from './action';
 import type { CreateResult } from './types';
+import { toError } from '@/lib/errors/types';
 import { join } from 'path';
 
 export interface CreateHarnessProjectOptions {
@@ -93,7 +93,7 @@ export async function createProjectWithHarness(options: CreateHarnessProjectOpti
   } catch (err) {
     return {
       success: false,
-      error: getErrorMessage(err),
+      error: toError(err),
       warnings: projectResult.warnings,
     };
   }

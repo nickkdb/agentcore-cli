@@ -288,7 +288,7 @@ export function AddFlow(props: AddFlowProps) {
             });
           }
         } else {
-          setFlow({ name: 'error', message: result.error });
+          setFlow({ name: 'error', message: result.error.message });
         }
       });
     },

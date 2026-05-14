@@ -1,6 +1,6 @@
 import type { ResourceType } from '../../commands/remove/types';
 import { RemoveLogger } from '../../logging';
-import type { RemovableGatewayTarget, RemovalPreview, RemovalResult } from '../../operations/remove';
+import type { RemovableGatewayTarget, RemovalPreview } from '../../operations/remove';
 import type { RemovableCredential } from '../../primitives/CredentialPrimitive';
 import type { RemovableMemory } from '../../primitives/MemoryPrimitive';
 import type { RemovablePolicyResource } from '../../primitives/PolicyPrimitive';
@@ -20,6 +20,7 @@ import {
   policyPrimitive,
   runtimeEndpointPrimitive,
 } from '../../primitives/registry';
+import type { Result } from '@/lib/result';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 // Re-export types for consumers
@@ -61,7 +62,7 @@ function useRemovableResources<T>(loader: () => Promise<T[]>) {
  * All useRemove* hooks delegate to this.
  */
 function useRemoveResource<TIdentifier>(
-  removeFn: (id: TIdentifier) => Promise<RemovalResult>,
+  removeFn: (id: TIdentifier) => Promise<Result>,
   resourceType: ResourceType,
   getResourceName: (id: TIdentifier) => string
 ) {
@@ -73,24 +74,27 @@ function useRemoveResource<TIdentifier>(
   const [state, setState] = useState<RemovalState>({ isLoading: false, result: null });
   const [logFilePath, setLogFilePath] = useState<string | null>(null);
 
-  const remove = useCallback(async (id: TIdentifier, preview?: RemovalPreview): Promise<RemoveResult> => {
-    setState({ isLoading: true, result: null });
-    const result = await removeFnRef.current(id);
-    setState({ isLoading: false, result });
+  const remove = useCallback(
+    async (id: TIdentifier, preview?: RemovalPreview): Promise<Result & { logFilePath?: string }> => {
+      setState({ isLoading: true, result: null });
+      const result = await removeFnRef.current(id);
+      setState({ isLoading: false, result });
 
-    let logPath: string | undefined;
-    if (preview) {
-      const logger = new RemoveLogger({
-        resourceType: resourceTypeRef.current,
-        resourceName: getNameRef.current(id),
-      });
-      logger.logRemoval(preview, result.success, result.success ? undefined : result.error);
-      logPath = logger.getAbsoluteLogPath();
-      setLogFilePath(logPath);
-    }
+      let logPath: string | undefined;
+      if (preview) {
+        const logger = new RemoveLogger({
+          resourceType: resourceTypeRef.current,
+          resourceName: getNameRef.current(id),
+        });
+        logger.logRemoval(preview, result.success, result.success ? undefined : result.error.message);
+        logPath = logger.getAbsoluteLogPath();
+        setLogFilePath(logPath);
+      }
 
-    return { ...result, logFilePath: logPath };
-  }, []);
+      return { ...result, logFilePath: logPath };
+    },
+    []
+  );
 
   const reset = useCallback(() => {
     setState({ isLoading: false, result: null });
@@ -304,10 +308,8 @@ export function useRemovalPreview() {
 
 interface RemovalState {
   isLoading: boolean;
-  result: RemovalResult | null;
+  result: Result | null;
 }
-
-type RemoveResult = RemovalResult & { logFilePath?: string };
 
 export function useRemoveAgent() {
   return useRemoveResource(

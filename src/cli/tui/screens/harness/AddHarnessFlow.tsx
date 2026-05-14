@@ -90,7 +90,7 @@ export function AddHarnessFlow({ isInteractive = true, onExit, onBack, onDev, on
           : undefined,
       });
       if (!result.success) {
-        setFlow({ name: 'error', message: result.error });
+        setFlow({ name: 'error', message: result.error.message });
         return;
       }
 

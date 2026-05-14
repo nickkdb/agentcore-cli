@@ -1,4 +1,4 @@
-import { APP_DIR, ConfigIO, findConfigRoot } from '../../lib';
+import { APP_DIR, ConfigIO, type Result, findConfigRoot } from '../../lib';
 import type {
   HarnessGatewayOutboundAuth,
   HarnessModelProvider,
@@ -11,13 +11,14 @@ import type {
 import { DEFAULT_EPISODIC_REFLECTION_NAMESPACES, DEFAULT_STRATEGY_NAMESPACES, HarnessSpecSchema } from '../../schema';
 import { deleteHarness } from '../aws/agentcore-harness';
 import { getErrorMessage } from '../errors';
-import type { RemovalPreview, RemovalResult, SchemaChange } from '../operations/remove/types';
+import type { RemovalPreview, SchemaChange } from '../operations/remove/types';
 import { getTemplatePath } from '../templates/templateRoot';
 import { DEFAULT_MEMORY_EXPIRY_DAYS } from '../tui/screens/generate/defaults';
 import { BasePrimitive } from './BasePrimitive';
 import { buildAuthorizerConfigFromJwtConfig, createManagedOAuthCredential } from './auth-utils';
 import type { JwtConfigOptions } from './auth-utils';
-import type { AddResult, AddScreenComponent, RemovableResource } from './types';
+import type { AddScreenComponent, RemovableResource } from './types';
+import { ResourceNotFoundError, toError } from '@/lib/errors/types';
 import type { Command } from '@commander-js/extra-typings';
 import { access, copyFile, mkdir, readFile, rm, writeFile } from 'fs/promises';
 import { basename, dirname, isAbsolute, join, resolve } from 'path';
@@ -61,11 +62,14 @@ export class HarnessPrimitive extends BasePrimitive<AddHarnessOptions, Removable
   readonly label = 'Harness';
   readonly primitiveSchema = HarnessSpecSchema;
 
-  async add(options: AddHarnessOptions): Promise<AddResult<{ harnessName: string }>> {
+  async add(options: AddHarnessOptions): Promise<Result<{ harnessName: string }>> {
     try {
       const configBaseDir = options.configBaseDir ?? findConfigRoot();
       if (!configBaseDir) {
-        return { success: false, error: 'No agentcore project found. Run `agentcore create` first.' };
+        return {
+          success: false,
+          error: new ResourceNotFoundError('No agentcore project found. Run `agentcore create` first.'),
+        };
       }
 
       const configIO = new ConfigIO({ baseDir: configBaseDir });
@@ -85,7 +89,7 @@ export class HarnessPrimitive extends BasePrimitive<AddHarnessOptions, Removable
         try {
           await access(srcPath);
         } catch {
-          return { success: false, error: `Dockerfile not found at: ${srcPath}` };
+          return { success: false, error: new ResourceNotFoundError(`Dockerfile not found at: ${srcPath}`) };
         }
         const appDir = join(projectRoot, APP_DIR, options.name);
         await mkdir(appDir, { recursive: true });
@@ -227,15 +231,15 @@ export class HarnessPrimitive extends BasePrimitive<AddHarnessOptions, Removable
 
       return { success: true, harnessName: options.name };
     } catch (err) {
-      return { success: false, error: getErrorMessage(err) };
+      return { success: false, error: toError(err) };
     }
   }
 
-  async remove(harnessName: string): Promise<RemovalResult> {
+  async remove(harnessName: string): Promise<Result> {
     try {
       const configRoot = findConfigRoot();
       if (!configRoot) {
-        return { success: false, error: 'No agentcore project found.' };
+        return { success: false, error: new ResourceNotFoundError('No agentcore project found.') };
       }
 
       const configIO = new ConfigIO({ baseDir: configRoot });
@@ -245,7 +249,7 @@ export class HarnessPrimitive extends BasePrimitive<AddHarnessOptions, Removable
       const harnessIndex = harnesses.findIndex(h => h.name === harnessName);
 
       if (harnessIndex === -1) {
-        return { success: false, error: `Harness "${harnessName}" not found.` };
+        return { success: false, error: new ResourceNotFoundError(`Harness "${harnessName}" not found.`) };
       }
 
       // Delete harness from AWS if it's deployed
@@ -279,7 +283,7 @@ export class HarnessPrimitive extends BasePrimitive<AddHarnessOptions, Removable
 
       return { success: true };
     } catch (err) {
-      return { success: false, error: getErrorMessage(err) };
+      return { success: false, error: toError(err) };
     }
   }
 

@@ -1,4 +1,4 @@
-import { ConfigIO } from '../../../lib';
+import { ConfigIO, type Result } from '../../../lib';
 import { getErrorMessage } from '../../errors';
 import { withCommandRunTelemetry } from '../../telemetry/cli-command-run.js';
 import { COMMAND_DESCRIPTIONS } from '../../tui/copy';
@@ -10,7 +10,6 @@ import { DEFAULT_DEPLOY_ATTRS, computeDeployAttrs } from './utils';
 import { validateDeployOptions } from './validate';
 import type { Command } from '@commander-js/extra-typings';
 import { Text, render } from 'ink';
-import React from 'react';
 
 const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
@@ -48,32 +47,46 @@ async function handleDeployCLI(options: DeployOptions): Promise<void> {
     .then(spec => computeDeployAttrs(spec, mode))
     .catch(() => ({ ...DEFAULT_DEPLOY_ATTRS, mode }) as const);
 
-  const { deployResult } = await withCommandRunTelemetry('deploy', attrs, async () => {
-    const result = await executeDeploy(options).catch(
-      (e): DeployResult => ({ success: false, error: getErrorMessage(e) })
-    );
-    if (!result.success) {
-      return { success: false as const, error: result.error ?? 'Deploy failed', deployResult: result };
+  const executeDeployResult = await withCommandRunTelemetry<'deploy', Result & { deployResult: DeployResult }>(
+    'deploy',
+    attrs,
+    async () => {
+      const result = await executeDeploy(options).catch(
+        (e): DeployResult => ({ success: false, error: getErrorMessage(e) })
+      );
+      if (!result.success) {
+        return { success: false as const, error: new Error(result.error ?? 'Deploy failed'), deployResult: result };
+      }
+      return { success: true as const, deployResult: result };
     }
-    return { success: true as const, deployResult: result };
-  });
+  );
 
   // ALL output happens here, after telemetry
-  if (!deployResult.success) {
+  if (!executeDeployResult.success) {
     if (options.json) {
-      console.log(JSON.stringify(deployResult));
+      console.log(
+        JSON.stringify({
+          ...executeDeployResult.deployResult,
+          success: false,
+          error: executeDeployResult.error.message,
+        })
+      );
     } else {
-      console.error(deployResult.error);
-      if (deployResult.logPath) {
-        console.error(`Log: ${deployResult.logPath}`);
+      console.error(executeDeployResult.error.message);
+      if (executeDeployResult.deployResult.logPath) {
+        console.error(`Log: ${executeDeployResult.deployResult.logPath}`);
       }
     }
     process.exit(1);
   }
 
-  printDeployResult(deployResult as DeployResult & { success: true }, options);
+  // cast is safe because we are guarenteed success because we exit the process if success is false above.
+  printDeployResult(executeDeployResult.deployResult as DeployResult & { success: true }, options);
 
-  if (deployResult.postDeployWarnings && deployResult.postDeployWarnings.length > 0) {
+  if (
+    executeDeployResult.deployResult.postDeployWarnings &&
+    executeDeployResult.deployResult.postDeployWarnings.length > 0
+  ) {
     process.exit(2);
   }
   process.exit(0);
@@ -204,7 +217,7 @@ export const registerDeploy = (program: Command) => {
               target: cliOptions.target ?? 'default',
               progress: !cliOptions.json,
             };
-            await handleDeployCLI(options as DeployOptions);
+            await handleDeployCLI(options);
           } else if (cliOptions.diff) {
             // Diff-only: use TUI with diff mode
             requireTTY();

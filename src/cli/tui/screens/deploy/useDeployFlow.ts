@@ -1,5 +1,5 @@
-import { ConfigIO } from '../../../../lib';
-import type { DeployedState, HarnessDeployedState } from '../../../../schema';
+import { ConfigIO, type Result } from '../../../../lib';
+import type { HarnessDeployedState } from '../../../../schema';
 import type { CdkToolkitWrapper, DeployMessage, SwitchableIoHost } from '../../../cdk/toolkit-lib';
 import {
   buildDeployedState,
@@ -25,7 +25,7 @@ import {
 } from '../../../operations/deploy/post-deploy-config-bundles';
 import { setupHttpGateways } from '../../../operations/deploy/post-deploy-http-gateways';
 import { enableOnlineEvalConfigs } from '../../../operations/deploy/post-deploy-online-evals';
-import { type OperationResult, withCommandRunTelemetry } from '../../../telemetry/cli-command-run.js';
+import { withCommandRunTelemetry } from '../../../telemetry/cli-command-run.js';
 import {
   type StackDiffSummary,
   type Step,
@@ -607,7 +607,7 @@ export function useDeployFlow(options: DeployFlowOptions = {}): DeployFlowState 
 
     const attrs = context ? computeDeployAttrs(context.projectSpec, 'deploy') : { ...DEFAULT_DEPLOY_ATTRS };
 
-    const run = async (): Promise<OperationResult> => {
+    const run = async (): Promise<Result> => {
       // Run diff before deploy to capture pre-deploy differences
       if (!isDiffRunningRef.current) {
         isDiffRunningRef.current = true;
@@ -680,9 +680,7 @@ export function useDeployFlow(options: DeployFlowOptions = {}): DeployFlowState 
           if (teardownTarget) {
             const imperativeManager = createDeploymentManager();
             const configIO = new ConfigIO();
-            const existingTeardownState = await configIO
-              .readDeployedState()
-              .catch(() => ({ targets: {} }) as DeployedState);
+            const existingTeardownState = await configIO.readDeployedState().catch(() => ({ targets: {} }));
             const teardownContext = {
               projectSpec: context.projectSpec,
               target: teardownTarget,
@@ -787,7 +785,7 @@ export function useDeployFlow(options: DeployFlowOptions = {}): DeployFlowState 
             error: logger.getFailureMessage('Publish assets'),
           }));
         }
-        return { success: false, error: errorMsg };
+        return { success: false, error: new Error(errorMsg) };
       } finally {
         // Disable verbose output and clear callback after deploy
         switchableIoHost?.setVerbose(false);
@@ -808,9 +806,7 @@ export function useDeployFlow(options: DeployFlowOptions = {}): DeployFlowState 
     shouldStartDeploy,
     persistDeployedState,
     switchableIoHost,
-    context?.isTeardownDeploy,
-    context?.awsTargets,
-    context?.projectSpec.runtimes,
+    context,
     diffMode,
   ]);
 
@@ -826,7 +822,7 @@ export function useDeployFlow(options: DeployFlowOptions = {}): DeployFlowState 
       ? computeDeployAttrs(context.projectSpec, 'diff')
       : { ...DEFAULT_DEPLOY_ATTRS, mode: 'diff' as const };
 
-    const run = async (): Promise<OperationResult> => {
+    const run = async (): Promise<Result> => {
       setDiffStep(prev => ({ ...prev, status: 'running' }));
       setShouldStartDeploy(false);
       setDiffSummaries([]);
@@ -862,7 +858,7 @@ export function useDeployFlow(options: DeployFlowOptions = {}): DeployFlowState 
           status: 'error',
           error: logger.getFailureMessage('Run CDK diff'),
         }));
-        return { success: false, error: errorMsg };
+        return { success: false, error: new Error(errorMsg) };
       } finally {
         switchableIoHost?.setVerbose(false);
         switchableIoHost?.setOnRawMessage(null);
@@ -880,6 +876,7 @@ export function useDeployFlow(options: DeployFlowOptions = {}): DeployFlowState 
     skipPreflight,
     shouldStartDeploy,
     switchableIoHost,
+    context,
   ]);
 
   // Finalize logger and dispose toolkit when preflight fails

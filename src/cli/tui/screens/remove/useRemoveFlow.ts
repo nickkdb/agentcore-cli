@@ -1,7 +1,6 @@
-import { ConfigIO, getWorkingDirectory } from '../../../../lib';
+import { ConfigIO, type Result, getWorkingDirectory } from '../../../../lib';
 import { findStack } from '../../../cloudformation/stack-discovery';
 import { getErrorMessage } from '../../../errors';
-import type { RemovalResult } from '../../../operations/remove/types';
 import { createDefaultProjectSpec } from '../../../project';
 import { withCommandRunTelemetry } from '../../../telemetry/cli-command-run.js';
 import { type Step, areStepsComplete, hasStepError } from '../../components';
@@ -151,7 +150,7 @@ export function useRemoveFlow({ force, dryRun }: RemoveFlowOptions): RemoveFlowS
           const res = await withCommandRunTelemetry(
             'remove.all',
             {},
-            (): Promise<RemovalResult> =>
+            (): Promise<Result> =>
               withMinDuration(async () => {
                 const configIO = new ConfigIO();
 
@@ -164,7 +163,7 @@ export function useRemoveFlow({ force, dryRun }: RemoveFlowOptions): RemoveFlowS
                 return { success: true };
               })
           );
-          if (!res.success) throw new Error(res.error);
+          if (!res.success) throw res.error;
           updateStep(0, { status: 'success' });
         } catch (err) {
           updateStep(0, { status: 'error', error: getErrorMessage(err) });

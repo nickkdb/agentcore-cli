@@ -3,19 +3,18 @@
  * Provides executeImportAgent() as the shared handler called by both
  * the TUI hook (useAddAgent) and the non-interactive CLI (AgentPrimitive).
  */
-import { APP_DIR, ConfigIO } from '../../../../lib';
+import { APP_DIR, ConfigIO, type Result } from '../../../../lib';
 import type { RuntimeAuthorizerType, SDKFramework } from '../../../../schema';
 import { getBedrockAgentConfig } from '../../../aws/bedrock-import';
-import { getErrorMessage } from '../../../errors';
 import type { JwtConfigOptions } from '../../../primitives/auth-utils';
 import { createManagedOAuthCredential } from '../../../primitives/auth-utils';
-import type { AddResult } from '../../../primitives/types';
 import type { MemoryOption } from '../../../tui/screens/generate/types';
 import { setupPythonProject } from '../../python';
 import { writeAgentToProject } from '../generate/write-agent-to-project';
 import { LangGraphTranslator } from './langgraph-translator';
 import { generatePyprojectToml } from './pyproject-generator';
 import { StrandsTranslator } from './strands-translator';
+import { toError } from '@/lib/errors/types';
 import { mkdirSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 
@@ -36,7 +35,7 @@ export interface ExecuteImportAgentParams {
 
 export async function executeImportAgent(
   params: ExecuteImportAgentParams
-): Promise<AddResult<{ agentName: string; agentPath: string }>> {
+): Promise<Result<{ agentName: string; agentPath: string }>> {
   const {
     name,
     framework,
@@ -120,6 +119,6 @@ export async function executeImportAgent(
 
     return { success: true, agentName: name, agentPath };
   } catch (err) {
-    return { success: false, error: getErrorMessage(err) };
+    return { success: false, error: toError(err) };
   }
 }

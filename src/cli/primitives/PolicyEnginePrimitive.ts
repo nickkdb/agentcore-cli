@@ -1,14 +1,15 @@
-import { findConfigRoot } from '../../lib';
+import { type Result, findConfigRoot } from '../../lib';
 import type { AgentCoreProjectSpec, PolicyEngine } from '../../schema';
 import { PolicyEngineModeSchema, PolicyEngineSchema } from '../../schema';
 import { getErrorMessage } from '../errors';
-import type { RemovalPreview, RemovalResult, SchemaChange } from '../operations/remove/types';
+import type { RemovalPreview, SchemaChange } from '../operations/remove/types';
 import { runCliCommand, withCommandRunTelemetry } from '../telemetry/cli-command-run.js';
 import { AttachMode, standardize } from '../telemetry/schemas/common-shapes.js';
 import { requireTTY } from '../tui/guards/tty';
 import { BasePrimitive } from './BasePrimitive';
 import { SOURCE_CODE_NOTE } from './constants';
-import type { AddResult, AddScreenComponent, RemovableResource } from './types';
+import type { AddScreenComponent, RemovableResource } from './types';
+import { ResourceNotFoundError, toError } from '@/lib/errors/types.js';
 import type { Command } from '@commander-js/extra-typings';
 
 export interface AddPolicyEngineOptions {
@@ -22,7 +23,7 @@ export class PolicyEnginePrimitive extends BasePrimitive<AddPolicyEngineOptions,
   readonly label = 'Policy Engine';
   readonly primitiveSchema = PolicyEngineSchema;
 
-  async add(options: AddPolicyEngineOptions): Promise<AddResult<{ engineName: string }>> {
+  async add(options: AddPolicyEngineOptions): Promise<Result<{ engineName: string }>> {
     try {
       const project = await this.readProjectSpec();
 
@@ -40,17 +41,17 @@ export class PolicyEnginePrimitive extends BasePrimitive<AddPolicyEngineOptions,
 
       return { success: true, engineName: engine.name };
     } catch (err) {
-      return { success: false, error: getErrorMessage(err) };
+      return { success: false, error: toError(err) };
     }
   }
 
-  async remove(engineName: string): Promise<RemovalResult> {
+  async remove(engineName: string): Promise<Result> {
     try {
       const project = await this.readProjectSpec();
 
       const index = project.policyEngines.findIndex(e => e.name === engineName);
       if (index === -1) {
-        return { success: false, error: `Policy engine "${engineName}" not found.` };
+        return { success: false, error: new ResourceNotFoundError(`Policy engine "${engineName}" not found.`) };
       }
 
       project.policyEngines.splice(index, 1);
@@ -70,8 +71,7 @@ export class PolicyEnginePrimitive extends BasePrimitive<AddPolicyEngineOptions,
 
       return { success: true };
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      return { success: false, error: message };
+      return { success: false, error: toError(err) };
     }
   }
 
@@ -251,7 +251,7 @@ export class PolicyEnginePrimitive extends BasePrimitive<AddPolicyEngineOptions,
               }
 
               if (!result.success) {
-                throw new Error(result.error);
+                throw result.error;
               }
 
               if (cliOptions.json) {
@@ -327,7 +327,7 @@ export class PolicyEnginePrimitive extends BasePrimitive<AddPolicyEngineOptions,
                   resourceName: cliOptions.name,
                   message: result.success ? `Removed policy engine '${cliOptions.name}'` : undefined,
                   note: result.success ? SOURCE_CODE_NOTE : undefined,
-                  error: !result.success ? result.error : undefined,
+                  error: !result.success ? getErrorMessage(result.error) : undefined,
                 })
               );
             } else if (result.success) {

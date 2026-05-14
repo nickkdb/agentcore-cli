@@ -1,10 +1,11 @@
-import { findConfigRoot } from '../../lib';
+import { type Result, findConfigRoot, serializeResult } from '../../lib';
 import type { ConfigBundle } from '../../schema';
 import { ConfigBundleSchema } from '../../schema';
 import { getErrorMessage } from '../errors';
-import type { RemovalPreview, RemovalResult, SchemaChange } from '../operations/remove/types';
+import type { RemovalPreview, SchemaChange } from '../operations/remove/types';
 import { BasePrimitive } from './BasePrimitive';
-import type { AddResult, AddScreenComponent, RemovableResource } from './types';
+import type { AddScreenComponent, RemovableResource } from './types';
+import { ResourceNotFoundError, toError } from '@/lib/errors/types';
 import type { Command } from '@commander-js/extra-typings';
 import { readFileSync } from 'fs';
 
@@ -32,22 +33,22 @@ export class ConfigBundlePrimitive extends BasePrimitive<AddConfigBundleOptions,
   override readonly article = 'a';
   readonly primitiveSchema = ConfigBundleSchema;
 
-  async add(options: AddConfigBundleOptions): Promise<AddResult<{ bundleName: string }>> {
+  async add(options: AddConfigBundleOptions): Promise<Result<{ bundleName: string }>> {
     try {
       const bundle = await this.createConfigBundle(options);
       return { success: true, bundleName: bundle.name };
     } catch (err) {
-      return { success: false, error: getErrorMessage(err) };
+      return { success: false, error: toError(err) };
     }
   }
 
-  async remove(bundleName: string): Promise<RemovalResult> {
+  async remove(bundleName: string): Promise<Result> {
     try {
       const project = await this.readProjectSpec();
 
       const index = (project.configBundles ?? []).findIndex(b => b.name === bundleName);
       if (index === -1) {
-        return { success: false, error: `Configuration bundle "${bundleName}" not found.` };
+        return { success: false, error: new ResourceNotFoundError(`Configuration bundle "${bundleName}" not found.`) };
       }
 
       project.configBundles.splice(index, 1);
@@ -55,7 +56,7 @@ export class ConfigBundlePrimitive extends BasePrimitive<AddConfigBundleOptions,
 
       return { success: true };
     } catch (err) {
-      return { success: false, error: getErrorMessage(err) };
+      return { success: false, error: toError(err) };
     }
   }
 
@@ -170,7 +171,7 @@ export class ConfigBundlePrimitive extends BasePrimitive<AddConfigBundleOptions,
               });
 
               if (cliOptions.json) {
-                console.log(JSON.stringify(result));
+                console.log(JSON.stringify(serializeResult(result)));
               } else if (result.success) {
                 console.log(`Added configuration bundle '${result.bundleName}'`);
               } else {

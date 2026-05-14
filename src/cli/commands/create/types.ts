@@ -1,4 +1,5 @@
 import type { VpcOptions } from '../shared/vpc-utils';
+import type { Result } from '@/lib';
 
 export interface CreateOptions extends VpcOptions {
   name?: string;
@@ -37,12 +38,13 @@ export interface CreateOptions extends VpcOptions {
   truncationStrategy?: string;
 }
 
-export interface CreateResult {
+export type CreateResult = Result<{
   success: boolean;
-  projectPath?: string;
   agentName?: string;
   error?: string;
   dryRun?: boolean;
+}> & {
   wouldCreate?: string[];
   warnings?: string[];
-}
+  projectPath?: string;
+};

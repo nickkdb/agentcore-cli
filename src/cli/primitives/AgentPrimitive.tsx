@@ -1,4 +1,4 @@
-import { APP_DIR, ConfigIO, NoProjectError, findConfigRoot, setEnvVar } from '../../lib';
+import { APP_DIR, ConfigIO, NoProjectError, type Result, findConfigRoot, setEnvVar } from '../../lib';
 import type {
   AgentEnvSpec,
   BuildType,
@@ -24,7 +24,7 @@ import { validateAddAgentOptions } from '../commands/add/validate';
 import { parseAndNormalizeHeaders } from '../commands/shared/header-utils';
 import type { VpcOptions } from '../commands/shared/vpc-utils';
 import { VPC_ENDPOINT_WARNING, parseCommaSeparatedList } from '../commands/shared/vpc-utils';
-import { getErrorMessage } from '../errors';
+import { AgentAlreadyExistsError, getErrorMessage } from '../errors';
 import { createConfigBundleForAgent } from '../operations/agent/config-bundle-defaults';
 import {
   mapGenerateConfigToRenderConfig,
@@ -34,7 +34,7 @@ import {
 } from '../operations/agent/generate';
 import { executeImportAgent } from '../operations/agent/import';
 import { setupPythonProject } from '../operations/python';
-import type { RemovalPreview, RemovalResult, SchemaChange } from '../operations/remove/types';
+import type { RemovalPreview, SchemaChange } from '../operations/remove/types';
 import { runCliCommand } from '../telemetry/cli-command-run.js';
 import {
   AgentType,
@@ -55,7 +55,8 @@ import { BasePrimitive } from './BasePrimitive';
 import { CredentialPrimitive } from './CredentialPrimitive';
 import { buildAuthorizerConfigFromJwtConfig, createManagedOAuthCredential } from './auth-utils';
 import { computeDefaultCredentialEnvVarName } from './credential-utils';
-import type { AddResult, AddScreenComponent, RemovableResource } from './types';
+import type { AddScreenComponent, RemovableResource } from './types';
+import { ResourceNotFoundError, toError } from '@/lib/errors/types.js';
 import type { Command } from '@commander-js/extra-typings';
 import { mkdirSync } from 'fs';
 import { dirname, join } from 'path';
@@ -115,17 +116,17 @@ export class AgentPrimitive extends BasePrimitive<AddAgentOptions, RemovableReso
     };
   }
 
-  async add(options: AddAgentOptions): Promise<AddResult<{ agentName: string; agentPath?: string }>> {
+  async add(options: AddAgentOptions): Promise<Result<{ agentName: string; agentPath?: string }>> {
     try {
       const configBaseDir = findConfigRoot();
       if (!configBaseDir) {
-        return { success: false, error: new NoProjectError().message };
+        return { success: false, error: new NoProjectError() };
       }
 
       const configIO = new ConfigIO({ baseDir: configBaseDir });
 
       if (!configIO.configExists('project')) {
-        return { success: false, error: new NoProjectError().message };
+        return { success: false, error: new NoProjectError() };
       }
 
       const project = await configIO.readProjectSpec();
@@ -133,7 +134,9 @@ export class AgentPrimitive extends BasePrimitive<AddAgentOptions, RemovableReso
       if (existingAgent) {
         return {
           success: false,
-          error: `Agent "${options.name}" already exists. To update its configuration, edit agentcore/agentcore.json directly.`,
+          error: new AgentAlreadyExistsError(
+            `Agent "${options.name}" already exists. To update its configuration, edit agentcore/agentcore.json directly.`
+          ),
         };
       }
 
@@ -145,17 +148,17 @@ export class AgentPrimitive extends BasePrimitive<AddAgentOptions, RemovableReso
         return await this.handleCreatePath(options, configBaseDir);
       }
     } catch (err) {
-      return { success: false, error: getErrorMessage(err) };
+      return { success: false, error: toError(err) };
     }
   }
 
-  async remove(agentName: string): Promise<RemovalResult> {
+  async remove(agentName: string): Promise<Result> {
     try {
       const project = await this.readProjectSpec();
 
       const agentIndex = project.runtimes.findIndex(a => a.name === agentName);
       if (agentIndex === -1) {
-        return { success: false, error: `Agent "${agentName}" not found.` };
+        return { success: false, error: new ResourceNotFoundError(`Agent "${agentName}" not found.`) };
       }
 
       // Remove agent (credentials preserved for potential reuse)
@@ -164,8 +167,7 @@ export class AgentPrimitive extends BasePrimitive<AddAgentOptions, RemovableReso
 
       return { success: true };
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      return { success: false, error: message };
+      return { success: false, error: toError(err) };
     }
   }
 
@@ -333,7 +335,7 @@ export class AgentPrimitive extends BasePrimitive<AddAgentOptions, RemovableReso
             });
 
             if (!result.success) {
-              throw new Error(result.error);
+              throw result.error;
             }
 
             if (cliOptions.json) {
@@ -400,7 +402,7 @@ export class AgentPrimitive extends BasePrimitive<AddAgentOptions, RemovableReso
   private async handleCreatePath(
     options: AddAgentOptions,
     configBaseDir: string
-  ): Promise<AddResult<{ agentName: string; agentPath?: string }>> {
+  ): Promise<Result<{ agentName: string; agentPath?: string }>> {
     const projectRoot = dirname(configBaseDir);
     const configIO = new ConfigIO({ baseDir: configBaseDir });
     const project = await configIO.readProjectSpec();
@@ -510,7 +512,7 @@ export class AgentPrimitive extends BasePrimitive<AddAgentOptions, RemovableReso
   private async handleImportPath(
     options: AddAgentOptions,
     configBaseDir: string
-  ): Promise<AddResult<{ agentName: string; agentPath?: string }>> {
+  ): Promise<Result<{ agentName: string; agentPath?: string }>> {
     return executeImportAgent({
       name: options.name,
       framework: options.framework,
@@ -532,7 +534,7 @@ export class AgentPrimitive extends BasePrimitive<AddAgentOptions, RemovableReso
     options: AddAgentOptions,
     configIO: ConfigIO,
     configBaseDir: string
-  ): Promise<AddResult<{ agentName: string; agentPath?: string }>> {
+  ): Promise<Result<{ agentName: string; agentPath?: string }>> {
     const codeLocation = options.codeLocation!.endsWith('/') ? options.codeLocation! : `${options.codeLocation!}/`;
 
     // Create the agent code directory so users know where to put their code
