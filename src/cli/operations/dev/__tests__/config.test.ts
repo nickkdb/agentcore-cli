@@ -614,6 +614,7 @@ describe('getDevSupportedAgents', () => {
       configBundles: [],
       abTests: [],
       httpGateways: [],
+      harnesses: [],
     };
 
     const supported = getDevSupportedAgents(project);

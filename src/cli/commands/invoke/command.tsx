@@ -1,4 +1,4 @@
-import { type Result, ValidationError, serializeResult } from '../../../lib';
+import { type Result, ValidationError } from '../../../lib';
 import { getErrorMessage } from '../../errors';
 import { withCommandRunTelemetry } from '../../telemetry/cli-command-run.js';
 import { AuthType, Protocol, standardize } from '../../telemetry/schemas/common-shapes.js';
@@ -39,7 +39,7 @@ function resolveProtocol(options: InvokeOptions, projectProtocol?: string): stri
 async function handleInvokeCLI(options: InvokeOptions, preloadedContext?: InvokeContext): Promise<InvokeResult> {
   const validation = validateInvokeOptions(options);
   if (!validation.valid) {
-    return { success: false, error: new ValidationError(validation.error ?? 'Validation failed') };
+    return { success: false, error: validation.error ?? 'Validation failed' };
   }
 
   let spinner: NodeJS.Timeout | undefined;
@@ -65,7 +65,7 @@ async function handleInvokeCLI(options: InvokeOptions, preloadedContext?: Invoke
       process.exit(result.success ? 0 : 1);
     }
 
-    const context = preloadedContext ??await loadInvokeConfig();
+    const context = preloadedContext ?? (await loadInvokeConfig());
 
     // Show spinner for non-streaming, non-json, non-exec invocations
     // Harness invoke always streams directly to stdout, so skip spinner for harness
@@ -120,7 +120,7 @@ async function handleInvokeCLI(options: InvokeOptions, preloadedContext?: Invoke
 
 function printInvokeResult(result: InvokeResult, options: InvokeOptions): void {
   if (options.json) {
-    console.log(JSON.stringify(serializeResult(result)));
+    console.log(JSON.stringify(result));
   } else if (options.stream) {
     // Streaming already wrote to stdout, just show session and log path
     if (result.sessionId) {
@@ -135,7 +135,7 @@ function printInvokeResult(result: InvokeResult, options: InvokeOptions): void {
     if (result.success && result.response) {
       console.log(result.response);
     } else if (!result.success && result.error) {
-      console.error(result.error.message);
+      console.error(result.error);
     }
     if (result.sessionId) {
       console.error(`\nSession: ${result.sessionId}`);
@@ -277,12 +277,9 @@ export const registerInvoke = (program: Command) => {
                 has_stream: cliOptions.stream ?? false,
                 has_session_id: !!cliOptions.sessionId,
                 auth_type: standardize(AuthType, cliOptions.bearerToken ? 'bearer_token' : 'sigv4'),
-                protocol: standardize(
-                  Protocol,
-                  resolveProtocol({ tool: cliOptions.tool } as InvokeOptions, agentProtocol)
-                ),
+                protocol: standardize(Protocol, resolveProtocol({ tool: cliOptions.tool }, agentProtocol)),
               },
-              async (): Promise<InvokeResult> => {
+              async (): Promise<Result> => {
                 if (!resolved.success) {
                   return { success: false, error: new ValidationError(resolved.error ?? 'Prompt resolution failed') };
                 }
@@ -324,14 +321,15 @@ export const registerInvoke = (program: Command) => {
                   actorId: cliOptions.actorId,
                 };
 
-                return handleInvokeCLI(options, invokeContext);
+                const invokeResult = await handleInvokeCLI(options, invokeContext);
+                printInvokeResult(invokeResult, options);
+                if (invokeResult.success) {
+                  return { success: true };
+                }
+                return { success: false, error: new Error(invokeResult.error ?? 'Invoke failed') };
               }
             );
 
-            printInvokeResult(result, {
-              json: cliOptions.json,
-              stream: cliOptions.stream,
-            });
             process.exit(result.success ? 0 : 1);
           } else {
             // No CLI options - interactive TUI mode (headers still passed if provided)

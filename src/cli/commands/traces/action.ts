@@ -31,9 +31,7 @@ export async function handleTracesList(
   if (!isPython) {
     return {
       success: false,
-      error: new ValidationError(
-        'Traces are only supported for Python agents. TypeScript agents do not support observability traces.'
-      ),
+      error: 'Traces are only supported for Python agents. TypeScript agents do not support observability traces.',
     };
   }
 
@@ -109,9 +107,7 @@ export async function handleTracesGet(
   if (!isPython) {
     return {
       success: false,
-      error: new ValidationError(
-        'Traces are only supported for Python agents. TypeScript agents do not support observability traces.'
-      ),
+      error: 'Traces are only supported for Python agents. TypeScript agents do not support observability traces.',
     };
   }
 
