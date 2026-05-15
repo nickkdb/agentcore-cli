@@ -17,11 +17,13 @@ export class OtelMetricSink implements MetricSink {
 
   constructor(config: OtelMetricSinkConfig) {
     const resource = resourceFromAttributes(config.resource);
+    const url = config.endpoint.endsWith('/v1/metrics') ? config.endpoint : `${config.endpoint}/v1/metrics`;
     const exporter = new OTLPMetricExporter({
-      url: `${config.endpoint}/v1/metrics`,
+      url,
       headers: { 'X-Installation-Id': config.resource['agentcore-cli.installation_id'] },
       temporalityPreference: AggregationTemporality.DELTA,
     });
+
     this.meterProvider = new MeterProvider({
       resource,
       readers: [
