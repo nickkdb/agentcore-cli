@@ -270,33 +270,37 @@ function mapMemory(
   deployedResources?: DeployedResourceState,
   cdkOutputs?: Record<string, string>
 ): HarnessMemoryConfiguration | undefined {
+  let arn: string | undefined;
+
   // Direct ARN takes precedence
   if (memory.arn) {
-    return { memoryArn: memory.arn };
-  }
-
-  // Resolve by name from deployed state or CDK outputs
-  if (memory.name) {
-    // Try deployed state first
+    arn = memory.arn;
+  } else if (memory.name) {
+    // Resolve by name from deployed state or CDK outputs
     const deployedMemory = deployedResources?.memories?.[memory.name];
     if (deployedMemory) {
-      return { memoryArn: deployedMemory.memoryArn };
+      arn = deployedMemory.memoryArn;
+    } else if (cdkOutputs) {
+      arn = resolveMemoryArnFromOutputs(memory.name, cdkOutputs);
     }
 
-    // Fall back to CDK outputs
-    if (cdkOutputs) {
-      const memoryArn = resolveMemoryArnFromOutputs(memory.name, cdkOutputs);
-      if (memoryArn) {
-        return { memoryArn };
-      }
+    if (!arn) {
+      throw new Error(
+        `Memory "${memory.name}" referenced by harness is not in deployed state. Ensure the memory is defined in agentcore.json and has been deployed.`
+      );
     }
-
-    throw new Error(
-      `Memory "${memory.name}" referenced by harness is not in deployed state. Ensure the memory is defined in agentcore.json and has been deployed.`
-    );
   }
 
-  return undefined;
+  if (!arn) {
+    return undefined;
+  }
+
+  return {
+    agentCoreMemoryConfiguration: {
+      arn,
+      ...(memory.actorId && { actorId: memory.actorId }),
+    },
+  };
 }
 
 /**

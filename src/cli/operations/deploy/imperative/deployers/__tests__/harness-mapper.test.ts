@@ -380,7 +380,9 @@ describe('mapHarnessSpecToCreateOptions', () => {
       });
 
       expect(result.memory).toEqual({
-        memoryArn: 'arn:aws:bedrock-agentcore:us-east-1:123456789012:memory/mem-123',
+        agentCoreMemoryConfiguration: {
+          arn: 'arn:aws:bedrock-agentcore:us-east-1:123456789012:memory/mem-123',
+        },
       });
     });
 
@@ -391,7 +393,9 @@ describe('mapHarnessSpecToCreateOptions', () => {
       const result = await mapHarnessSpecToCreateOptions({ ...BASE_OPTIONS, harnessSpec: spec });
 
       expect(result.memory).toEqual({
-        memoryArn: 'arn:aws:bedrock-agentcore:us-east-1:123456789012:memory/custom-mem',
+        agentCoreMemoryConfiguration: {
+          arn: 'arn:aws:bedrock-agentcore:us-east-1:123456789012:memory/custom-mem',
+        },
       });
     });
 

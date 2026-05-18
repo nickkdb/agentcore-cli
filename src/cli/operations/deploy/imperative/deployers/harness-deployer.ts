@@ -192,7 +192,7 @@ export class HarnessDeployer implements ImperativeDeployer<HarnessDeployedStateM
             roleArn: executionRoleArn,
             status: finalHarness.status,
             agentRuntimeArn: extractRuntimeArn(finalHarness),
-            memoryArn: createOptions.memory?.memoryArn,
+            memoryArn: createOptions.memory?.agentCoreMemoryConfiguration?.arn,
             configHash,
           };
           notes.push(`Updated harness "${entry.name}"`);
@@ -216,7 +216,7 @@ export class HarnessDeployer implements ImperativeDeployer<HarnessDeployedStateM
             roleArn: executionRoleArn,
             status: finalHarness.status,
             agentRuntimeArn: extractRuntimeArn(finalHarness),
-            memoryArn: createOptions.memory?.memoryArn,
+            memoryArn: createOptions.memory?.agentCoreMemoryConfiguration?.arn,
             configHash,
           };
           notes.push(`Created harness "${entry.name}"`);
