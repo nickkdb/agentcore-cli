@@ -516,6 +516,10 @@ interface HarnessModel {
   provider?: string;
   modelId?: string;
   apiKeyArn?: string;
+  temperature?: number;
+  topP?: number;
+  topK?: number;
+  maxTokens?: number;
 }
 
 function buildHarnessBaseOpts(
@@ -527,15 +531,43 @@ function buildHarnessBaseOpts(
     const provider = options.modelProvider ?? harnessSpec?.provider;
     const modelId = options.modelId ?? harnessSpec?.modelId ?? '';
     const apiKeyArn = options.apiKeyArn ?? harnessSpec?.apiKeyArn;
+    const temperature = harnessSpec?.temperature;
+    const topP = harnessSpec?.topP;
+    const topK = harnessSpec?.topK;
+    const modelMaxTokens = harnessSpec?.maxTokens;
     switch (provider) {
       case 'open_ai':
-        baseOpts.model = { openAiModelConfig: { modelId, ...(apiKeyArn && { apiKeyArn }) } };
+        baseOpts.model = {
+          openAiModelConfig: {
+            modelId,
+            ...(apiKeyArn && { apiKeyArn }),
+            ...(temperature !== undefined && { temperature }),
+            ...(topP !== undefined && { topP }),
+            ...(modelMaxTokens !== undefined && { maxTokens: modelMaxTokens }),
+          },
+        };
         break;
       case 'gemini':
-        baseOpts.model = { geminiModelConfig: { modelId, ...(apiKeyArn && { apiKeyArn }) } };
+        baseOpts.model = {
+          geminiModelConfig: {
+            modelId,
+            ...(apiKeyArn && { apiKeyArn }),
+            ...(temperature !== undefined && { temperature }),
+            ...(topP !== undefined && { topP }),
+            ...(topK !== undefined && { topK }),
+            ...(modelMaxTokens !== undefined && { maxTokens: modelMaxTokens }),
+          },
+        };
         break;
       default:
-        baseOpts.model = { bedrockModelConfig: { modelId } };
+        baseOpts.model = {
+          bedrockModelConfig: {
+            modelId,
+            ...(temperature !== undefined && { temperature }),
+            ...(topP !== undefined && { topP }),
+            ...(modelMaxTokens !== undefined && { maxTokens: modelMaxTokens }),
+          },
+        };
         break;
     }
   }
