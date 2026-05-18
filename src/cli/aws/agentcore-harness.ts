@@ -37,8 +37,15 @@ export interface HarnessSkill {
   path: string;
 }
 
+export interface HarnessAgentCoreMemoryConfiguration {
+  arn: string;
+  actorId?: string;
+  messagesCount?: number;
+  retrievalConfig?: Record<string, { topK?: number; relevanceScore?: number }>;
+}
+
 export interface HarnessMemoryConfiguration {
-  memoryArn?: string;
+  agentCoreMemoryConfiguration: HarnessAgentCoreMemoryConfiguration;
 }
 
 export interface HarnessTruncationConfiguration {
