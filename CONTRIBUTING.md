@@ -48,6 +48,15 @@ Looking at the existing issues is a great way to find something to contribute on
 default GitHub issue labels (enhancement/bug/duplicate/help wanted/invalid/question/wontfix), looking at any 'help
 wanted' issues is a great place to start.
 
+## Maintainer notes: Claude security review on community PRs
+
+The `Claude Security Review` workflow runs automatically on maintainer-authored PRs (opened/reopened) and on community
+PRs as soon as a maintainer submits an **approving review**. PRs from non-collaborators are otherwise skipped — the
+approval is the gate, so a maintainer must manually review the diff before the automated reviewer runs.
+
+To re-run the review on a later commit, submit another approving review (resolves to a fresh workflow run), or trigger
+the `Claude Security Review` workflow manually from the Actions tab with the PR number.
+
 ## Code of Conduct
 
 This project has adopted the [Amazon Open Source Code of Conduct](https://aws.github.io/code-of-conduct). For more
