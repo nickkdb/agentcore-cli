@@ -17,10 +17,34 @@ import { randomUUID } from 'node:crypto';
 
 export type HarnessStatus = 'CREATING' | 'READY' | 'UPDATING' | 'DELETING' | 'DELETED' | 'FAILED';
 
+export interface BedrockModelConfig {
+  modelId: string;
+  temperature?: number;
+  topP?: number;
+  maxTokens?: number;
+}
+
+export interface OpenAiModelConfig {
+  modelId: string;
+  apiKeyArn?: string;
+  temperature?: number;
+  topP?: number;
+  maxTokens?: number;
+}
+
+export interface GeminiModelConfig {
+  modelId: string;
+  apiKeyArn?: string;
+  temperature?: number;
+  topP?: number;
+  topK?: number;
+  maxTokens?: number;
+}
+
 export interface HarnessModelConfiguration {
-  bedrockModelConfig?: { modelId: string };
-  openAiModelConfig?: { modelId: string; apiKeyArn?: string };
-  geminiModelConfig?: { modelId: string; apiKeyArn?: string };
+  bedrockModelConfig?: BedrockModelConfig;
+  openAiModelConfig?: OpenAiModelConfig;
+  geminiModelConfig?: GeminiModelConfig;
 }
 
 export type HarnessSystemPrompt = { text: string }[];

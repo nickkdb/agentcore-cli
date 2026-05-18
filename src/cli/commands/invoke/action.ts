@@ -1,5 +1,5 @@
 import { ConfigIO } from '../../../lib';
-import type { AgentCoreProjectSpec, AwsDeploymentTargets, DeployedState } from '../../../schema';
+import type { AgentCoreProjectSpec, AwsDeploymentTargets, DeployedState, HarnessModel } from '../../../schema';
 import {
   buildAguiRunInput,
   executeBashCommand,
@@ -512,30 +512,52 @@ export async function handleInvoke(context: InvokeContext, options: InvokeOption
 // Shared Harness Helpers
 // ============================================================================
 
-interface HarnessModel {
-  provider?: string;
-  modelId?: string;
-  apiKeyArn?: string;
-}
-
-function buildHarnessBaseOpts(
+export function buildHarnessBaseOpts(
   options: InvokeOptions,
-  harnessSpec?: HarnessModel
+  harnessSpec?: Partial<HarnessModel>
 ): Partial<import('../../aws/agentcore-harness').InvokeHarnessOptions> {
   const baseOpts: Partial<import('../../aws/agentcore-harness').InvokeHarnessOptions> = {};
   if (options.modelId || options.modelProvider || options.apiKeyArn) {
     const provider = options.modelProvider ?? harnessSpec?.provider;
     const modelId = options.modelId ?? harnessSpec?.modelId ?? '';
     const apiKeyArn = options.apiKeyArn ?? harnessSpec?.apiKeyArn;
+    const temperature = harnessSpec?.temperature;
+    const topP = harnessSpec?.topP;
+    const topK = harnessSpec?.topK;
+    const modelMaxTokens = harnessSpec?.maxTokens;
     switch (provider) {
       case 'open_ai':
-        baseOpts.model = { openAiModelConfig: { modelId, ...(apiKeyArn && { apiKeyArn }) } };
+        baseOpts.model = {
+          openAiModelConfig: {
+            modelId,
+            ...(apiKeyArn && { apiKeyArn }),
+            ...(temperature !== undefined && { temperature }),
+            ...(topP !== undefined && { topP }),
+            ...(modelMaxTokens !== undefined && { maxTokens: modelMaxTokens }),
+          },
+        };
         break;
       case 'gemini':
-        baseOpts.model = { geminiModelConfig: { modelId, ...(apiKeyArn && { apiKeyArn }) } };
+        baseOpts.model = {
+          geminiModelConfig: {
+            modelId,
+            ...(apiKeyArn && { apiKeyArn }),
+            ...(temperature !== undefined && { temperature }),
+            ...(topP !== undefined && { topP }),
+            ...(topK !== undefined && { topK }),
+            ...(modelMaxTokens !== undefined && { maxTokens: modelMaxTokens }),
+          },
+        };
         break;
       default:
-        baseOpts.model = { bedrockModelConfig: { modelId } };
+        baseOpts.model = {
+          bedrockModelConfig: {
+            modelId,
+            ...(temperature !== undefined && { temperature }),
+            ...(topP !== undefined && { topP }),
+            ...(modelMaxTokens !== undefined && { maxTokens: modelMaxTokens }),
+          },
+        };
         break;
     }
   }
