@@ -1,5 +1,5 @@
 import { ConfigIO } from '../../../lib';
-import type { AgentCoreProjectSpec, AwsDeploymentTargets, DeployedState } from '../../../schema';
+import type { AgentCoreProjectSpec, AwsDeploymentTargets, DeployedState, HarnessModel } from '../../../schema';
 import {
   buildAguiRunInput,
   executeBashCommand,
@@ -512,19 +512,9 @@ export async function handleInvoke(context: InvokeContext, options: InvokeOption
 // Shared Harness Helpers
 // ============================================================================
 
-interface HarnessModel {
-  provider?: string;
-  modelId?: string;
-  apiKeyArn?: string;
-  temperature?: number;
-  topP?: number;
-  topK?: number;
-  maxTokens?: number;
-}
-
-function buildHarnessBaseOpts(
+export function buildHarnessBaseOpts(
   options: InvokeOptions,
-  harnessSpec?: HarnessModel
+  harnessSpec?: Partial<HarnessModel>
 ): Partial<import('../../aws/agentcore-harness').InvokeHarnessOptions> {
   const baseOpts: Partial<import('../../aws/agentcore-harness').InvokeHarnessOptions> = {};
   if (options.modelId || options.modelProvider || options.apiKeyArn) {
