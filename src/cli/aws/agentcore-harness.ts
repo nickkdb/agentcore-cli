@@ -41,7 +41,7 @@ export interface HarnessAgentCoreMemoryConfiguration {
   arn: string;
   actorId?: string;
   messagesCount?: number;
-  retrievalConfig?: Record<string, { topK?: number; relevanceScore?: number }>;
+  retrievalConfig?: Record<string, { topK?: number; relevanceScore?: number; strategyId?: string }>;
 }
 
 export interface HarnessMemoryConfiguration {
