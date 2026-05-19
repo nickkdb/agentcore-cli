@@ -91,6 +91,11 @@ export function validateAddAgentOptions(options: AddAgentOptions): ValidationRes
       (matchEnumValue(TargetLanguageSchema, options.language) as typeof options.language) ?? options.language;
   if (options.build) options.build = matchEnumValue(BuildTypeSchema, options.build) ?? options.build;
 
+  // Session storage is not supported for TypeScript agents — reject early before any path-specific returns
+  if (options.sessionStorageMountPath && options.language === 'TypeScript') {
+    return { valid: false, error: '--session-storage-mount-path is not supported for TypeScript agents' };
+  }
+
   if (!options.name) {
     return { valid: false, error: '--name is required' };
   }
@@ -285,11 +290,8 @@ export function validateAddAgentOptions(options: AddAgentOptions): ValidationRes
   if (lifecycleResult.idleTimeout !== undefined) options.idleTimeout = lifecycleResult.idleTimeout;
   if (lifecycleResult.maxLifetime !== undefined) options.maxLifetime = lifecycleResult.maxLifetime;
 
-  // Validate session storage mount path
+  // Validate session storage mount path format (TypeScript rejection is handled at the top)
   if (options.sessionStorageMountPath) {
-    if (options.language === 'TypeScript') {
-      return { valid: false, error: '--session-storage-mount-path is not supported for TypeScript agents' };
-    }
     const mountPathResult = SessionStorageSchema.shape.mountPath.safeParse(options.sessionStorageMountPath);
     if (!mountPathResult.success) {
       return { valid: false, error: `--session-storage-mount-path: ${mountPathResult.error.issues[0]?.message}` };
