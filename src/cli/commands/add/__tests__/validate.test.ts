@@ -1583,4 +1583,15 @@ describe('validateAddAgentOptions - session storage mount path', () => {
     const result = validateAddAgentOptions({ ...baseOptions });
     expect(result.valid).toBe(true);
   });
+
+  it('rejects session storage for TypeScript agents', () => {
+    const result = validateAddAgentOptions({
+      ...baseOptions,
+      language: 'TypeScript',
+      framework: 'Strands',
+      sessionStorageMountPath: '/mnt/data',
+    });
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('--session-storage-mount-path is not supported for TypeScript agents');
+  });
 });
