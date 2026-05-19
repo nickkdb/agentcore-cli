@@ -287,6 +287,9 @@ export function validateAddAgentOptions(options: AddAgentOptions): ValidationRes
 
   // Validate session storage mount path
   if (options.sessionStorageMountPath) {
+    if (options.language === 'TypeScript') {
+      return { valid: false, error: '--session-storage-mount-path is not supported for TypeScript agents' };
+    }
     const mountPathResult = SessionStorageSchema.shape.mountPath.safeParse(options.sessionStorageMountPath);
     if (!mountPathResult.success) {
       return { valid: false, error: `--session-storage-mount-path: ${mountPathResult.error.issues[0]?.message}` };
