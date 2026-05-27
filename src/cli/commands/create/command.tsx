@@ -24,9 +24,9 @@ import {
   BuildType as TelemetryBuildType,
   standardize,
 } from '../../telemetry/schemas/common-shapes.js';
+import { renderTUI } from '../../tui';
 import { COMMAND_DESCRIPTIONS } from '../../tui/copy';
 import { requireTTY } from '../../tui/guards';
-import { CreateScreen } from '../../tui/screens/create';
 import { parseCommaSeparatedList } from '../shared/vpc-utils';
 import { type ProgressCallback, createProject, createProjectWithAgent, getDryRunInfo } from './action';
 import { createProjectWithHarness } from './harness-action';
@@ -37,18 +37,13 @@ import type { Command } from '@commander-js/extra-typings';
 import { Text, render } from 'ink';
 
 /** Render CreateScreen for interactive TUI mode */
-function handleCreateTUI(): void {
-  const cwd = getWorkingDirectory();
-  const { unmount } = render(
-    <CreateScreen
-      cwd={cwd}
-      isInteractive={false}
-      onExit={() => {
-        unmount();
-        process.exit(0);
-      }}
-    />
-  );
+function handleCreateTUI(): Promise<void> {
+  return renderTUI({
+    initialRoute: { name: 'create' },
+    enterAltScreen: false,
+    actionOnBack: 'exit',
+    isInteractive: false,
+  });
 }
 
 /** Print completion summary after successful create */
@@ -490,7 +485,7 @@ export const registerCreate = (program: Command) => {
 
         if (!hasAnyFlag) {
           requireTTY();
-          handleCreateTUI();
+          await handleCreateTUI();
           return;
         }
 
@@ -571,7 +566,7 @@ export const registerCreate = (program: Command) => {
           await handleCreateCLI(options as CreateOptions);
         } else {
           requireTTY();
-          handleCreateTUI();
+          await handleCreateTUI();
         }
       }
     } catch (error) {

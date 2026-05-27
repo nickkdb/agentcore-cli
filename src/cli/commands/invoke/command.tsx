@@ -1,11 +1,11 @@
-import { type Result, ValidationError, serializeResult } from '../../../lib';
+import { ValidationError, serializeResult } from '../../../lib';
 import { getErrorMessage } from '../../errors';
 import { isPreviewEnabled } from '../../feature-flags';
 import { withCommandRunTelemetry } from '../../telemetry/cli-command-run.js';
 import { AgentProtocol, AuthType, standardize } from '../../telemetry/schemas/common-shapes.js';
+import { renderTUI } from '../../tui';
 import { COMMAND_DESCRIPTIONS } from '../../tui/copy';
 import { requireProject, requireTTY } from '../../tui/guards';
-import { InvokeScreen } from '../../tui/screens/invoke';
 import { parseHeaderFlags } from '../shared/header-utils';
 import { type InvokeContext, handleHarnessInvokeByArn, handleInvoke, loadInvokeConfig } from './action';
 import { resolvePrompt } from './resolve-prompt';
@@ -13,7 +13,6 @@ import type { InvokeOptions, InvokeResult } from './types';
 import { validateInvokeOptions } from './validate';
 import type { Command } from '@commander-js/extra-typings';
 import { Text, render } from 'ink';
-import React from 'react';
 
 const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
@@ -331,33 +330,18 @@ export const registerInvoke = (program: Command) => {
             headers = parseHeaderFlags(cliOptions.header);
           }
 
-          const tuiResult = await withCommandRunTelemetry(
-            'invoke',
-            {
-              has_stream: true,
-              has_session_id: !!cliOptions.sessionId,
-              auth_type: standardize(AuthType, cliOptions.bearerToken ? 'bearer_token' : 'sigv4'),
-              agent_protocol: standardize(AgentProtocol, resolveProtocol({}, agentProtocol)),
+          await renderTUI({
+            initialRoute: {
+              name: 'invoke',
+              sessionId: cliOptions.sessionId,
+              userId: cliOptions.userId,
+              headers,
+              bearerToken: cliOptions.bearerToken,
             },
-            async (): Promise<Result> => {
-              const { waitUntilExit, unmount } = render(
-                <InvokeScreen
-                  isInteractive={true}
-                  onExit={() => unmount()}
-                  initialSessionId={cliOptions.sessionId}
-                  initialUserId={cliOptions.userId}
-                  initialHeaders={headers}
-                  initialBearerToken={cliOptions.bearerToken}
-                />
-              );
-              await waitUntilExit();
-              return { success: true };
-            }
-          );
-          if (!tuiResult.success) {
-            render(<Text color="red">Error: {getErrorMessage(tuiResult.error)}</Text>);
-            process.exit(1);
-          }
+            enterAltScreen: false,
+            actionOnBack: 'exit',
+            isInteractive: false,
+          });
         }
       } catch (error) {
         if (cliOptions.json) {

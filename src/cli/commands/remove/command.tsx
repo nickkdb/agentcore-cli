@@ -1,14 +1,13 @@
 import { ConfigIO, serializeResult, toError } from '../../../lib';
 import { getErrorMessage } from '../../errors';
 import { runCliCommand } from '../../telemetry/cli-command-run.js';
+import { renderTUI } from '../../tui';
 import { COMMAND_DESCRIPTIONS } from '../../tui/copy';
 import { requireProject, requireTTY } from '../../tui/guards';
-import { RemoveAllScreen, RemoveFlow } from '../../tui/screens/remove';
 import type { RemoveAllOptions, RemoveResult } from './types';
 import { validateRemoveAllOptions } from './validate';
 import type { Command } from '@commander-js/extra-typings';
 import { Text, render } from 'ink';
-import React from 'react';
 
 async function handleRemoveAll(_options: RemoveAllOptions): Promise<RemoveResult> {
   try {
@@ -86,15 +85,12 @@ export const registerRemove = (program: Command): Command => {
           });
         } else {
           requireTTY();
-          const { unmount } = render(
-            <RemoveAllScreen
-              isInteractive={false}
-              onExit={() => {
-                unmount();
-                process.exit(0);
-              }}
-            />
-          );
+          await renderTUI({
+            initialRoute: { name: 'remove', screen: 'all' },
+            enterAltScreen: false,
+            actionOnBack: 'exit',
+            isInteractive: false,
+          });
         }
       } catch (error) {
         if (cliOptions.json) {
@@ -114,7 +110,7 @@ export const registerRemove = (program: Command): Command => {
   // primitive subcommands are registered after this point.
   removeCommand
     .argument('[subcommand]')
-    .action((subcommand: string | undefined, _options, cmd) => {
+    .action(async (subcommand: string | undefined, _options, cmd) => {
       if (subcommand) {
         console.error(`error: '${subcommand}' is not a valid subcommand.`);
         cmd.outputHelp();
@@ -124,15 +120,12 @@ export const registerRemove = (program: Command): Command => {
       requireProject();
       requireTTY();
 
-      const { clear, unmount } = render(
-        <RemoveFlow
-          isInteractive={false}
-          onExit={() => {
-            clear();
-            unmount();
-          }}
-        />
-      );
+      await renderTUI({
+        initialRoute: { name: 'remove' },
+        enterAltScreen: false,
+        actionOnBack: 'exit',
+        isInteractive: false,
+      });
     })
     .showHelpAfterError()
     .showSuggestionAfterError();

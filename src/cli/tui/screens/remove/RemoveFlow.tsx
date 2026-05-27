@@ -124,7 +124,8 @@ interface RemoveFlowProps {
     | 'policy'
     | 'config-bundle'
     | 'ab-test'
-    | 'dataset';
+    | 'dataset'
+    | 'all';
   /** Initial resource name to auto-select (for CLI --name flag) */
   initialResourceName?: string;
 }
@@ -168,6 +169,8 @@ export function RemoveFlow({
         return { name: 'select-ab-test' };
       case 'runtime-endpoint':
         return { name: 'select-runtime-endpoint' };
+      case 'all':
+        return { name: 'remove-all' };
       default:
         return { name: 'select' };
     }
