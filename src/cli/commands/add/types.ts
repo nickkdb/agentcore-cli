@@ -144,6 +144,7 @@ export interface AddDatasetOptions {
   name: string;
   schemaType: DatasetSchemaType;
   description?: string;
+  kmsKeyArn?: string;
   json?: boolean;
 }
 
