@@ -13,7 +13,6 @@ import { listMemoryRecords, retrieveMemoryRecords } from '../../operations/memor
 import { loadDeployedProjectConfig, resolveAgentOrHarness } from '../../operations/resolve-agent';
 import { fetchTraceRecords, listTraces } from '../../operations/traces';
 import { LayoutProvider } from '../../tui/context';
-import { runCliDeploy } from '../deploy/progress';
 import { render } from 'ink';
 import path from 'node:path';
 import React from 'react';
@@ -129,8 +128,10 @@ export async function launchBrowserDev(): Promise<void> {
     process.exit(1);
   }
 
-  if (hasHarnesses) {
-    await runCliDeploy();
+  const pickerResult = await launchTuiDevScreenWithPicker(workingDir);
+
+  if (pickerResult == null) {
+    return;
   }
 
   const configRoot = findConfigRoot(workingDir);
@@ -141,6 +142,8 @@ export async function launchBrowserDev(): Promise<void> {
     workingDir,
     project,
     port: 8080,
+    agentName: pickerResult.agentName,
+    harnessName: pickerResult.harnessName,
     otelEnvVars,
     collector,
   });
