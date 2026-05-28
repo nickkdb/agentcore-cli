@@ -14,7 +14,6 @@ import { listMemoryRecords, retrieveMemoryRecords } from '../../operations/memor
 import { loadDeployedProjectConfig, resolveAgentOrHarness } from '../../operations/resolve-agent';
 import { fetchTraceRecords, listTraces } from '../../operations/traces';
 import { LayoutProvider } from '../../tui/context';
-import { runCliDeploy } from '../deploy/progress';
 import { render } from 'ink';
 import path from 'node:path';
 import React from 'react';
@@ -133,7 +132,26 @@ export async function launchBrowserDev(): Promise<void> {
   }
 
   if (hasHarnesses) {
-    await runCliDeploy();
+    const pickerResult = await launchTuiDevScreenWithPicker(workingDir);
+
+    if (pickerResult == null) {
+      return;
+    }
+
+    const configRoot = findConfigRoot(workingDir);
+    const persistTracesDir = path.join(configRoot ?? workingDir, '.cli', 'traces');
+    const { collector, otelEnvVars } = await startOtelCollector(persistTracesDir);
+
+    await runBrowserMode({
+      workingDir,
+      project,
+      port: 8080,
+      agentName: pickerResult.agentName,
+      harnessName: pickerResult.harnessName,
+      otelEnvVars,
+      collector,
+    });
+    return;
   }
 
   const configRoot = findConfigRoot(workingDir);
