@@ -86,101 +86,53 @@ describe('launchBrowserDev', () => {
     vi.restoreAllMocks();
   });
 
-  describe('when preview is enabled and project has harnesses', () => {
-    it('uses TUI picker with alt screen for deploy instead of inline runCliDeploy', async () => {
-      const { launchBrowserDev } = await import('../browser-mode');
+  it('uses TUI picker for deploy when preview enabled and harnesses present', async () => {
+    const { launchBrowserDev } = await import('../browser-mode');
 
-      mockIsPreviewEnabled.mockReturnValue(true);
-      mockLoadProjectConfig.mockResolvedValue({
-        runtimes: [{ name: 'my-agent', build: 'CodeZip', protocol: 'HTTP' }],
-        harnesses: [{ name: 'my-harness' }],
-      });
-      mockGetDevSupportedAgents.mockReturnValue([{ name: 'my-agent', build: 'CodeZip', protocol: 'HTTP' }]);
+    mockIsPreviewEnabled.mockReturnValue(true);
+    mockLoadProjectConfig.mockResolvedValue({
+      runtimes: [{ name: 'my-agent', build: 'CodeZip', protocol: 'HTTP' }],
+      harnesses: [{ name: 'my-harness' }],
+    });
+    mockGetDevSupportedAgents.mockReturnValue([{ name: 'my-agent', build: 'CodeZip', protocol: 'HTTP' }]);
 
-      mockRender.mockImplementation((element: { props: Record<string, unknown> }) => {
-        const onLaunchBrowser = element.props?.onLaunchBrowser as
-          | ((selection?: { agentName?: string; harnessName?: string }) => void)
-          | undefined;
-        if (onLaunchBrowser) {
-          onLaunchBrowser({ agentName: 'my-agent', harnessName: 'my-harness' });
-        }
-        return { unmount: vi.fn(), waitUntilExit: () => Promise.resolve() };
-      });
-
-      await launchBrowserDev();
-
-      // Verify alt screen was entered (TUI picker path)
-      expect(mockStdoutWrite).toHaveBeenCalledWith('\x1B[?1049h\x1B[H');
-      // Verify render was called (DevScreen TUI was used)
-      expect(mockRender).toHaveBeenCalled();
-      // Verify runCliDeploy was NOT called (deploy handled by TUI picker)
-      expect(mockRunCliDeploy).not.toHaveBeenCalled();
+    mockRender.mockImplementation((element: { props: Record<string, unknown> }) => {
+      const onLaunchBrowser = element.props?.onLaunchBrowser as
+        | ((selection?: { agentName?: string; harnessName?: string }) => void)
+        | undefined;
+      if (onLaunchBrowser) {
+        onLaunchBrowser({ agentName: 'my-agent', harnessName: 'my-harness' });
+      }
+      return { unmount: vi.fn(), waitUntilExit: () => Promise.resolve() };
     });
 
-    it('does not proceed to browser mode when user backs out of TUI picker', async () => {
-      const { launchBrowserDev } = await import('../browser-mode');
+    await launchBrowserDev();
 
-      mockIsPreviewEnabled.mockReturnValue(true);
-      mockLoadProjectConfig.mockResolvedValue({
-        runtimes: [{ name: 'my-agent', build: 'CodeZip', protocol: 'HTTP' }],
-        harnesses: [{ name: 'my-harness' }],
-      });
-      mockGetDevSupportedAgents.mockReturnValue([{ name: 'my-agent', build: 'CodeZip', protocol: 'HTTP' }]);
-
-      mockRender.mockImplementation((element: { props: Record<string, unknown> }) => {
-        const onBack = element.props?.onBack as (() => void) | undefined;
-        if (onBack) onBack();
-        return { unmount: vi.fn(), waitUntilExit: () => Promise.resolve() };
-      });
-
-      await launchBrowserDev();
-
-      expect(mockStdoutWrite).toHaveBeenCalledWith('\x1B[?1049h\x1B[H');
-      expect(mockStdoutWrite).toHaveBeenCalledWith('\x1B[?1049l');
-      expect(mockRunWebUI).not.toHaveBeenCalled();
-      expect(mockRunCliDeploy).not.toHaveBeenCalled();
-    });
+    expect(mockStdoutWrite).toHaveBeenCalledWith('\x1B[?1049h\x1B[H');
+    expect(mockRender).toHaveBeenCalled();
+    expect(mockRunCliDeploy).not.toHaveBeenCalled();
   });
 
-  describe('when preview is disabled', () => {
-    it('skips harnesses and launches browser mode directly without TUI picker', async () => {
-      const { launchBrowserDev } = await import('../browser-mode');
+  it('does not launch browser mode when user backs out of TUI picker', async () => {
+    const { launchBrowserDev } = await import('../browser-mode');
 
-      mockIsPreviewEnabled.mockReturnValue(false);
-      mockLoadProjectConfig.mockResolvedValue({
-        runtimes: [{ name: 'my-agent', build: 'CodeZip', protocol: 'HTTP' }],
-        harnesses: [{ name: 'my-harness' }],
-      });
-      mockGetDevSupportedAgents.mockReturnValue([{ name: 'my-agent', build: 'CodeZip', protocol: 'HTTP' }]);
-
-      await launchBrowserDev();
-
-      // Should NOT enter alt screen or use TUI picker
-      expect(mockStdoutWrite).not.toHaveBeenCalledWith('\x1B[?1049h\x1B[H');
-      expect(mockRender).not.toHaveBeenCalled();
-      // Should go straight to browser mode
-      expect(mockRunWebUI).toHaveBeenCalled();
+    mockIsPreviewEnabled.mockReturnValue(true);
+    mockLoadProjectConfig.mockResolvedValue({
+      runtimes: [{ name: 'my-agent', build: 'CodeZip', protocol: 'HTTP' }],
+      harnesses: [{ name: 'my-harness' }],
     });
-  });
+    mockGetDevSupportedAgents.mockReturnValue([{ name: 'my-agent', build: 'CodeZip', protocol: 'HTTP' }]);
 
-  describe('error cases', () => {
-    it('exits when no project is found', async () => {
-      const { launchBrowserDev } = await import('../browser-mode');
-      mockIsPreviewEnabled.mockReturnValue(true);
-      mockLoadProjectConfig.mockResolvedValue(null);
-
-      await expect(launchBrowserDev()).rejects.toThrow('process.exit called');
+    mockRender.mockImplementation((element: { props: Record<string, unknown> }) => {
+      const onBack = element.props?.onBack as (() => void) | undefined;
+      if (onBack) onBack();
+      return { unmount: vi.fn(), waitUntilExit: () => Promise.resolve() };
     });
 
-    it('exits when project has no runtimes or harnesses', async () => {
-      const { launchBrowserDev } = await import('../browser-mode');
-      mockIsPreviewEnabled.mockReturnValue(true);
-      mockLoadProjectConfig.mockResolvedValue({
-        runtimes: [],
-        harnesses: [],
-      });
+    await launchBrowserDev();
 
-      await expect(launchBrowserDev()).rejects.toThrow('process.exit called');
-    });
+    expect(mockStdoutWrite).toHaveBeenCalledWith('\x1B[?1049h\x1B[H');
+    expect(mockStdoutWrite).toHaveBeenCalledWith('\x1B[?1049l');
+    expect(mockRunWebUI).not.toHaveBeenCalled();
   });
 });

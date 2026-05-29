@@ -131,27 +131,14 @@ export async function launchBrowserDev(): Promise<void> {
     process.exit(1);
   }
 
+  let pickerResult: { agentName?: string; harnessName?: string } | undefined;
+
   if (hasHarnesses) {
-    const pickerResult = await launchTuiDevScreenWithPicker(workingDir);
+    pickerResult = await launchTuiDevScreenWithPicker(workingDir);
 
     if (pickerResult == null) {
       return;
     }
-
-    const configRoot = findConfigRoot(workingDir);
-    const persistTracesDir = path.join(configRoot ?? workingDir, '.cli', 'traces');
-    const { collector, otelEnvVars } = await startOtelCollector(persistTracesDir);
-
-    await runBrowserMode({
-      workingDir,
-      project,
-      port: 8080,
-      agentName: pickerResult.agentName,
-      harnessName: pickerResult.harnessName,
-      otelEnvVars,
-      collector,
-    });
-    return;
   }
 
   const configRoot = findConfigRoot(workingDir);
@@ -162,6 +149,8 @@ export async function launchBrowserDev(): Promise<void> {
     workingDir,
     project,
     port: 8080,
+    agentName: pickerResult?.agentName,
+    harnessName: pickerResult?.harnessName,
     otelEnvVars,
     collector,
   });
