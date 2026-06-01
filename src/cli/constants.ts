@@ -72,6 +72,11 @@ export const DEFAULT_ENDPOINT_NAME = 'DEFAULT';
 export const TELEMETRY_ENDPOINT = 'https://telemetry.agentcore.aws.dev';
 
 /**
+ * Base image for generated Python Dockerfiles.
+ */
+export const PYTHON_BASE_IMAGE = 'public.ecr.aws/docker/library/python:3.12-slim-trixie';
+
+/**
  * Color gating: emit ANSI codes only when both streams are attached to a terminal.
  * Uses AND so that redirecting either stream (e.g. `2> log.txt`) disables colors,
  * preventing escape codes from leaking into files.
