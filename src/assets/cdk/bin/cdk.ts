@@ -28,13 +28,19 @@ async function main() {
   const spec = await configIO.readProjectSpec();
   const targets = await configIO.readAWSDeploymentTargets();
 
+  // The vended CDK project compiles against the published @aws/agentcore-cdk
+  // schema type, which may lag the CLI's own AgentCoreProjectSpec (e.g. payments,
+  // harnesses, gateway fields). Cast once so those fields are reachable.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const specAny = spec as any;
+
   // Extract MCP configuration from project spec.
   // Gateway fields are stored in agentcore.json but may not yet be on the
-  const mcpSpec = spec.agentCoreGateways?.length
+  const mcpSpec = specAny.agentCoreGateways?.length
     ? {
-        agentCoreGateways: spec.agentCoreGateways,
-        mcpRuntimeTools: spec.mcpRuntimeTools,
-        unassignedTargets: spec.unassignedTargets,
+        agentCoreGateways: specAny.agentCoreGateways,
+        mcpRuntimeTools: specAny.mcpRuntimeTools,
+        unassignedTargets: specAny.unassignedTargets,
       }
     : undefined;
 
@@ -108,21 +114,32 @@ async function main() {
     // Payment credential provider ARNs live in the same credentials map as identity credentials
     const paymentCredentials = credentials;
 
-    const paymentSpec = spec.payments?.length
-      ? spec.payments.map(p => ({
-          name: p.name,
-          description: p.description,
-          authorizerType: p.authorizerType,
-          authorizerConfiguration: p.authorizerConfiguration,
-          autoPayment: p.autoPayment,
-          paymentToolAllowlist: p.paymentToolAllowlist,
-          networkPreferences: p.networkPreferences,
-          connectors: p.connectors.map(c => ({
-            name: c.name,
-            provider: c.provider,
-            credentialProviderArn: paymentCredentials?.[c.credentialName]?.credentialProviderArn ?? '',
-          })),
-        }))
+    const paymentSpec = specAny.payments?.length
+      ? specAny.payments.map(
+          (p: {
+            name: string;
+            description?: string;
+            authorizerType: 'AWS_IAM' | 'CUSTOM_JWT';
+            authorizerConfiguration?: unknown;
+            autoPayment?: boolean;
+            paymentToolAllowlist?: string[];
+            networkPreferences?: string[];
+            connectors: { name: string; provider?: string; credentialName: string }[];
+          }) => ({
+            name: p.name,
+            description: p.description,
+            authorizerType: p.authorizerType,
+            authorizerConfiguration: p.authorizerConfiguration,
+            autoPayment: p.autoPayment,
+            paymentToolAllowlist: p.paymentToolAllowlist,
+            networkPreferences: p.networkPreferences,
+            connectors: p.connectors.map(c => ({
+              name: c.name,
+              provider: c.provider,
+              credentialProviderArn: paymentCredentials?.[c.credentialName]?.credentialProviderArn ?? '',
+            })),
+          })
+        )
       : undefined;
 
     new AgentCoreStack(app, stackName, {
