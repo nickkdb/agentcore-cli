@@ -18,6 +18,9 @@ from memory.session import get_memory_session_manager
 {{#if needsOs}}
 import os
 {{/if}}
+{{#if hasPayment}}
+from capabilities.payments.payments import create_payments_plugin, PAYMENT_SYSTEM_PROMPT
+{{/if}}
 
 app = BedrockAgentCoreApp()
 log = app.logger
@@ -153,12 +156,12 @@ class ConfigBundleHook(HookProvider):
 {{/if}}
 
 {{#if hasMemory}}
+{{#unless hasPayment}}
 def agent_factory():
     cache = {}
     def get_or_create_agent(session_id, user_id):
         key = f"{session_id}/{user_id}"
         if key not in cache:
-            # Create an agent for the given session_id and user_id
             cache[key] = Agent(
                 model=load_model(),
                 session_manager=get_memory_session_manager(session_id, user_id),
@@ -169,6 +172,7 @@ def agent_factory():
         return cache[key]
     return get_or_create_agent
 get_or_create_agent = agent_factory()
+{{/unless}}
 {{else}}
 {{#if hasConfigBundle}}
 def create_agent():
@@ -179,6 +183,7 @@ def create_agent():
         hooks=[ConfigBundleHook()],
     )
 {{else}}
+{{#unless hasPayment}}
 _agent = None
 
 def get_or_create_agent():
@@ -187,9 +192,10 @@ def get_or_create_agent():
         _agent = Agent(
             model=load_model(),
             system_prompt=DEFAULT_SYSTEM_PROMPT,
-            tools=tools
+            tools=tools,
         )
     return _agent
+{{/unless}}
 {{/if}}
 {{/if}}
 
@@ -198,15 +204,46 @@ def get_or_create_agent():
 async def invoke(payload, context):
     log.info("Invoking Agent.....")
 
+{{#if hasPayment}}
+    user_id = payload.get("user_id") or getattr(context, "user_id", "default-user")
+    instrument_id = payload.get("payment_instrument_id")
+    session_id = payload.get("payment_session_id")
+    payments_plugin = create_payments_plugin(user_id, instrument_id, session_id)
+    plugins = [payments_plugin] if payments_plugin else []
+{{/if}}
+
 {{#if hasMemory}}
+{{#if hasPayment}}
+    mem_session_id = getattr(context, 'session_id', 'default-session')
+    mem_user_id = getattr(context, 'user_id', 'default-user')
+    agent = Agent(
+        model=load_model(),
+        session_manager=get_memory_session_manager(mem_session_id, mem_user_id),
+        system_prompt=DEFAULT_SYSTEM_PROMPT + PAYMENT_SYSTEM_PROMPT,
+        tools=tools,
+        plugins=plugins,{{#if hasConfigBundle}}
+        hooks=[ConfigBundleHook()],{{/if}}
+    )
+{{else}}
     session_id = getattr(context, 'session_id', 'default-session')
     user_id = getattr(context, 'user_id', 'default-user')
     agent = get_or_create_agent(session_id, user_id)
+{{/if}}
+{{else}}
+{{#if hasPayment}}
+    agent = Agent(
+        model=load_model(),
+        system_prompt=DEFAULT_SYSTEM_PROMPT + PAYMENT_SYSTEM_PROMPT,
+        tools=tools,
+        plugins=plugins,{{#if hasConfigBundle}}
+        hooks=[ConfigBundleHook()],{{/if}}
+    )
 {{else}}
 {{#if hasConfigBundle}}
     agent = create_agent()
 {{else}}
     agent = get_or_create_agent()
+{{/if}}
 {{/if}}
 {{/if}}
 

@@ -384,7 +384,8 @@ export const registerDev = (program: Command) => {
               }
 
               const agentName = opts.runtime ?? project.runtimes[0]?.name;
-              const { envVars } = await loadDevEnv(workingDir);
+              const selectedRuntime = project.runtimes.find(r => r.name === agentName);
+              const { envVars } = await loadDevEnv(workingDir, selectedRuntime);
               const mergedEnvVars = { ...envVars, ...otelEnvVars };
               const config = getDevConfig(workingDir, project, configRoot ?? undefined, agentName);
 

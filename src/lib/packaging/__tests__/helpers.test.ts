@@ -162,6 +162,32 @@ describe('copySourceTree', () => {
     expect(existsSync(join(dest, '.venv'))).toBe(false);
   });
 
+  it('excludes .env, .env.local and .env.* files at any depth (C-05-3 secret leak guard)', async () => {
+    const src = join(root, 'src-env-secrets');
+    const dest = join(root, 'dest-env-secrets');
+    mkdirSync(join(src, 'nested', 'deep'), { recursive: true });
+    writeFileSync(join(src, '.env'), 'TOP_LEVEL_SECRET=abc');
+    writeFileSync(join(src, '.env.local'), 'CDP_PRIVATE_KEY=xyz');
+    writeFileSync(join(src, '.env.production'), 'PROD_SECRET=zzz');
+    writeFileSync(join(src, 'nested', '.env.local'), 'NESTED_SECRET=def');
+    writeFileSync(join(src, 'nested', 'deep', '.env'), 'DEEP_SECRET=ghi');
+    writeFileSync(join(src, 'app.py'), 'pass');
+    writeFileSync(join(src, 'nested', 'deep', 'lib.py'), 'pass');
+    mkdirSync(dest, { recursive: true });
+
+    await copySourceTree(src, dest);
+
+    // No env file at any depth survives.
+    expect(existsSync(join(dest, '.env'))).toBe(false);
+    expect(existsSync(join(dest, '.env.local'))).toBe(false);
+    expect(existsSync(join(dest, '.env.production'))).toBe(false);
+    expect(existsSync(join(dest, 'nested', '.env.local'))).toBe(false);
+    expect(existsSync(join(dest, 'nested', 'deep', '.env'))).toBe(false);
+    // Source files preserved.
+    expect(existsSync(join(dest, 'app.py'))).toBe(true);
+    expect(existsSync(join(dest, 'nested', 'deep', 'lib.py'))).toBe(true);
+  });
+
   it('throws for non-existent source', async () => {
     await expect(copySourceTree(join(root, 'nope'), join(root, 'x'))).rejects.toThrow('not found');
   });

@@ -100,3 +100,20 @@ export {
 
 export type { HttpGateway } from './http-gateway';
 export { HttpGatewayNameSchema, HttpGatewaySchema } from './http-gateway';
+
+export type {
+  PaymentManager,
+  PaymentConnector,
+  PaymentProvider,
+  PaymentPattern,
+  PaymentAuthorizerType,
+} from './payment';
+export {
+  PaymentManagerSchema,
+  PaymentManagerNameSchema,
+  PaymentConnectorSchema,
+  PaymentConnectorNameSchema,
+  PaymentProviderSchema,
+  PaymentPatternSchema,
+  PaymentAuthorizerTypeSchema,
+} from './payment';

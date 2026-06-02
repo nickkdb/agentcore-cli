@@ -140,14 +140,14 @@ agentcore status --runtime-id abc123
 agentcore status --json
 ```
 
-| Flag                | Description                                                                                                                |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `--runtime-id <id>` | Look up a specific runtime by ID                                                                                           |
-| `--target <name>`   | Select deployment target                                                                                                   |
-| `--type <type>`     | Filter by resource type: `agent`, `memory`, `credential`, `gateway`, `evaluator`, `online-eval`, `policy-engine`, `policy` |
-| `--state <state>`   | Filter by deployment state: `deployed`, `local-only`, `pending-removal`                                                    |
-| `--runtime <name>`  | Filter to a specific runtime                                                                                               |
-| `--json`            | JSON output                                                                                                                |
+| Flag                | Description                                                                                                                           |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `--runtime-id <id>` | Look up a specific runtime by ID                                                                                                      |
+| `--target <name>`   | Select deployment target                                                                                                              |
+| `--type <type>`     | Filter by resource type: `agent`, `memory`, `credential`, `gateway`, `evaluator`, `online-eval`, `payment`, `policy-engine`, `policy` |
+| `--state <state>`   | Filter by deployment state: `deployed`, `local-only`, `pending-removal`                                                               |
+| `--runtime <name>`  | Filter to a specific runtime                                                                                                          |
+| `--json`            | JSON output                                                                                                                           |
 
 ### validate
 
@@ -473,6 +473,85 @@ agentcore add gateway-target \
 > `open-api-schema` requires `--outbound-auth` (`oauth` or `api-key`). `api-gateway` supports `api-key` or `none`.
 > `mcp-server` supports `oauth` or `none`.
 
+### add payment-manager
+
+Add a payment manager to the project. See [Payments](payments.md) for full usage guide.
+
+```bash
+# Minimal (defaults: AWS_IAM, interceptor, auto-payment enabled)
+agentcore add payment-manager --name MyManager
+
+# With CUSTOM_JWT authorization
+agentcore add payment-manager \
+  --name MyManager \
+  --authorizer-type CUSTOM_JWT \
+  --discovery-url https://cognito-idp.us-east-1.amazonaws.com/us-east-1_XXXXX/.well-known/openid-configuration \
+  --allowed-clients "client-id-1,client-id-2"
+
+# With advanced options
+agentcore add payment-manager \
+  --name MyManager \
+  --auto-payment true \
+  --default-spend-limit 25.00 \
+  --tool-allowlist "web_search,fetch_url" \
+  --network-preferences "eip155:84532"
+```
+
+| Flag                               | Description                                           |
+| ---------------------------------- | ----------------------------------------------------- |
+| `--name <name>`                    | Manager name (required in non-interactive mode)       |
+| `--authorizer-type <type>`         | `AWS_IAM` (default) or `CUSTOM_JWT`                   |
+| `--discovery-url <url>`            | OIDC discovery URL (required for CUSTOM_JWT)          |
+| `--allowed-clients <clients>`      | Comma-separated client IDs (CUSTOM_JWT only)          |
+| `--allowed-audience <audience>`    | Comma-separated allowed audiences (CUSTOM_JWT only)   |
+| `--allowed-scopes <scopes>`        | Comma-separated allowed scopes (CUSTOM_JWT only)      |
+| `--pattern <pattern>`              | `interceptor` (default) or `tool-based`               |
+| `--auto-payment [value]`           | Enable automatic payment: `true` (default) or `false` |
+| `--default-spend-limit <amount>`   | Default session spend limit in USD (default: `10.00`) |
+| `--tool-allowlist <tools>`         | Comma-separated tool names eligible for payment       |
+| `--network-preferences <networks>` | Comma-separated network IDs (e.g., `eip155:84532`)    |
+| `--description <desc>`             | Human-readable description                            |
+| `--json`                           | JSON output                                           |
+
+### add payment-connector
+
+Add a payment connector to an existing payment manager. See [Payments](payments.md) for credential details.
+
+```bash
+# CoinbaseCDP provider
+agentcore add payment-connector \
+  --manager MyManager \
+  --name MyCDPConnector \
+  --provider CoinbaseCDP \
+  --api-key-id your-api-key-id \
+  --api-key-secret your-api-key-secret \
+  --wallet-secret your-wallet-secret
+
+# StripePrivy provider
+agentcore add payment-connector \
+  --manager MyManager \
+  --name MyStripeConnector \
+  --provider StripePrivy \
+  --app-id your-app-id \
+  --app-secret your-app-secret \
+  --authorization-private-key your-private-key \
+  --authorization-id your-auth-id
+```
+
+| Flag                                | Description                                |
+| ----------------------------------- | ------------------------------------------ |
+| `--manager <name>`                  | Parent payment manager (required)          |
+| `--name <name>`                     | Connector name (required)                  |
+| `--provider <provider>`             | `CoinbaseCDP` (default) or `StripePrivy`   |
+| `--api-key-id <id>`                 | Coinbase CDP API Key ID                    |
+| `--api-key-secret <secret>`         | Coinbase CDP API Key Secret                |
+| `--wallet-secret <secret>`          | Coinbase CDP Wallet Secret                 |
+| `--app-id <id>`                     | Privy App ID (StripePrivy)                 |
+| `--app-secret <secret>`             | Privy App Secret (StripePrivy)             |
+| `--authorization-private-key <key>` | ECDSA P-256 private key (StripePrivy)      |
+| `--authorization-id <id>`           | Authorization key identifier (StripePrivy) |
+| `--json`                            | JSON output                                |
+
 ### add credential
 
 Add a credential to the project. Supports API key and OAuth credential types.
@@ -739,19 +818,22 @@ agentcore remove runtime-endpoint --name prod
 agentcore remove dataset --name MyDataset
 agentcore remove config-bundle --name MyBundle
 agentcore remove ab-test --name PromptComparison
+agentcore remove payment-manager --name MyManager -y
+agentcore remove payment-connector --name MyCDPConnector --manager MyManager -y
 
 # Reset everything
 agentcore remove all -y
 agentcore remove all --dry-run  # Preview
 ```
 
-| Flag                | Description                                       |
-| ------------------- | ------------------------------------------------- |
-| `--name <name>`     | Resource name                                     |
-| `--engine <engine>` | Policy engine name (required for `remove policy`) |
-| `-y, --yes`         | Skip confirmation                                 |
-| `--dry-run`         | Preview (`remove all` only)                       |
-| `--json`            | JSON output                                       |
+| Flag                | Description                                               |
+| ------------------- | --------------------------------------------------------- |
+| `--name <name>`     | Resource name                                             |
+| `--engine <engine>` | Policy engine name (required for `remove policy`)         |
+| `--manager <name>`  | Parent payment manager (required for `payment-connector`) |
+| `-y, --yes`         | Skip confirmation                                         |
+| `--dry-run`         | Preview (`remove all` only)                               |
+| `--json`            | JSON output                                               |
 
 ---
 
@@ -815,23 +897,26 @@ agentcore invoke --exec "cat /etc/os-release" --json
 The prompt can come from four sources, resolved in this precedence order: `--prompt` > positional > `--prompt-file` >
 piped stdin. `--prompt-file` combined with piped stdin content returns a collision error — pick one.
 
-| Flag                   | Description                                                      |
-| ---------------------- | ---------------------------------------------------------------- |
-| `[prompt]`             | Prompt text (positional argument)                                |
-| `--prompt <text>`      | Prompt text (flag, takes precedence over positional)             |
-| `--prompt-file <path>` | Read the prompt from a file (useful for long / structured input) |
-| `--runtime <name>`     | Specific runtime                                                 |
-| `--target <name>`      | Deployment target                                                |
-| `--session-id <id>`    | Continue a specific session                                      |
-| `--user-id <id>`       | User ID for runtime invocation (default: `default-user`)         |
-| `--stream`             | Stream response in real-time                                     |
-| `--tool <name>`        | MCP tool name (use with `call-tool` prompt)                      |
-| `--input <json>`       | MCP tool arguments as JSON (use with `--tool`)                   |
-| `-H, --header <h>`     | Custom header (`"Name: Value"`, repeatable)                      |
-| `--bearer-token <t>`   | Bearer token for CUSTOM_JWT auth                                 |
-| `--exec`               | Execute a shell command in the runtime container                 |
-| `--timeout <seconds>`  | Timeout in seconds for `--exec` commands                         |
-| `--json`               | JSON output                                                      |
+| Flag                           | Description                                                      |
+| ------------------------------ | ---------------------------------------------------------------- |
+| `[prompt]`                     | Prompt text (positional argument)                                |
+| `--prompt <text>`              | Prompt text (flag, takes precedence over positional)             |
+| `--prompt-file <path>`         | Read the prompt from a file (useful for long / structured input) |
+| `--runtime <name>`             | Specific runtime                                                 |
+| `--target <name>`              | Deployment target                                                |
+| `--session-id <id>`            | Continue a specific session                                      |
+| `--user-id <id>`               | User ID for runtime invocation (default: `default-user`)         |
+| `--stream`                     | Stream response in real-time                                     |
+| `--tool <name>`                | MCP tool name (use with `call-tool` prompt)                      |
+| `--input <json>`               | MCP tool arguments as JSON (use with `--tool`)                   |
+| `-H, --header <h>`             | Custom header (`"Name: Value"`, repeatable)                      |
+| `--bearer-token <t>`           | Bearer token for CUSTOM_JWT auth                                 |
+| `--payment-instrument-id <id>` | Payment instrument ID for x402 payments                          |
+| `--payment-session-id <id>`    | Payment session ID for budget tracking                           |
+| `--auto-session`               | Auto-create/reuse a payment session for testing                  |
+| `--exec`                       | Execute a shell command in the runtime container                 |
+| `--timeout <seconds>`          | Timeout in seconds for `--exec` commands                         |
+| `--json`                       | JSON output                                                      |
 
 Piped stdin is auto-detected: when no prompt is supplied and stdin is not a TTY, the prompt is read from stdin.
 

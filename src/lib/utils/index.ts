@@ -1,6 +1,6 @@
 export { detectAwsAccount } from './aws-account';
 export { SecureCredentials } from './credentials';
-export { getEnvPath, readEnvFile, writeEnvFile, getEnvVar, setEnvVar } from './env';
+export { getEnvPath, readEnvFile, writeEnvFile, getEnvVar, setEnvVar, removeEnvVars } from './env';
 export { isWindows } from './platform';
 export {
   runSubprocess,

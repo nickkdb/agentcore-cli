@@ -185,6 +185,8 @@ export const COMMAND_SCHEMAS = {
   'add.policy-engine': AddPolicyEngineAttrs,
   'add.policy': AddPolicyAttrs,
   'add.runtime-endpoint': NoAttrs,
+  'add.payment-manager': NoAttrs,
+  'add.payment-connector': NoAttrs,
   deploy: DeployAttrs,
 
   // dev / invoke / exec
@@ -233,6 +235,10 @@ export const COMMAND_SCHEMAS = {
   'dataset.download': NoAttrs,
   'dataset.publish-version': NoAttrs,
   'dataset.remove-version': NoAttrs,
+  'remove.payment-manager': NoAttrs,
+  'remove.payment-connector': NoAttrs,
+  'telemetry.disable': NoAttrs,
+  'telemetry.enable': NoAttrs,
   'telemetry.status': NoAttrs,
 } as const satisfies Record<string, z.ZodObject<z.ZodRawShape>>;
 

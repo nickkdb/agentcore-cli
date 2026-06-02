@@ -94,9 +94,13 @@ export class CdkToolkitWrapper {
    */
   async initialize(): Promise<void> {
     return withErrorContext(`initialize (project: ${this.projectDir})`, async () => {
-      // Use explicit profile, fall back to AWS_PROFILE env var per AWS SDK precedence
+      // Use explicit profile and region, fall back to env vars per AWS SDK precedence
       const profile = this.options.profile ?? process.env.AWS_PROFILE;
-      const sdkConfig = profile ? { baseCredentials: BaseCredentials.awsCliCompatible({ profile }) } : undefined;
+      const region = this.options.region ?? process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION;
+      const sdkConfig =
+        profile || region
+          ? { baseCredentials: BaseCredentials.awsCliCompatible({ profile, defaultRegion: region }) }
+          : undefined;
 
       this.toolkit = new Toolkit({
         ioHost: this.options.ioHost,
@@ -105,6 +109,7 @@ export class CdkToolkitWrapper {
 
       this.cloudAssemblySource = await this.toolkit.fromCdkApp(this.getCdkAppCommand(), {
         workingDirectory: this.projectDir,
+        ...(region && { env: { AWS_REGION: region, AWS_DEFAULT_REGION: region } }),
       });
     });
   }

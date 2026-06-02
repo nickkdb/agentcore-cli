@@ -16,6 +16,7 @@ import { AddIdentityFlow } from '../identity';
 import { AddGatewayFlow, AddGatewayTargetFlow } from '../mcp';
 import { AddMemoryFlow } from '../memory/AddMemoryFlow';
 import { AddOnlineEvalFlow } from '../online-eval';
+import { AddPaymentFlow } from '../payment';
 import { AddPolicyFlow } from '../policy';
 import { AddRuntimeEndpointFlow } from '../runtime-endpoint';
 import type { AddResourceType } from './AddScreen';
@@ -40,6 +41,7 @@ type FlowState =
   | { name: 'config-bundle-wizard' }
   | { name: 'ab-test-wizard' }
   | { name: 'runtime-endpoint-wizard' }
+  | { name: 'payment-wizard' }
   | {
       name: 'agent-create-success';
       agentName: string;
@@ -199,6 +201,8 @@ function getInitialFlowState(resource?: AddResourceType): FlowState {
       return { name: 'config-bundle-wizard' };
     case 'ab-test':
       return { name: 'ab-test-wizard' };
+    case 'payment':
+      return { name: 'payment-wizard' };
     default:
       return { name: 'select' };
   }
@@ -260,6 +264,9 @@ export function AddFlow(props: AddFlowProps) {
         break;
       case 'runtime-endpoint':
         setFlow({ name: 'runtime-endpoint-wizard' });
+        break;
+      case 'payment':
+        setFlow({ name: 'payment-wizard' });
         break;
     }
   }, []);
@@ -555,6 +562,19 @@ export function AddFlow(props: AddFlowProps) {
   if (flow.name === 'runtime-endpoint-wizard') {
     return (
       <AddRuntimeEndpointFlow
+        isInteractive={props.isInteractive}
+        onExit={props.onExit}
+        onBack={() => setFlow({ name: 'select' })}
+        onDev={props.onDev}
+        onDeploy={props.onDeploy}
+      />
+    );
+  }
+
+  // Payment wizard
+  if (flow.name === 'payment-wizard') {
+    return (
+      <AddPaymentFlow
         isInteractive={props.isInteractive}
         onExit={props.onExit}
         onBack={() => setFlow({ name: 'select' })}

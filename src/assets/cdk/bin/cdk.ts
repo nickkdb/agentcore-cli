@@ -30,15 +30,11 @@ async function main() {
 
   // Extract MCP configuration from project spec.
   // Gateway fields are stored in agentcore.json but may not yet be on the
-  // AgentCoreProjectSpec type from @aws/agentcore-cdk, so we read them
-  // dynamically and cast the resulting object.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const specAny = spec as any;
-  const mcpSpec = specAny.agentCoreGateways?.length
+  const mcpSpec = spec.agentCoreGateways?.length
     ? {
-        agentCoreGateways: specAny.agentCoreGateways,
-        mcpRuntimeTools: specAny.mcpRuntimeTools,
-        unassignedTargets: specAny.unassignedTargets,
+        agentCoreGateways: spec.agentCoreGateways,
+        mcpRuntimeTools: spec.mcpRuntimeTools,
+        unassignedTargets: spec.unassignedTargets,
       }
     : undefined;
 
@@ -109,11 +105,32 @@ async function main() {
       | Record<string, { credentialProviderArn: string; clientSecretArn?: string }>
       | undefined;
 
+    // Payment credential provider ARNs live in the same credentials map as identity credentials
+    const paymentCredentials = credentials;
+
+    const paymentSpec = spec.payments?.length
+      ? spec.payments.map(p => ({
+          name: p.name,
+          description: p.description,
+          authorizerType: p.authorizerType,
+          authorizerConfiguration: p.authorizerConfiguration,
+          autoPayment: p.autoPayment,
+          paymentToolAllowlist: p.paymentToolAllowlist,
+          networkPreferences: p.networkPreferences,
+          connectors: p.connectors.map(c => ({
+            name: c.name,
+            provider: c.provider,
+            credentialProviderArn: paymentCredentials?.[c.credentialName]?.credentialProviderArn ?? '',
+          })),
+        }))
+      : undefined;
+
     new AgentCoreStack(app, stackName, {
       spec,
       mcpSpec,
       credentials,
       harnesses: harnessConfigs.length > 0 ? harnessConfigs : undefined,
+      paymentSpec,
       env,
       description: `AgentCore stack for ${spec.name} deployed to ${target.name} (${target.region})`,
       tags: {
@@ -128,5 +145,5 @@ async function main() {
 
 main().catch((error: unknown) => {
   console.error('AgentCore CDK synthesis failed:', error instanceof Error ? error.message : error);
-  process.exitCode = 1;
+  process.exit(1);
 });

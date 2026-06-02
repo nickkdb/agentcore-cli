@@ -51,6 +51,12 @@ export interface InvokeOptions {
   allowedTools?: string;
   /** Override memory actor ID (harness only) */
   actorId?: string;
+  /** Payment instrument ID for x402 payments */
+  paymentInstrumentId?: string;
+  /** Payment session ID for budget tracking */
+  paymentSessionId?: string;
+  /** Auto-create/reuse a payment session for testing (runs with developer ManagementRole credentials) */
+  autoSession?: boolean;
 }
 
 export type InvokeResult = Result & {

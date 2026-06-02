@@ -21,6 +21,7 @@ const VALID_RESOURCE_TYPES = [
   'gateway',
   'evaluator',
   'online-eval',
+  'payment',
   'policy-engine',
   'policy',
   'config-bundle',
@@ -170,6 +171,7 @@ export const registerStatus = (program: Command) => {
         const abTests = filtered.filter(r => r.resourceType === 'ab-test');
         const datasets = filtered.filter(r => r.resourceType === 'dataset');
         const harnesses = filtered.filter(r => r.resourceType === 'harness');
+        const payments = filtered.filter(r => r.resourceType === 'payment');
         // TODO: Add http-gateway resource type when diffResourceSet for HTTP gateways is added to action.ts
 
         // Fetch enriched dataset info when --type dataset is specified
@@ -376,6 +378,15 @@ export const registerStatus = (program: Command) => {
                       )}
                     </Box>
                   ))}
+              </Box>
+            )}
+
+            {payments.length > 0 && (
+              <Box flexDirection="column" marginTop={1}>
+                <Text bold>Payments</Text>
+                {payments.map(entry => (
+                  <ResourceEntry key={`${entry.resourceType}-${entry.name}`} entry={entry} />
+                ))}
               </Box>
             )}
 

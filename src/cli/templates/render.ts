@@ -73,10 +73,10 @@ export async function copyAndRenderDir<T extends object>(
     if (entry.isDirectory()) {
       await copyAndRenderDir(srcPath, destPath, data);
     } else {
+      await fs.mkdir(path.dirname(destPath), { recursive: true });
       const content = await fs.readFile(srcPath, 'utf-8');
       const template = Handlebars.compile(content);
       const rendered = template(data);
-      await fs.mkdir(path.dirname(destPath), { recursive: true });
       await fs.writeFile(destPath, rendered, 'utf-8');
     }
   }

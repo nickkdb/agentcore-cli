@@ -1,8 +1,10 @@
 import { ConfigIO, ResourceNotFoundError, ValidationError } from '../../../lib';
 import type { AgentCoreProjectSpec, AwsDeploymentTargets, DeployedState, HarnessModel } from '../../../schema';
 import {
+  DEFAULT_RUNTIME_USER_ID,
   buildAguiRunInput,
   executeBashCommand,
+  getOrCreatePaymentSession,
   invokeA2ARuntime,
   invokeAgentRuntime,
   invokeAgentRuntimeStreaming,
@@ -117,6 +119,58 @@ export async function handleInvoke(context: InvokeContext, options: InvokeOption
     console.log(
       `${ANSI.yellow}Warning: This agent uses VPC network mode. Ensure your VPC endpoints are configured for invocation.${ANSI.reset}`
     );
+  }
+
+  // Payment flags are only supported for HTTP protocol
+  if (
+    (options.paymentInstrumentId || options.paymentSessionId || options.autoSession) &&
+    agentSpec.protocol &&
+    agentSpec.protocol !== 'HTTP'
+  ) {
+    return {
+      success: false,
+      error: new Error(
+        `Payment flags are only supported for HTTP protocol agents. Agent '${agentSpec.name}' uses '${agentSpec.protocol}'.`
+      ),
+    };
+  }
+
+  // Conflict: --auto-session and --payment-session-id are mutually exclusive
+  if (options.autoSession && options.paymentSessionId) {
+    return {
+      success: false,
+      error: new Error('--auto-session and --payment-session-id are mutually exclusive. Use one or the other.'),
+    };
+  }
+
+  // Auto-session: get or create a payment session when --auto-session is set
+  if (options.autoSession && !options.paymentSessionId) {
+    const targetState = deployedState.targets[selectedTargetName];
+    const payments = targetState?.resources?.payments;
+    const firstManager = payments ? Object.values(payments)[0] : undefined;
+    if (!firstManager?.managerArn) {
+      return {
+        success: false,
+        error: new Error('--auto-session requires a deployed payment manager. Run `agentcore deploy` first.'),
+      };
+    }
+    try {
+      const paymentSpec = project.payments?.find(p => p.name === Object.keys(payments!)[0]);
+      const sessionId = await getOrCreatePaymentSession({
+        region: targetConfig.region,
+        managerArn: firstManager.managerArn,
+        userId: options.userId ?? DEFAULT_RUNTIME_USER_ID,
+        defaultSpendLimit: paymentSpec?.defaultSpendLimit,
+      });
+      options = { ...options, paymentSessionId: sessionId };
+    } catch (err) {
+      return {
+        success: false,
+        error: new Error(
+          `--auto-session failed to create payment session: ${err instanceof Error ? err.message : String(err)}`
+        ),
+      };
+    }
   }
 
   // Exec mode: run shell command in runtime container
@@ -446,6 +500,8 @@ export async function handleInvoke(context: InvokeContext, options: InvokeOption
         headers: options.headers,
         bearerToken: options.bearerToken,
         baggage,
+        paymentInstrumentId: options.paymentInstrumentId,
+        paymentSessionId: options.paymentSessionId,
       });
 
       for await (const chunk of result.stream) {
@@ -480,6 +536,8 @@ export async function handleInvoke(context: InvokeContext, options: InvokeOption
     headers: options.headers,
     bearerToken: options.bearerToken,
     baggage,
+    paymentInstrumentId: options.paymentInstrumentId,
+    paymentSessionId: options.paymentSessionId,
   });
 
   logger.logResponse(response.content);

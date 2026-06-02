@@ -52,6 +52,7 @@ export interface AgentRenderConfig {
   hasMemory: boolean;
   hasIdentity: boolean;
   hasGateway: boolean;
+  hasPayment: boolean;
   /** Whether agent is deployed in VPC mode (affects example MCP endpoints) */
   isVpc: boolean;
   /** Build type: CodeZip (default) or Container */

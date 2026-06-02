@@ -157,7 +157,10 @@ export const registerInvoke = (program: Command) => {
       (val: string, prev: string[]) => [...prev, val],
       [] as string[]
     )
-    .option('--bearer-token <token>', 'Bearer token for CUSTOM_JWT auth (bypasses SigV4) [non-interactive]');
+    .option('--bearer-token <token>', 'Bearer token for CUSTOM_JWT auth (bypasses SigV4) [non-interactive]')
+    .option('--payment-instrument-id <id>', 'Payment instrument ID for x402 payments [non-interactive]')
+    .option('--payment-session-id <id>', 'Payment session ID for budget tracking [non-interactive]')
+    .option('--auto-session', 'Auto-create/reuse a payment session for testing [non-interactive]');
 
   if (isPreviewEnabled()) {
     invokeCmd
@@ -227,6 +230,9 @@ export const registerInvoke = (program: Command) => {
         systemPrompt?: string;
         allowedTools?: string;
         actorId?: string;
+        paymentInstrumentId?: string;
+        paymentSessionId?: string;
+        autoSession?: boolean;
       }
     ) => {
       try {
@@ -270,7 +276,10 @@ export const registerInvoke = (program: Command) => {
           cliOptions.bearerToken ||
           cliOptions.harness ||
           cliOptions.harnessArn ||
-          cliOptions.verbose
+          cliOptions.verbose ||
+          cliOptions.paymentInstrumentId ||
+          cliOptions.paymentSessionId ||
+          cliOptions.autoSession
         ) {
           const result = await withCommandRunTelemetry(
             'invoke',
@@ -325,6 +334,9 @@ export const registerInvoke = (program: Command) => {
                 systemPrompt: cliOptions.systemPrompt,
                 allowedTools: cliOptions.allowedTools,
                 actorId: cliOptions.actorId,
+                paymentInstrumentId: cliOptions.paymentInstrumentId,
+                paymentSessionId: cliOptions.paymentSessionId,
+                autoSession: cliOptions.autoSession,
               };
 
               return handleInvokeCLI(options, invokeContext);

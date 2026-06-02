@@ -279,6 +279,14 @@ export async function mapGenerateConfigToRenderConfig(
     hasMemory: isMcp || config.language === 'TypeScript' ? false : config.memory !== 'none',
     hasIdentity: isMcp ? false : identityProviders.length > 0,
     hasGateway: gatewayProviders.length > 0,
+    hasPayment: await (async () => {
+      try {
+        const spec = await new ConfigIO().readProjectSpec();
+        return (spec.payments ?? []).length > 0;
+      } catch {
+        return false;
+      }
+    })(),
     isVpc: config.networkMode === 'VPC',
     buildType: config.buildType,
     memoryProviders:

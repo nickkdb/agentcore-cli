@@ -407,6 +407,38 @@ describe('AgentCoreProjectSpecSchema', () => {
     }
   });
 
+  it('leaves payments undefined when absent (optional, non-breaking round-trip)', () => {
+    // payments is .optional(), NOT .default([]) — parsing a project without a
+    // payments key must NOT materialize `payments: []`, so re-serializing an
+    // older config does not inject a payments field for customers who never
+    // used payments. See PR discussion on agentcore-l3-cdk-constructs#219.
+    const result = AgentCoreProjectSpecSchema.safeParse(minimalProject);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.payments).toBeUndefined();
+      expect('payments' in result.data).toBe(false);
+    }
+  });
+
+  it('accepts and validates a payments array when present', () => {
+    const result = AgentCoreProjectSpecSchema.safeParse({
+      ...minimalProject,
+      payments: [
+        {
+          name: 'paymgr',
+          authorizerType: 'AWS_IAM',
+          pattern: 'interceptor',
+          connectors: [],
+        },
+      ],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.payments).toHaveLength(1);
+      expect(result.data.payments![0]!.name).toBe('paymgr');
+    }
+  });
+
   it('accepts project with agents', () => {
     const result = AgentCoreProjectSpecSchema.safeParse({
       ...minimalProject,
