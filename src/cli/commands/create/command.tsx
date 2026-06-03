@@ -9,7 +9,7 @@ import type {
   TargetLanguage,
 } from '../../../schema';
 import { LIFECYCLE_TIMEOUT_MAX, LIFECYCLE_TIMEOUT_MIN } from '../../../schema';
-import { ANSI } from '../../constants';
+import { ANSI, COMMAND_DESCRIPTIONS } from '../../constants';
 import { getErrorMessage } from '../../errors';
 import { isPreviewEnabled } from '../../feature-flags';
 import { harnessPrimitive } from '../../primitives/registry';
@@ -26,7 +26,6 @@ import {
   standardize,
 } from '../../telemetry/schemas/common-shapes.js';
 import { renderTUI } from '../../tui';
-import { COMMAND_DESCRIPTIONS } from '../../tui/copy';
 import { requireTTY } from '../../tui/guards';
 import { parseCommaSeparatedList } from '../shared/vpc-utils';
 import { type ProgressCallback, createProject, createProjectWithAgent, getDryRunInfo } from './action';

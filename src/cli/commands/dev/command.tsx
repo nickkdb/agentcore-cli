@@ -7,6 +7,7 @@ import {
   getWorkingDirectory,
 } from '../../../lib';
 import { failureResult } from '../../../lib/result.js';
+import { COMMAND_DESCRIPTIONS } from '../../constants';
 import { getErrorMessage } from '../../errors';
 import { detectContainerRuntime } from '../../external-requirements';
 import { isPreviewEnabled } from '../../feature-flags';
@@ -31,7 +32,6 @@ import { OtelCollector, startOtelCollector } from '../../operations/dev/otel';
 import { withCommandRunTelemetry } from '../../telemetry/cli-command-run.js';
 import { AgentProtocol, standardize } from '../../telemetry/schemas/common-shapes.js';
 import { LayoutProvider } from '../../tui/context';
-import { COMMAND_DESCRIPTIONS } from '../../tui/copy';
 import { requireProject, requireTTY } from '../../tui/guards';
 import { runCliDeploy } from '../deploy/progress';
 import { parseHeaderFlags } from '../shared/header-utils';
