@@ -1,5 +1,5 @@
 import { ConfigIO, ResourceNotFoundError, SecureCredentials, ValidationError, toError } from '../../../lib';
-import type { AgentCoreMcpSpec, DeployedState, HarnessDeployedState } from '../../../schema';
+import type { AgentCoreMcpSpec, AgentCoreProjectSpec, DeployedState, HarnessDeployedState } from '../../../schema';
 import { applyTargetRegionToEnv } from '../../aws';
 import { validateAwsCredentials } from '../../aws/account';
 import { CdkToolkitWrapper, createSwitchableIoHost } from '../../cdk/toolkit-lib';
@@ -38,6 +38,7 @@ import {
 import { computeProjectDeployHash } from '../../operations/deploy/change-detection';
 import { formatTargetStatus, getGatewayTargetStatuses } from '../../operations/deploy/gateway-status';
 import { type ImperativeDeployContext, createDeploymentManager } from '../../operations/deploy/imperative';
+import { collectThreeLoBannerEntries, renderThreeLoBanner } from '../../operations/deploy/post-deploy-3lo-banner';
 import { deleteOrphanedABTests, setupABTests } from '../../operations/deploy/post-deploy-ab-tests';
 import {
   resolveConfigBundleComponentKeys,
@@ -46,9 +47,33 @@ import {
 import { syncDatasets } from '../../operations/deploy/post-deploy-datasets';
 import { setupHttpGateways } from '../../operations/deploy/post-deploy-http-gateways';
 import { enableOnlineEvalConfigs } from '../../operations/deploy/post-deploy-online-evals';
+import { buildCredentialScopesIndex, resolveEffectiveScopes } from '../../operations/identity/resolve-effective-scopes';
 import { toStackName } from '../import/import-utils';
 import type { DeployResult } from './types';
 import { StackSelectionStrategy } from '@aws-cdk/toolkit-lib';
+
+/**
+ * Resolve effective OAuth scopes for every target before handing the spec to
+ * the CDK. Both `target.outboundAuth.scopes` and `credential.scopes` are
+ * optional in the schema; the deploy spec must carry the resolved value
+ * because the CDK construct only receives credential ARNs, not the source
+ * credential's scope list. See `resolve-effective-scopes.ts` for precedence.
+ */
+function resolveGatewayScopes(
+  projectSpec: AgentCoreProjectSpec
+): NonNullable<AgentCoreProjectSpec['agentCoreGateways']> {
+  const credScopes = buildCredentialScopesIndex(projectSpec);
+  return (projectSpec.agentCoreGateways ?? []).map(gateway => ({
+    ...gateway,
+    targets: gateway.targets.map(target => {
+      const auth = target.outboundAuth;
+      if (auth?.type !== 'OAUTH' || !auth.credentialName) return target;
+      const effective = resolveEffectiveScopes(auth.scopes, credScopes.get(auth.credentialName));
+      if (effective.length === 0) return target;
+      return { ...target, outboundAuth: { ...auth, scopes: effective } };
+    }),
+  }));
+}
 
 export interface ValidatedDeployOptions {
   target: string;
@@ -140,7 +165,7 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
     let mcpSpec: Pick<AgentCoreMcpSpec, 'agentCoreGateways'> | null = null;
     try {
       const projectSpec = await configIO.readProjectSpec();
-      mcpSpec = { agentCoreGateways: projectSpec.agentCoreGateways };
+      mcpSpec = { agentCoreGateways: resolveGatewayScopes(projectSpec) };
     } catch {
       // Project read failed — no gateways
     }
@@ -582,6 +607,21 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
     }
 
     await configIO.writeDeployedState(deployedState);
+
+    // Post-deploy 3LO banner: surface the IdP callback URL for any 3LO
+    // gateway target whose credential's callbackUrl just appeared (or
+    // changed) in this deploy. Silent on re-deploys with no callback-URL
+    // change so customers don't see noise on subsequent runs.
+    const threeLoEntries = collectThreeLoBannerEntries({
+      projectSpec: context.projectSpec,
+      deployedState,
+      previousDeployedState: existingState,
+      deploymentTargetName: target.name,
+    });
+    if (threeLoEntries.length > 0) {
+      const banner = renderThreeLoBanner(threeLoEntries);
+      if (banner) process.stderr.write(banner);
+    }
 
     // Show gateway URLs and target sync status
     if (Object.keys(gateways).length > 0) {

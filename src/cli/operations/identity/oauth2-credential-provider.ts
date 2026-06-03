@@ -65,12 +65,35 @@ export async function oAuth2ProviderExists(
 
 /**
  * Build the OAuth2 provider config for Create/Update commands.
- * Always uses customOauth2ProviderConfig — the vendor field controls server-side
- * behavior (token endpoints, scopes), but the config shape is the same for all
- * vendors in the current API. Vendor-specific config paths (e.g. googleOauth2ProviderConfig)
- * would be needed if we add vendor selection in a future phase.
+ *
+ * The CreateOauth2CredentialProvider API takes a Union — exactly ONE of
+ *   customOauth2ProviderConfig | googleOauth2ProviderConfig | githubOauth2ProviderConfig
+ *   | microsoftOauth2ProviderConfig | slackOauth2ProviderConfig
+ *   | salesforceOauth2ProviderConfig | atlassianOauth2ProviderConfig
+ *   | linkedinOauth2ProviderConfig
+ * — and rejects the request when the chosen union member doesn't match
+ * `credentialProviderVendor`. For example, sending a `GoogleOauth2` vendor
+ * with `customOauth2ProviderConfig` produces "Provided configuration does
+ * not match selected type: GoogleOauth2" and fails the deploy.
+ *
+ * Route on `vendor` to the matching provider config. Built-in vendors that
+ * the SDK doesn't yet model with a dedicated input type (or vendors we
+ * haven't seen in customer projects yet) flow through
+ * `includedOauth2ProviderConfig` — the catch-all union member for
+ * non-Custom built-ins. CustomOauth2 (and unknown vendors) keep the
+ * existing customOauth2ProviderConfig path.
  */
-function buildOAuth2Config(params: OAuth2ProviderParams) {
+const BUILT_IN_VENDOR_CONFIG_KEY: Record<string, string> = {
+  GoogleOauth2: 'googleOauth2ProviderConfig',
+  GithubOauth2: 'githubOauth2ProviderConfig',
+  MicrosoftOauth2: 'microsoftOauth2ProviderConfig',
+  SlackOauth2: 'slackOauth2ProviderConfig',
+  SalesforceOauth2: 'salesforceOauth2ProviderConfig',
+  AtlassianOauth2: 'atlassianOauth2ProviderConfig',
+  LinkedinOauth2: 'linkedinOauth2ProviderConfig',
+};
+
+function buildCustomConfig(params: OAuth2ProviderParams) {
   return {
     name: params.name,
     credentialProviderVendor: params.vendor as CredentialProviderVendorType,
@@ -84,6 +107,28 @@ function buildOAuth2Config(params: OAuth2ProviderParams) {
       },
     },
   };
+}
+
+function buildOAuth2Config(params: OAuth2ProviderParams) {
+  const builtInKey = BUILT_IN_VENDOR_CONFIG_KEY[params.vendor];
+  if (builtInKey) {
+    // Built-in vendors with a dedicated SDK config member only need
+    // clientId + clientSecret; the IdP's discovery / endpoints are
+    // hard-coded server-side. The SDK types this as a tagged union with a
+    // Member-shaped variant per built-in vendor; we build it dynamically
+    // by key, so cast to the input shape after construction.
+    return {
+      name: params.name,
+      credentialProviderVendor: params.vendor as CredentialProviderVendorType,
+      oauth2ProviderConfigInput: {
+        [builtInKey]: {
+          clientId: params.clientId,
+          clientSecret: params.clientSecret,
+        },
+      } as ReturnType<typeof buildCustomConfig>['oauth2ProviderConfigInput'],
+    };
+  }
+  return buildCustomConfig(params);
 }
 
 /**

@@ -290,7 +290,23 @@ export class GatewayTargetPrimitive extends BasePrimitive<AddGatewayTargetOption
         '--oauth-discovery-url <url>',
         'OAuth discovery URL — creates credential inline (for oauth auth) [non-interactive]'
       )
-      .option('--oauth-scopes <scopes>', 'OAuth scopes, comma-separated (for oauth auth) [non-interactive]')
+      .option(
+        '--oauth-scopes <scopes>',
+        'OAuth scopes, comma-separated (for oauth auth). When --scopes is also set, --scopes wins. [non-interactive]'
+      )
+      .option(
+        '--grant-type <type>',
+        'OAuth grant type: client-credentials (2LO, default) or authorization-code (3LO) [non-interactive]'
+      )
+      .option(
+        '--scopes <scopes>',
+        'OAuth scopes, comma-separated (target-level). Alias of --oauth-scopes; when both are set, --scopes wins. [non-interactive]'
+      )
+      .option('--default-return-url <url>', 'Default return URL for 3LO (authorization-code) targets [non-interactive]')
+      .option(
+        '--custom-params <pairs>',
+        'Comma-separated key=value OAuth params for 3LO (e.g. access_type=offline,prompt=consent) [non-interactive]'
+      )
       .option('--rest-api-id <id>', 'REST API ID (for api-gateway type) [non-interactive]')
       .option('--stage <stage>', 'Deployment stage (for api-gateway type) [non-interactive]')
       .option('--tool-filter-path <path>', 'Tool filter path pattern, e.g. /pets/* [non-interactive]')
@@ -333,6 +349,95 @@ export class GatewayTargetPrimitive extends BasePrimitive<AddGatewayTargetOption
             'api-key': 'API_KEY',
             api_key: 'API_KEY',
             none: 'NONE',
+          };
+
+          // Build the outbound-auth object for OAuth targets (2LO or 3LO).
+          // Returns `undefined` when no outbound auth flag was set so the caller
+          // can spread it conditionally.
+          const buildOauthOutboundAuth = ():
+            | {
+                type: 'OAUTH' | 'API_KEY' | 'NONE';
+                credentialName?: string;
+                scopes?: string[];
+                grantType?: 'CLIENT_CREDENTIALS' | 'AUTHORIZATION_CODE';
+                defaultReturnUrl?: string;
+                customParameters?: Record<string, string>;
+              }
+            | undefined => {
+            if (!cliOptions.outboundAuthType) return undefined;
+            const type = outboundAuthMap[cliOptions.outboundAuthType.toLowerCase()] ?? 'NONE';
+            // Target-level scopes: prefer --scopes, fall back to --oauth-scopes for back-compat.
+            const scopesRaw = cliOptions.scopes ?? cliOptions.oauthScopes;
+            const scopes = scopesRaw
+              ? scopesRaw
+                  .split(',')
+                  .map(s => s.trim())
+                  .filter(Boolean)
+              : undefined;
+            let grantType: 'CLIENT_CREDENTIALS' | 'AUTHORIZATION_CODE' | undefined;
+            if (cliOptions.grantType) {
+              const normalized = cliOptions.grantType.toLowerCase().replace(/_/g, '-');
+              if (normalized === 'client-credentials') grantType = 'CLIENT_CREDENTIALS';
+              else if (normalized === 'authorization-code') grantType = 'AUTHORIZATION_CODE';
+              else
+                throw new Error(
+                  `Invalid --grant-type: ${cliOptions.grantType}. Expected client-credentials or authorization-code.`
+                );
+            }
+            let customParameters: Record<string, string> | undefined;
+            if (cliOptions.customParams !== undefined) {
+              if (cliOptions.customParams.length === 0) {
+                throw new Error(
+                  '--custom-params cannot be empty. Use comma-separated key=value pairs or omit the flag.'
+                );
+              }
+              // Reject reserved keys to keep prototype pollution out of the
+              // OAuth-parameters bag.
+              const RESERVED_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+              customParameters = Object.create(null) as Record<string, string>;
+              for (const pair of cliOptions.customParams.split(',')) {
+                const [k, ...rest] = pair.split('=');
+                const key = k?.trim();
+                const value = rest.join('=').trim();
+                if (!key || !value) {
+                  throw new Error(`Invalid --custom-params entry "${pair}". Expected comma-separated key=value pairs.`);
+                }
+                if (RESERVED_KEYS.has(key)) {
+                  throw new Error(`Invalid --custom-params key "${key}". Reserved key names are not allowed.`);
+                }
+                if (Object.prototype.hasOwnProperty.call(customParameters, key)) {
+                  throw new Error(`Duplicate --custom-params key "${key}". Each key may appear at most once.`);
+                }
+                customParameters[key] = value;
+              }
+            }
+            // Default-return-URL must be http(s). The schema itself uses
+            // `z.string().url()` which accepts `javascript:` and other exotic
+            // schemes; explicitly enforce http/https on the CLI surface.
+            let defaultReturnUrl: string | undefined;
+            if (cliOptions.defaultReturnUrl !== undefined) {
+              if (cliOptions.defaultReturnUrl.length === 0) {
+                throw new Error('--default-return-url cannot be empty.');
+              }
+              try {
+                const u = new URL(cliOptions.defaultReturnUrl);
+                if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+                  throw new Error(`Invalid --default-return-url scheme "${u.protocol}". Only http(s) is allowed.`);
+                }
+                defaultReturnUrl = cliOptions.defaultReturnUrl;
+              } catch (e) {
+                if (e instanceof Error && e.message.startsWith('Invalid --default-return-url')) throw e;
+                throw new Error(`Invalid --default-return-url: ${cliOptions.defaultReturnUrl}`);
+              }
+            }
+            return {
+              type,
+              ...(cliOptions.credentialName ? { credentialName: cliOptions.credentialName } : {}),
+              ...(scopes ? { scopes } : {}),
+              ...(grantType ? { grantType } : {}),
+              ...(defaultReturnUrl ? { defaultReturnUrl } : {}),
+              ...(customParameters && Object.keys(customParameters).length > 0 ? { customParameters } : {}),
+            };
           };
 
           const cliType = cliOptions.type ?? '';
@@ -399,19 +504,13 @@ export class GatewayTargetPrimitive extends BasePrimitive<AddGatewayTargetOption
                 }
               : { inline: { path: cliOptions.schema } };
 
+            const outboundAuth = buildOauthOutboundAuth();
             const config: SchemaBasedTargetConfig = {
               name: cliOptions.name!,
               targetType: cliOptions.type,
               schemaSource,
               gateway: cliOptions.gateway!,
-              ...(cliOptions.outboundAuthType
-                ? {
-                    outboundAuth: {
-                      type: outboundAuthMap[cliOptions.outboundAuthType.toLowerCase()] ?? 'NONE',
-                      credentialName: cliOptions.credentialName,
-                    },
-                  }
-                : {}),
+              ...(outboundAuth ? { outboundAuth } : {}),
             };
             const result = await this.createSchemaBasedGatewayTarget(config);
             const output = { success: true, toolName: result.toolName };
@@ -444,6 +543,7 @@ export class GatewayTargetPrimitive extends BasePrimitive<AddGatewayTargetOption
 
           // Handle MCP server targets (existing endpoint, no code generation)
           if (cliOptions.type === 'mcpServer' && cliOptions.endpoint) {
+            const outboundAuth = buildOauthOutboundAuth();
             const config: McpServerTargetConfig = {
               targetType: 'mcpServer',
               name: cliOptions.name!,
@@ -455,14 +555,7 @@ export class GatewayTargetPrimitive extends BasePrimitive<AddGatewayTargetOption
                 description: cliOptions.description ?? `Tool for ${cliOptions.name!}`,
                 inputSchema: { type: 'object' },
               },
-              ...(cliOptions.outboundAuthType
-                ? {
-                    outboundAuth: {
-                      type: outboundAuthMap[cliOptions.outboundAuthType.toLowerCase()] ?? 'NONE',
-                      credentialName: cliOptions.credentialName,
-                    },
-                  }
-                : {}),
+              ...(outboundAuth ? { outboundAuth } : {}),
             };
             const result = await this.createExternalGatewayTarget(config);
             const output = {

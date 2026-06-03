@@ -12,6 +12,7 @@ export {
   type OAuth2ProviderParams,
   type OAuth2ProviderResult,
 } from './oauth2-credential-provider';
+export { getIdpRedirectUriForTarget, setIdpRedirectUriForTarget } from './idp-redirect-uri';
 // Re-export credential utilities from primitives for backward compatibility
 // (these were previously exported from the now-deleted create-identity.ts)
 export { computeDefaultCredentialEnvVarName } from '../../primitives/credential-utils';

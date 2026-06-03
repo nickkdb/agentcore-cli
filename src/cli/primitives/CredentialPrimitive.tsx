@@ -33,11 +33,19 @@ export interface AddApiKeyCredentialOptions {
 
 /**
  * Options for adding an OAuth credential.
+ *
+ * For 2LO and standard 3LO with OIDC discovery: provide `discoveryUrl`.
+ * For CustomOauth2 vendors without discovery (used to back 3LO targets):
+ * provide `authorizationUrl` + `tokenUrl` instead. The project-level
+ * superRefine in agentcore-project.ts enforces "discoveryUrl OR both
+ * authorizationUrl + tokenUrl" when the credential backs a 3LO target.
  */
 export interface AddOAuthCredentialOptions {
   authorizerType: 'OAuthCredentialProvider';
   name: string;
-  discoveryUrl: string;
+  discoveryUrl?: string;
+  authorizationUrl?: string;
+  tokenUrl?: string;
   clientId: string;
   clientSecret: string;
   scopes?: string[];
@@ -273,7 +281,12 @@ export class CredentialPrimitive extends BasePrimitive<AddCredentialOptions, Rem
       .option('--api-key <key>', 'The API key value [non-interactive]')
       .option('--json', 'Output as JSON [non-interactive]')
       .option('--type <type>', 'Credential type: api-key (default) or oauth [non-interactive]')
-      .option('--discovery-url <url>', 'OAuth discovery URL [non-interactive]')
+      .option(
+        '--discovery-url <url>',
+        'OAuth discovery URL (alternative: --authorization-url + --token-url) [non-interactive]'
+      )
+      .option('--authorization-url <url>', 'OAuth authorization endpoint (when no OIDC discovery) [non-interactive]')
+      .option('--token-url <url>', 'OAuth token endpoint (when no OIDC discovery) [non-interactive]')
       .option('--client-id <id>', 'OAuth client ID [non-interactive]')
       .option('--client-secret <secret>', 'OAuth client secret [non-interactive]')
       .option('--scopes <scopes>', 'OAuth scopes, comma-separated [non-interactive]')
@@ -284,6 +297,8 @@ export class CredentialPrimitive extends BasePrimitive<AddCredentialOptions, Rem
           json?: boolean;
           type?: string;
           discoveryUrl?: string;
+          authorizationUrl?: string;
+          tokenUrl?: string;
           clientId?: string;
           clientSecret?: string;
           scopes?: string;
@@ -324,7 +339,9 @@ export class CredentialPrimitive extends BasePrimitive<AddCredentialOptions, Rem
                   ? {
                       authorizerType: 'OAuthCredentialProvider' as const,
                       name: cliOptions.name!,
-                      discoveryUrl: cliOptions.discoveryUrl!,
+                      ...(cliOptions.discoveryUrl ? { discoveryUrl: cliOptions.discoveryUrl } : {}),
+                      ...(cliOptions.authorizationUrl ? { authorizationUrl: cliOptions.authorizationUrl } : {}),
+                      ...(cliOptions.tokenUrl ? { tokenUrl: cliOptions.tokenUrl } : {}),
                       clientId: cliOptions.clientId!,
                       clientSecret: cliOptions.clientSecret!,
                       scopes: cliOptions.scopes
@@ -406,7 +423,9 @@ export class CredentialPrimitive extends BasePrimitive<AddCredentialOptions, Rem
       credential = {
         authorizerType: 'OAuthCredentialProvider',
         name: config.name,
-        discoveryUrl: config.discoveryUrl,
+        ...(config.discoveryUrl ? { discoveryUrl: config.discoveryUrl } : {}),
+        ...(config.authorizationUrl ? { authorizationUrl: config.authorizationUrl } : {}),
+        ...(config.tokenUrl ? { tokenUrl: config.tokenUrl } : {}),
         vendor: 'CustomOauth2',
         scopes: config.scopes,
       };

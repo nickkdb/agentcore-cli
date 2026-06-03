@@ -1,4 +1,5 @@
-import { ConfigIO, ResourceNotFoundError, ValidationError } from '../../../lib';
+import { ConfigIO, ResourceNotFoundError, ValidationError, findConfigRoot } from '../../../lib';
+import { sanitizeForTerminal } from '../../../lib/utils/sanitize';
 import type { AgentCoreProjectSpec, AwsDeploymentTargets, DeployedState, HarnessModel } from '../../../schema';
 import {
   buildAguiRunInput,
@@ -7,7 +8,6 @@ import {
   invokeAgentRuntime,
   invokeAgentRuntimeStreaming,
   invokeAguiRuntime,
-  mcpCallTool,
   mcpInitSession,
   mcpListTools,
 } from '../../aws';
@@ -15,11 +15,14 @@ import { invokeHarness } from '../../aws/agentcore-harness';
 import { ANSI } from '../../constants';
 import { isPreviewEnabled } from '../../feature-flags';
 import { InvokeLogger } from '../../logging';
+import { invokeWithConsent } from '../../operations/dev/invoke-with-consent';
 import { formatMcpToolList } from '../../operations/dev/utils';
 import { canFetchHarnessToken, fetchHarnessToken } from '../../operations/fetch-access';
+import { getProjectIdentifier, recordConsent } from '../../operations/identity/session-pointer';
 import { resolveInvokeTarget } from './resolve';
 import type { InvokeOptions, InvokeResult } from './types';
 import { randomUUID } from 'node:crypto';
+import { dirname } from 'node:path';
 
 export interface InvokeContext {
   project: AgentCoreProjectSpec;
@@ -280,7 +283,37 @@ export async function handleInvoke(context: InvokeContext, options: InvokeOption
       try {
         // Lightweight init to get session ID (no tools/list round-trip)
         const mcpSessionId = await mcpInitSession(mcpOpts);
-        const response = await mcpCallTool({ ...mcpOpts, mcpSessionId }, options.tool, args);
+        // Drive the call through invokeWithConsent so 3LO targets that the
+        // agent proxies to via a Gateway can return URLElicitationRequiredError
+        // (-32042), the consent flow runs, and the call retries with the
+        // freshly-minted token. Non-3LO and non-gateway calls take the same
+        // happy-path through this wrapper at zero added cost.
+        const configRoot = findConfigRoot();
+        const projectRoot = configRoot ? dirname(configRoot) : undefined;
+        const projectIdentifier = projectRoot ? getProjectIdentifier(projectRoot) : 'no-project';
+        // Scope the consent lock at the GATEWAY level, not the tool level.
+        // One OAuth session covers every tool the gateway exposes, so
+        // locking per-tool would force the user to re-consent on every
+        // distinct tool call within the same session.
+        const consentScopeId = `${projectIdentifier}/${agentSpec.name}`;
+        const response = await invokeWithConsent({ ...mcpOpts, mcpSessionId }, options.tool, args, {
+          consentScopeId,
+          forceReauth: options.forceReauth,
+          noBrowserConsent: options.noBrowserConsent,
+          gatewayName: agentSpec.name,
+          targetName: options.tool,
+          contextLabel: `${agentSpec.name}/${options.tool}`,
+          onConsentComplete: projectRoot
+            ? result => {
+                recordConsent({
+                  projectAbsPath: projectRoot,
+                  gatewayName: agentSpec.name,
+                  targetName: options.tool!,
+                  strategy: result.strategyUsed,
+                });
+              }
+            : undefined,
+        });
         return {
           success: true,
           agentName: agentSpec.name,
@@ -290,9 +323,12 @@ export async function handleInvoke(context: InvokeContext, options: InvokeOption
       } catch (err) {
         return {
           success: false,
-          error: new Error(`Failed to call MCP tool: ${err instanceof Error ? err.message : String(err)}`, {
-            cause: err,
-          }),
+          error: new Error(
+            `Failed to call MCP tool: ${sanitizeForTerminal(err instanceof Error ? err : String(err))}`,
+            {
+              cause: err,
+            }
+          ),
         };
       }
     }

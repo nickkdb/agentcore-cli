@@ -269,6 +269,18 @@ export const OAuthCredentialSchema = z.object({
   name: CredentialNameSchema,
   /** OIDC discovery URL for the OAuth provider (optional for imported providers that already exist in Identity service) */
   discoveryUrl: z.string().url().optional(),
+  /**
+   * Authorization endpoint URL. For `CustomOauth2` vendors that don't expose an
+   * OIDC discovery document, this is required when the credential backs a 3LO
+   * (`AUTHORIZATION_CODE`) gateway target.
+   */
+  authorizationUrl: z.string().url().optional(),
+  /**
+   * Token endpoint URL. Companion to `authorizationUrl` for `CustomOauth2`
+   * vendors without an OIDC discovery document, required when the credential
+   * backs a 3LO target.
+   */
+  tokenUrl: z.string().url().optional(),
   /** Scopes this credential provider supports */
   scopes: z.array(z.string()).optional(),
   /** Credential provider vendor type */
@@ -563,6 +575,84 @@ export const AgentCoreProjectSpecSchema = z
             code: z.ZodIssueCode.custom,
             message: `HTTP gateway "${gw.name}" target "${target.name}" references qualifier "${target.qualifier}" which is not an endpoint on runtime "${target.runtimeRef}"`,
           });
+        }
+      }
+    }
+
+    // Validate gateway target outbound-auth references against project credentials.
+    // Per-target rules (task 1.4):
+    //   1. credentialName must resolve to a declared credential.
+    //   2. OAUTH-typed outbound auth must reference an OAuthCredentialProvider.
+    //   3. AUTHORIZATION_CODE (3LO) targets backed by a CustomOauth2 vendor must
+    //      have either a discoveryUrl OR both authorizationUrl + tokenUrl on the
+    //      credential, since the consent flow needs an authorization endpoint.
+    const credentialsByName = new Map(spec.credentials.map(c => [c.name, c]));
+    for (const gateway of spec.agentCoreGateways) {
+      for (const target of gateway.targets) {
+        const auth = target.outboundAuth;
+        if (!auth || auth.type === 'NONE' || !auth.credentialName) continue;
+
+        const cred = credentialsByName.get(auth.credentialName);
+        if (!cred) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Gateway target "${gateway.name}/${target.name}" references unknown credential "${auth.credentialName}"`,
+          });
+          continue;
+        }
+
+        if (auth.type === 'OAUTH' && cred.authorizerType !== 'OAuthCredentialProvider') {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Gateway target "${gateway.name}/${target.name}" uses OAUTH outbound auth but credential "${auth.credentialName}" is not an OAuthCredentialProvider`,
+          });
+          continue;
+        }
+        if (auth.type === 'API_KEY' && cred.authorizerType !== 'ApiKeyCredentialProvider') {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Gateway target "${gateway.name}/${target.name}" uses API_KEY outbound auth but credential "${auth.credentialName}" is not an ApiKeyCredentialProvider`,
+          });
+          continue;
+        }
+
+        if (
+          auth.type === 'OAUTH' &&
+          auth.grantType === 'AUTHORIZATION_CODE' &&
+          cred.authorizerType === 'OAuthCredentialProvider' &&
+          (cred.vendor === 'CustomOauth2' || !cred.vendor)
+        ) {
+          const hasDiscovery = Boolean(cred.discoveryUrl);
+          const hasManualUrls = Boolean(cred.authorizationUrl && cred.tokenUrl);
+          if (!hasDiscovery && !hasManualUrls) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: `Gateway target "${gateway.name}/${target.name}" is 3LO (AUTHORIZATION_CODE) but credential "${auth.credentialName}" (CustomOauth2) has neither discoveryUrl nor both authorizationUrl + tokenUrl set.`,
+            });
+          }
+        }
+
+        // A 3LO target on a gateway with `authorizerType: NONE` passes
+        // shape-level schema validation but fails at CFN-stabilize time
+        // with "3LO Auth is not supported when gateway authorizer type is
+        // NONE" — wasting a multi-minute deploy and leaving a stuck
+        // CREATE_PENDING_AUTH gateway target behind. Catch it client-side
+        // at `agentcore validate` time so the developer never enters that
+        // failure mode.
+        if (auth.type === 'OAUTH' && auth.grantType === 'AUTHORIZATION_CODE') {
+          const gatewayAuthorizerType = gateway.authorizerType ?? 'NONE';
+          if (gatewayAuthorizerType === 'NONE') {
+            // No `path` override here — matches the diagnostic style of
+            // every other rule in this superRefine block.
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: `Gateway "${gateway.name}" target "${target.name}" uses 3LO (AUTHORIZATION_CODE) outbound auth, but the gateway's authorizerType is "NONE". 3LO requires an inbound authorizer (e.g. CUSTOM_JWT) so the gateway can identify the calling user.`,
+            });
+          }
+          // The defaultReturnUrl-required-for-3LO rule lives on
+          // OutboundAuthSchema's superRefine — see schemas/mcp.ts. That's
+          // the right layer because the rule is about a single
+          // outboundAuth shape, not about cross-target relationships.
         }
       }
     }

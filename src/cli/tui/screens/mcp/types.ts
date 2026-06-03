@@ -87,6 +87,10 @@ export type AddGatewayTargetStep =
   | 'gateway'
   | 'host'
   | 'outbound-auth'
+  // 3LO grant-type prompt + scope/return-URL prompt for AUTHORIZATION_CODE.
+  // Inserted between outbound-auth and confirm (Phase 3.2 / 3.3).
+  | 'grant-type'
+  | 'three-lo-scopes'
   | 'rest-api-id'
   | 'stage'
   | 'tool-filters'
@@ -116,6 +120,10 @@ export interface GatewayTargetWizardState {
     type: 'OAUTH' | 'API_KEY' | 'NONE';
     credentialName?: string;
     scopes?: string[];
+    /** 3LO additions — set by the grant-type wizard step. */
+    grantType?: 'CLIENT_CREDENTIALS' | 'AUTHORIZATION_CODE';
+    defaultReturnUrl?: string;
+    customParameters?: Record<string, string>;
   };
   restApiId?: string;
   stage?: string;
@@ -142,6 +150,9 @@ export interface McpServerTargetConfig {
     type: 'OAUTH' | 'API_KEY' | 'NONE';
     credentialName?: string;
     scopes?: string[];
+    grantType?: 'CLIENT_CREDENTIALS' | 'AUTHORIZATION_CODE';
+    defaultReturnUrl?: string;
+    customParameters?: Record<string, string>;
   };
 }
 
@@ -192,6 +203,8 @@ export const MCP_TOOL_STEP_LABELS: Record<AddGatewayTargetStep, string> = {
   gateway: 'Gateway',
   host: 'Host',
   'outbound-auth': 'Outbound Auth',
+  'grant-type': 'OAuth Grant Type',
+  'three-lo-scopes': '3LO Scopes & Return URL',
   'rest-api-id': 'REST API ID',
   stage: 'Stage',
   'tool-filters': 'Tool Filters',

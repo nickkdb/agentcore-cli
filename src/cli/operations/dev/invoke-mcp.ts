@@ -1,5 +1,6 @@
 import { ConnectionError, ServerError } from '../../../lib/errors/types';
 import { parseJsonRpcResponse } from '../../../lib/utils/json-rpc';
+import { McpRpcError } from '../../aws/agentcore';
 import { type SSELogger } from './invoke-types';
 import { isConnectionError, sleep } from './utils';
 
@@ -196,8 +197,14 @@ export async function callMcpTool(
   const parsed = parseJsonRpcResponse(responseText);
 
   if (parsed.error) {
-    const rpcError = parsed.error as { message?: string; code?: number };
-    throw new Error(rpcError.message ?? `MCP error (code ${rpcError.code})`);
+    // Surface the structured envelope so the dev driver (or any caller
+    // running invokeWithConsent against the local server) can detect
+    // -32042 URLElicitationRequiredError and run the consent flow.
+    // Previously we flattened to a plain Error and lost the data field,
+    // which made 3LO consent handling impossible from the dev path.
+    // (Phase 3.8/3.9 prerequisite — architect R5 follow-up.)
+    const rpcError = parsed.error as { message?: string; code?: number; data?: unknown };
+    throw new McpRpcError(rpcError.code, rpcError.message ?? `MCP error (code ${rpcError.code})`, rpcError.data);
   }
 
   const result = parsed.result as { content?: { type?: string; text?: string }[] } | undefined;

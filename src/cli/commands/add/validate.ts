@@ -51,6 +51,34 @@ const VALID_DELIVERY_TYPES = ['kinesis'] as const;
 export const DEFAULT_DELIVERY_TYPE = 'kinesis';
 
 /**
+ * Validate a URL string is well-formed and uses http(s). Returns
+ * `undefined` when valid, or a typed `ValidationResult` for the caller
+ * to forward.
+ *
+ * `flagName` is the user-facing flag (e.g. `--authorization-url`) used
+ * in error messages so the operator sees the same flag name they typed.
+ *
+ * Mirrors the consent-flow.ts and mcp-meta.ts http(s) chokepoints so a
+ * malformed scheme can't slip past the CLI and show up later as a
+ * `javascript:` or `data:` URL handed to xdg-open.
+ */
+function validateHttpsUrl(value: string, flagName: string): ValidationResult | undefined {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return { valid: false, error: `${flagName} must be a valid URL` };
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    return {
+      valid: false,
+      error: `${flagName} must use http:// or https:// (got "${url.protocol}")`,
+    };
+  }
+  return undefined;
+}
+
+/**
  * Validate that a credential name exists in the project spec.
  */
 async function validateCredentialExists(credentialName: string): Promise<ValidationResult> {
@@ -526,6 +554,13 @@ export async function validateAddGatewayTargetOptions(options: AddGatewayTargetO
     if (options.oauthClientId || options.oauthClientSecret || options.oauthDiscoveryUrl || options.oauthScopes) {
       return { valid: false, error: 'OAuth options are not applicable for lambda-function-arn type' };
     }
+    if (options.grantType || options.scopes || options.defaultReturnUrl || options.customParams) {
+      return {
+        valid: false,
+        error:
+          '3LO options (--grant-type, --scopes, --default-return-url, --custom-params) are not applicable for lambda-function-arn type — Lambda targets execute under the gateway IAM role.',
+      };
+    }
 
     const configRoot = findConfigRoot();
     const projectRoot = configRoot ? dirname(configRoot) : process.cwd();
@@ -858,13 +893,28 @@ export function validateAddCredentialOptions(options: AddCredentialOptions): Val
   const identityType = options.type ?? 'api-key';
 
   if (identityType === 'oauth') {
-    if (!options.discoveryUrl) {
-      return { valid: false, error: '--discovery-url is required for OAuth credentials' };
+    // Accept either --discovery-url alone OR (--authorization-url AND --token-url).
+    // The latter is required for CustomOauth2 vendors that don't expose OIDC
+    // discovery and back 3LO targets (Phase 1.3 + Phase 3.1).
+    const hasDiscovery = Boolean(options.discoveryUrl);
+    const hasManualUrls = Boolean(options.authorizationUrl && options.tokenUrl);
+    if (!hasDiscovery && !hasManualUrls) {
+      return {
+        valid: false,
+        error: '--discovery-url, OR both --authorization-url and --token-url, are required for OAuth credentials',
+      };
     }
-    try {
-      new URL(options.discoveryUrl);
-    } catch {
-      return { valid: false, error: '--discovery-url must be a valid URL' };
+    if (options.discoveryUrl) {
+      const result = validateHttpsUrl(options.discoveryUrl, '--discovery-url');
+      if (result) return result;
+    }
+    if (options.authorizationUrl) {
+      const result = validateHttpsUrl(options.authorizationUrl, '--authorization-url');
+      if (result) return result;
+    }
+    if (options.tokenUrl) {
+      const result = validateHttpsUrl(options.tokenUrl, '--token-url');
+      if (result) return result;
     }
     if (!options.clientId) {
       return { valid: false, error: '--client-id is required for OAuth credentials' };

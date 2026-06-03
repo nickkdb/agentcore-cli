@@ -29,13 +29,90 @@ export type GatewayTargetType = z.infer<typeof GatewayTargetTypeSchema>;
 export const OutboundAuthTypeSchema = z.enum(['OAUTH', 'API_KEY', 'NONE']);
 export type OutboundAuthType = z.infer<typeof OutboundAuthTypeSchema>;
 
+/**
+ * OAuth grant type for outbound auth.
+ *
+ * - `CLIENT_CREDENTIALS` — 2-legged OAuth (machine-to-machine). Default for
+ *   backwards-compatibility with existing gateway targets.
+ * - `AUTHORIZATION_CODE` — 3-legged OAuth (user-delegated). The Gateway target
+ *   acquires tokens on behalf of an end-user via AgentCore Identity's
+ *   session-binding flow.
+ *
+ * Note: `TOKEN_EXCHANGE` (RFC 8693 / RFC 7523, server-side OBO) is supported by
+ * the AgentCore Identity service for multi-tenant production but is not modelled
+ * as a CLI grant type — multi-tenant OBO flows happen entirely server-side and
+ * do not require a developer-time configuration toggle.
+ */
+export const OAuthGrantTypeSchema = z.enum(['CLIENT_CREDENTIALS', 'AUTHORIZATION_CODE']);
+export type OAuthGrantType = z.infer<typeof OAuthGrantTypeSchema>;
+
 export const OutboundAuthSchema = z
   .object({
     type: OutboundAuthTypeSchema.default('NONE'),
     credentialName: z.string().min(1).optional(),
+    /**
+     * Scopes the gateway requests for this target. Target-level scopes take
+     * precedence over credential-level scopes. For 2LO targets, scopes may
+     * still be inherited from the credential's `scopes` field with a
+     * deprecation note from `agentcore validate`.
+     */
     scopes: z.array(z.string()).optional(),
+    /**
+     * OAuth grant type. Defaults to `CLIENT_CREDENTIALS` (2LO) for
+     * backwards-compatibility. Set to `AUTHORIZATION_CODE` for 3LO targets.
+     * Only applicable when `type === 'OAUTH'`.
+     */
+    grantType: OAuthGrantTypeSchema.optional(),
+    /**
+     * Default return URL the authorization server redirects the user-agent to
+     * once consent completes. Only applicable for 3LO (`AUTHORIZATION_CODE`).
+     */
+    defaultReturnUrl: z.string().url().optional(),
+    /**
+     * Vendor-specific OAuth parameters appended to the authorization request
+     * (e.g. Google's `access_type=offline`, `prompt=consent`).
+     * Only applicable for 3LO (`AUTHORIZATION_CODE`).
+     */
+    customParameters: z.record(z.string(), z.string()).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((data, ctx) => {
+    const isThreeLo = data.grantType === 'AUTHORIZATION_CODE';
+    if (data.grantType && data.type !== 'OAUTH') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'grantType is only applicable when outbound auth type is OAUTH',
+        path: ['grantType'],
+      });
+    }
+    if (!isThreeLo && data.defaultReturnUrl) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'defaultReturnUrl is only applicable for AUTHORIZATION_CODE grant type',
+        path: ['defaultReturnUrl'],
+      });
+    }
+    // The AgentCore service rejects 3LO targets without `defaultReturnUrl`
+    // at gateway-target stabilize time with a 400 ("Default return URL is
+    // required when grant type is AUTHORIZATION_CODE"). Catch it client-side
+    // so the customer doesn't waste a multi-minute deploy round-trip. The
+    // sibling rule above ensures the field is *only* set for 3LO; this rule
+    // ensures it is *always* set for 3LO.
+    if (isThreeLo && !data.defaultReturnUrl) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'defaultReturnUrl is required when grantType is AUTHORIZATION_CODE',
+        path: ['defaultReturnUrl'],
+      });
+    }
+    if (!isThreeLo && data.customParameters) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'customParameters is only applicable for AUTHORIZATION_CODE grant type',
+        path: ['customParameters'],
+      });
+    }
+  });
 
 export type OutboundAuth = z.infer<typeof OutboundAuthSchema>;
 
@@ -542,6 +619,18 @@ export const AgentCoreGatewayTargetSchema = z
         message: `${data.outboundAuth.type} outbound auth requires a credentialName.`,
         path: ['outboundAuth', 'credentialName'],
       });
+    }
+    // 3LO (AUTHORIZATION_CODE) is only supported on target types that proxy
+    // user-delegated tool calls — `lambda` and `apiGateway` always run with the
+    // gateway's IAM principal, so a per-user OAuth flow makes no sense there.
+    if (data.outboundAuth?.grantType === 'AUTHORIZATION_CODE') {
+      if (data.targetType === 'lambda' || data.targetType === 'apiGateway') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `${data.targetType} targets do not support AUTHORIZATION_CODE (3LO) outbound auth — these targets execute under the gateway's IAM role.`,
+          path: ['outboundAuth', 'grantType'],
+        });
+      }
     }
   });
 

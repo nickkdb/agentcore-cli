@@ -277,15 +277,36 @@ Strategy configuration:
 }
 ```
 
-| Field            | Required | Description                                            |
-| ---------------- | -------- | ------------------------------------------------------ |
-| `authorizerType` | Yes      | Always `"OAuthCredentialProvider"`                     |
-| `name`           | Yes      | Credential name (1-128 chars)                          |
-| `discoveryUrl`   | Yes      | OIDC discovery URL (must be a valid URL)               |
-| `scopes`         | No       | Array of OAuth scopes                                  |
-| `vendor`         | No       | Credential provider vendor (default: `"CustomOauth2"`) |
-| `managed`        | No       | Whether auto-created by the CLI (do not edit)          |
-| `usage`          | No       | `"inbound"` or `"outbound"`                            |
+| Field              | Required | Description                                                                                  |
+| ------------------ | -------- | -------------------------------------------------------------------------------------------- |
+| `authorizerType`   | Yes      | Always `"OAuthCredentialProvider"`                                                           |
+| `name`             | Yes      | Credential name (1-128 chars)                                                                |
+| `discoveryUrl`     | Cond.    | OIDC discovery URL. Required unless `authorizationUrl` + `tokenUrl` are both set (see below) |
+| `authorizationUrl` | Cond.    | OAuth authorization endpoint. Use with `tokenUrl` for IdPs that don't expose OIDC discovery  |
+| `tokenUrl`         | Cond.    | OAuth token endpoint. Companion to `authorizationUrl`                                        |
+| `scopes`           | No       | Array of OAuth scopes                                                                        |
+| `vendor`           | No       | Credential provider vendor (default: `"CustomOauth2"`)                                       |
+| `managed`          | No       | Whether auto-created by the CLI (do not edit)                                                |
+| `usage`            | No       | `"inbound"` or `"outbound"`                                                                  |
+
+Provide **either** an OIDC `discoveryUrl` (preferred — the CLI/service resolves the authorization and token endpoints
+automatically) **or** both `authorizationUrl` and `tokenUrl` for identity providers that don't publish a
+`/.well-known/openid-configuration` document.
+
+The `vendor` field defaults to `CustomOauth2`, which works with any standards-compliant OIDC identity provider via its
+discovery URL. Common discovery URLs (substitute the bracketed values for your account/tenant):
+
+| Identity provider  | Discovery URL                                                                              |
+| ------------------ | ------------------------------------------------------------------------------------------ |
+| Google             | `https://accounts.google.com/.well-known/openid-configuration`                             |
+| Microsoft Entra ID | `https://login.microsoftonline.com/{tenantId}/v2.0/.well-known/openid-configuration`       |
+| Amazon Cognito     | `https://cognito-idp.{region}.amazonaws.com/{userPoolId}/.well-known/openid-configuration` |
+| Auth0              | `https://{tenant}.{region}.auth0.com/.well-known/openid-configuration`                     |
+| Okta               | `https://{org}.okta.com/oauth2/default/.well-known/openid-configuration`                   |
+
+For 3-legged OAuth (`AUTHORIZATION_CODE`) targets, set `grantType`, `scopes`, and `defaultReturnUrl` on the gateway
+target's `outboundAuth` (see [Outbound Auth](#outbound-auth)), not on the credential. Vendor-specific OAuth parameters
+(for example Google's `access_type=offline`) are passed through the target's `customParameters`.
 
 The actual secrets (API keys, client IDs, client secrets) are stored in `.env.local` for local development and in
 AgentCore Identity service for deployed environments.
@@ -474,11 +495,19 @@ implementations.
 
 ### Outbound Auth
 
-| Field            | Required | Description                                          |
-| ---------------- | -------- | ---------------------------------------------------- |
-| `type`           | Yes      | `"OAUTH"`, `"API_KEY"`, or `"NONE"` (default)        |
-| `credentialName` | Cond.    | Credential name (required when type is not `"NONE"`) |
-| `scopes`         | No       | OAuth scopes (for `"OAUTH"` type)                    |
+| Field              | Required | Description                                                                                               |
+| ------------------ | -------- | --------------------------------------------------------------------------------------------------------- |
+| `type`             | Yes      | `"OAUTH"`, `"API_KEY"`, or `"NONE"` (default)                                                             |
+| `credentialName`   | Cond.    | Credential name (required when type is not `"NONE"`)                                                      |
+| `scopes`           | No       | OAuth scopes (for `"OAUTH"` type). Target-level scopes take precedence over the credential's scopes       |
+| `grantType`        | No       | `"CLIENT_CREDENTIALS"` (2LO, default) or `"AUTHORIZATION_CODE"` (3LO — acts on behalf of an end user)     |
+| `defaultReturnUrl` | Cond.    | Required for `AUTHORIZATION_CODE`. URL the IdP returns the user to after consent completes                |
+| `customParameters` | No       | Extra OAuth parameters forwarded to the IdP (e.g. `{"access_type": "offline"}` for Google refresh tokens) |
+
+For 3LO targets (`grantType: "AUTHORIZATION_CODE"`), the gateway must have an inbound authorizer (e.g. `CUSTOM_JWT`) so
+it can identify the calling user. After deploying a 3LO target, register the AgentCore-managed callback URL printed by
+the deploy banner with your identity provider, then run `agentcore invoke` (opens a browser for consent) or
+`agentcore invoke --no-browser-consent` (prints the URL for paste-back on headless hosts).
 
 ---
 

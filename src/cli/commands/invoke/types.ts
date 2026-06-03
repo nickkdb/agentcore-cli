@@ -51,6 +51,14 @@ export interface InvokeOptions {
   allowedTools?: string;
   /** Override memory actor ID (harness only) */
   actorId?: string;
+  /** Skip browser auto-open during 3LO consent (uses paste-URL strategy). */
+  noBrowserConsent?: boolean;
+  /**
+   * Force a fresh 3LO consent flow on the next tool call by setting
+   * `_meta.aws.bedrock-agentcore.gateway/credentialProviderConfiguration.oauthCredentialProvider.forceAuthentication = true`
+   * on the JSON-RPC `tools/call` request.
+   */
+  forceReauth?: boolean;
 }
 
 export type InvokeResult = Result & {

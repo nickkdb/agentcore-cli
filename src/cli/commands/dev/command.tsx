@@ -13,7 +13,6 @@ import { detectContainerRuntime } from '../../external-requirements';
 import { isPreviewEnabled } from '../../feature-flags';
 import { ExecLogger } from '../../logging';
 import {
-  callMcpTool,
   createDevServer,
   findAvailablePort,
   getAgentPort,
@@ -95,13 +94,23 @@ function isConnectionRefused(err: unknown): boolean {
   return msg.includes('ECONNREFUSED') || msg.includes('fetch failed');
 }
 
-async function handleMcpInvoke(
-  port: number,
-  invokeValue: string,
-  toolName?: string,
-  input?: string,
-  headers?: Record<string, string>
-): Promise<void> {
+interface McpInvokeArgs {
+  port: number;
+  invokeValue: string;
+  toolName?: string;
+  input?: string;
+  headers?: Record<string, string>;
+  /** Consent context required for 3LO call-tool flows. Stable agent/gateway name + project root determine the consent file lock scope. */
+  consent: {
+    agentName: string;
+    projectRoot: string;
+    forceReauth?: boolean;
+    noBrowserConsent?: boolean;
+  };
+}
+
+async function handleMcpInvoke(args: McpInvokeArgs): Promise<void> {
+  const { port, invokeValue, toolName, input, headers, consent: consentContext } = args;
   try {
     if (invokeValue === 'list-tools') {
       const { tools } = await listMcpTools(port, undefined, headers);
@@ -129,7 +138,29 @@ async function handleMcpInvoke(
           throw new ValidationError(`Invalid JSON for --input: ${input}. Expected format: --input '{"key": "value"}'`);
         }
       }
-      const result = await callMcpTool(port, toolName, args, sessionId, undefined, headers);
+      // Drive the call through invokeWithConsentDev so 3LO targets that
+      // the dev server proxies via a Gateway can return
+      // URLElicitationRequiredError (-32042); the consent flow runs and
+      // the call retries with the freshly-minted token. (Phase 3.8/3.9.)
+      const { getProjectIdentifier, recordConsent } = await import('../../operations/identity/session-pointer');
+      const { invokeWithConsentDev } = await import('../../operations/dev/invoke-with-consent');
+      const projectIdentifier = getProjectIdentifier(consentContext.projectRoot);
+      const result = await invokeWithConsentDev({ port, sessionId, customHeaders: headers }, toolName, args, {
+        consentScopeId: `${projectIdentifier}/${consentContext.agentName}`,
+        forceReauth: consentContext.forceReauth,
+        noBrowserConsent: consentContext.noBrowserConsent,
+        gatewayName: consentContext.agentName,
+        targetName: toolName,
+        contextLabel: `${consentContext.agentName}/${toolName}`,
+        onConsentComplete: r => {
+          recordConsent({
+            projectAbsPath: consentContext.projectRoot,
+            gatewayName: consentContext.agentName,
+            targetName: toolName,
+            strategy: r.strategyUsed,
+          });
+        },
+      });
       console.log(result);
     } else {
       throw new ValidationError(
@@ -186,6 +217,10 @@ export const registerDev = (program: Command) => {
       [] as string[]
     )
     .option('-b, --no-browser', 'Use terminal TUI instead of web-based chat UI')
+    .option(
+      '--no-browser-consent',
+      'Skip opening the system browser for 3LO consent during call-tool; print the URL and accept a paste-back redirect URL instead. Useful on SSH / headless hosts. Independent of -b/--no-browser, which controls the chat UI mode.'
+    )
     .option('--no-traces', 'Disable local OTEL trace collection')
 
     .action(async (positionalPrompt: string | undefined, opts) => {
@@ -277,7 +312,23 @@ export const registerDev = (program: Command) => {
               else if (protocol === 'MCP') invokePort = 8000;
 
               if (protocol === 'MCP') {
-                await handleMcpInvoke(invokePort, invokePrompt, opts.tool, opts.input, headers);
+                await handleMcpInvoke({
+                  port: invokePort,
+                  invokeValue: invokePrompt,
+                  toolName: opts.tool,
+                  input: opts.input,
+                  headers,
+                  consent: {
+                    agentName: targetAgent?.name ?? 'unknown',
+                    projectRoot: workingDir,
+                    // The legacy `-b / --no-browser` flag controls chat UI mode
+                    // for non-MCP runtimes; it does NOT participate in the 3LO
+                    // consent flow. The dedicated `--no-browser-consent` flag
+                    // toggles paste-URL consent independently. Commander parses
+                    // `--no-browser-consent` as `browserConsent: false`.
+                    noBrowserConsent: opts.browserConsent === false,
+                  },
+                });
               } else if (protocol === 'A2A') {
                 await invokeA2ADevServer(invokePort, invokePrompt, headers);
               } else if (protocol === 'AGUI') {

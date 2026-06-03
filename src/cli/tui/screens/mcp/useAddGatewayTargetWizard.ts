@@ -30,7 +30,10 @@ export function useAddGatewayTargetWizard(
   const [config, setConfig] = useState<GatewayTargetWizardState>(() => initialConfig ?? getDefaultConfig());
   const [step, setStep] = useState<AddGatewayTargetStep>(initialStep ?? 'name');
 
-  // Dynamic steps — recomputes when targetType changes
+  // Dynamic steps — recomputes when targetType OR outboundAuth changes.
+  // The grant-type + three-lo-scopes steps are inserted after outbound-auth
+  // when the user picked OAUTH on a target type that supports 3LO
+  // (mcpServer / openApiSchema). 2LO and non-OAUTH paths skip them.
   const steps = useMemo<AddGatewayTargetStep[]>(() => {
     const baseSteps: AddGatewayTargetStep[] = ['name', 'target-type'];
     if (config.targetType) {
@@ -52,10 +55,17 @@ export function useAddGatewayTargetWizard(
           baseSteps.push('endpoint', 'gateway', 'outbound-auth');
           break;
       }
+      // Insert 3LO sub-steps after outbound-auth when applicable.
+      if (config.outboundAuth?.type === 'OAUTH') {
+        baseSteps.push('grant-type');
+        if (config.outboundAuth.grantType === 'AUTHORIZATION_CODE') {
+          baseSteps.push('three-lo-scopes');
+        }
+      }
       baseSteps.push('confirm');
     }
     return baseSteps;
-  }, [config.targetType]);
+  }, [config.targetType, config.outboundAuth?.type, config.outboundAuth?.grantType]);
 
   const currentIndex = steps.indexOf(step);
 
@@ -140,8 +150,69 @@ export function useAddGatewayTargetWizard(
     (outboundAuth: { type: 'OAUTH' | 'API_KEY' | 'NONE'; credentialName?: string }) => {
       setConfig(c => ({
         ...c,
-        outboundAuth,
+        outboundAuth: {
+          ...c.outboundAuth,
+          ...outboundAuth,
+        },
       }));
+      // OAUTH adds a grant-type sub-step that the cached `steps` array
+      // doesn't include yet (useMemo recomputes asynchronously). Set the
+      // next step explicitly to bypass the stale closure.
+      if (outboundAuth.type === 'OAUTH') {
+        setStep('grant-type');
+      } else {
+        goToNextStep();
+      }
+    },
+    [goToNextStep]
+  );
+
+  /**
+   * Set the OAuth grant type and route to the next wizard step.
+   * AUTHORIZATION_CODE goes to three-lo-scopes for return-URL + custom-params
+   * collection; CLIENT_CREDENTIALS goes straight to confirm.
+   */
+  const setGrantType = useCallback((grantType: 'CLIENT_CREDENTIALS' | 'AUTHORIZATION_CODE') => {
+    setConfig(c => {
+      if (!c.outboundAuth) return c;
+      const next = { ...c.outboundAuth, grantType };
+      // When the user switches AUTHORIZATION_CODE → CLIENT_CREDENTIALS
+      // (e.g. via Back then re-select), drop any 3LO-only fields the prior
+      // path collected. Otherwise the schema's superRefine rejects them at
+      // write time with a confusing post-wizard error.
+      if (grantType !== 'AUTHORIZATION_CODE') {
+        delete next.defaultReturnUrl;
+        delete next.customParameters;
+      }
+      return { ...c, outboundAuth: next };
+    });
+    // Cannot use goToNextStep — the steps array depends on grantType, which
+    // we just changed. Set the next step explicitly based on the new value.
+    if (grantType === 'AUTHORIZATION_CODE') {
+      setStep('three-lo-scopes');
+    } else {
+      setStep('confirm');
+    }
+  }, []);
+
+  /**
+   * Set the 3LO-only fields (defaultReturnUrl + optional customParameters)
+   * and advance to confirm. customParameters is a key-value record; pass
+   * undefined or {} to omit it from the rendered config.
+   */
+  const setThreeLoFields = useCallback(
+    (fields: { defaultReturnUrl?: string; customParameters?: Record<string, string> }) => {
+      setConfig(c => {
+        if (!c.outboundAuth) return c;
+        const next = { ...c.outboundAuth };
+        if (fields.defaultReturnUrl !== undefined && fields.defaultReturnUrl !== '') {
+          next.defaultReturnUrl = fields.defaultReturnUrl;
+        }
+        if (fields.customParameters && Object.keys(fields.customParameters).length > 0) {
+          next.customParameters = fields.customParameters;
+        }
+        return { ...c, outboundAuth: next };
+      });
       goToNextStep();
     },
     [goToNextStep]
@@ -213,6 +284,8 @@ export function useAddGatewayTargetWizard(
     setSchemaSource,
     setGateway,
     setOutboundAuth,
+    setGrantType,
+    setThreeLoFields,
     setRestApiId,
     setStage,
     setToolFilters,

@@ -40,7 +40,16 @@ export function AddIdentityFlow({ isInteractive = true, onExit, onBack, onDev, o
           ? {
               authorizerType: 'OAuthCredentialProvider' as const,
               name: config.name,
-              discoveryUrl: config.discoveryUrl!,
+              // The wizard branches on oauthMode: 'discovery' captures
+              // discoveryUrl alone (covers all OIDC vendors); 'manual'
+              // captures authorizationUrl + tokenUrl (CustomOauth2 / 3LO
+              // without OIDC discovery).
+              ...(config.oauthMode === 'manual'
+                ? {
+                    authorizationUrl: config.authorizationUrl!,
+                    tokenUrl: config.tokenUrl!,
+                  }
+                : { discoveryUrl: config.discoveryUrl! }),
               clientId: config.clientId!,
               clientSecret: config.clientSecret!,
               scopes: config.scopes

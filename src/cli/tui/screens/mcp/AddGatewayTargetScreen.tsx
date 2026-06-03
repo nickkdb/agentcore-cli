@@ -80,6 +80,8 @@ export function AddGatewayTargetScreen({
   const isLambdaArnStep = wizard.step === 'lambda-arn';
   const isToolSchemaStep = wizard.step === 'tool-schema';
   const isConfirmStep = wizard.step === 'confirm';
+  const isGrantTypeStep = wizard.step === 'grant-type';
+  const isThreeLoScopesStep = wizard.step === 'three-lo-scopes';
   const isAuthStep = isOutboundAuthStep || isApiGatewayAuthStep;
   const noGatewaysAvailable = isGatewayStep && existingGateways.length === 0;
 
@@ -215,6 +217,30 @@ export function AddGatewayTargetScreen({
     isActive: isAuthStep && pendingCredType === 'API_KEY',
   });
 
+  // 3LO grant-type selection (only fires when the user picked OAUTH on the
+  // outbound-auth step). CLIENT_CREDENTIALS jumps to confirm; AUTHORIZATION_CODE
+  // routes to the three-lo-scopes step for return-URL + custom-params input.
+  const grantTypeItems: SelectableItem[] = [
+    {
+      id: 'CLIENT_CREDENTIALS',
+      title: 'Client Credentials (2LO)',
+      description: 'Service-to-service: gateway calls the tool with its own machine credentials.',
+    },
+    {
+      id: 'AUTHORIZATION_CODE',
+      title: 'Authorization Code (3LO)',
+      description: 'Per-user: each developer / agent caller completes OAuth consent before the tool runs.',
+    },
+  ];
+  const grantTypeNav = useListNavigation({
+    items: grantTypeItems,
+    onSelect: item => {
+      wizard.setGrantType(item.id as 'CLIENT_CREDENTIALS' | 'AUTHORIZATION_CODE');
+    },
+    onExit: () => wizard.goBack(),
+    isActive: isGrantTypeStep,
+  });
+
   // Confirm step
   useListNavigation({
     items: [{ id: 'confirm', title: 'Confirm' }],
@@ -266,6 +292,9 @@ export function AddGatewayTargetScreen({
   });
 
   // ── Render ──
+  // isGrantTypeStep is a WizardSelect — correctly falls through to
+  // NAVIGATE_SELECT via the `:` arm. isThreeLoScopesStep is a TextInput
+  // and is explicitly listed in the TEXT_INPUT condition.
   const helpText = isConfirmStep
     ? HELP_TEXT.CONFIRM_CANCEL
     : isTextStep ||
@@ -274,7 +303,8 @@ export function AddGatewayTargetScreen({
         isToolFiltersStep ||
         isSchemaSourceStep ||
         isLambdaArnStep ||
-        isToolSchemaStep
+        isToolSchemaStep ||
+        isThreeLoScopesStep
       ? HELP_TEXT.TEXT_INPUT
       : HELP_TEXT.NAVIGATE_SELECT;
 
@@ -311,6 +341,43 @@ export function AddGatewayTargetScreen({
             items={outboundAuthItems}
             selectedIndex={outboundAuthNav.selectedIndex}
           />
+        )}
+
+        {isGrantTypeStep && (
+          <WizardSelect
+            title="OAuth grant type"
+            description="2LO uses one shared service identity; 3LO mints a fresh token per end-user via consent."
+            items={grantTypeItems}
+            selectedIndex={grantTypeNav.selectedIndex}
+          />
+        )}
+
+        {isThreeLoScopesStep && (
+          <Box flexDirection="column">
+            <Text bold>3LO consent details (optional)</Text>
+            <Text dimColor>Press Enter to skip; both fields can be edited later in agentcore.json.</Text>
+            <Box marginTop={1}>
+              <TextInput
+                prompt="Default return URL (where the IdP redirects after consent)"
+                placeholder="https://app.example.com/oauth/return"
+                allowEmpty
+                onSubmit={value => {
+                  wizard.setThreeLoFields({ defaultReturnUrl: value || undefined });
+                }}
+                onCancel={() => wizard.goBack()}
+                customValidation={value => {
+                  if (!value) return true; // optional
+                  try {
+                    const u = new URL(value);
+                    if (u.protocol !== 'http:' && u.protocol !== 'https:') return 'Must be http(s)://';
+                  } catch {
+                    return 'Must be a valid URL';
+                  }
+                  return true;
+                }}
+              />
+            </Box>
+          </Box>
         )}
 
         {/* Auth type selection — api-gateway-auth step */}
@@ -527,6 +594,25 @@ export function AddGatewayTargetScreen({
                 ? [
                     { label: 'Auth Type', value: wizard.config.outboundAuth.type },
                     { label: 'Credential', value: wizard.config.outboundAuth.credentialName ?? 'None' },
+                    // Surface 3LO fields the user just collected so they
+                    // can verify before commit.
+                    ...(wizard.config.outboundAuth.grantType
+                      ? [{ label: 'Grant Type', value: wizard.config.outboundAuth.grantType }]
+                      : []),
+                    ...(wizard.config.outboundAuth.defaultReturnUrl
+                      ? [{ label: 'Return URL', value: wizard.config.outboundAuth.defaultReturnUrl }]
+                      : []),
+                    ...(wizard.config.outboundAuth.customParameters &&
+                    Object.keys(wizard.config.outboundAuth.customParameters).length > 0
+                      ? [
+                          {
+                            label: 'Custom Params',
+                            value: Object.entries(wizard.config.outboundAuth.customParameters)
+                              .map(([k, v]) => `${k}=${v}`)
+                              .join(', '),
+                          },
+                        ]
+                      : []),
                   ]
                 : wizard.config.targetType === 'apiGateway'
                   ? [{ label: 'Auth Type', value: 'IAM (default)' }]

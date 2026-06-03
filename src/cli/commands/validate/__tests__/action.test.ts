@@ -6,12 +6,14 @@ const {
   mockReadProjectSpec,
   mockReadAWSDeploymentTargets,
   mockReadDeployedState,
+  mockWriteProjectSpec,
   mockConfigExists,
   mockFindConfigRoot,
 } = vi.hoisted(() => ({
   mockReadProjectSpec: vi.fn(),
   mockReadAWSDeploymentTargets: vi.fn(),
   mockReadDeployedState: vi.fn(),
+  mockWriteProjectSpec: vi.fn().mockResolvedValue(undefined),
   mockConfigExists: vi.fn(),
   mockFindConfigRoot: vi.fn(),
 }));
@@ -55,6 +57,7 @@ vi.mock('../../../../lib/index.js', () => {
       readProjectSpec = mockReadProjectSpec;
       readAWSDeploymentTargets = mockReadAWSDeploymentTargets;
       readDeployedState = mockReadDeployedState;
+      writeProjectSpec = mockWriteProjectSpec;
       configExists = mockConfigExists;
     },
     ConfigValidationError,
@@ -213,5 +216,155 @@ describe('handleValidate', () => {
     expect(result.success).toBe(false);
     assert(!result.success);
     expect(result.error.message).toBe('string error');
+  });
+
+  describe('scope precedence (no migration)', () => {
+    // Both `target.outboundAuth.scopes` and `credential.scopes` are first-class
+    // shapes. The deploy and consent paths resolve effective scopes via
+    // `resolveEffectiveScopes` (target wins, credential fallback). `validate`
+    // does NOT migrate or mutate the file; it only reports schema validity.
+    const projectWithCredScopes = {
+      name: 'Test',
+      version: 1,
+      managedBy: 'CDK' as const,
+      runtimes: [],
+      memories: [],
+      evaluators: [],
+      onlineEvalConfigs: [],
+      policyEngines: [],
+      configBundles: [],
+      abTests: [],
+      httpGateways: [],
+      credentials: [
+        {
+          authorizerType: 'OAuthCredentialProvider' as const,
+          name: 'cred-1',
+          discoveryUrl: 'https://accounts.example.com/.well-known/openid-configuration',
+          scopes: ['orders.read', 'inventory.read'],
+          vendor: 'CustomOauth2',
+        },
+      ],
+      agentCoreGateways: [
+        {
+          name: 'gw',
+          targets: [
+            {
+              name: 'tgt-2lo',
+              targetType: 'mcpServer',
+              endpoint: 'https://example.com/mcp',
+              outboundAuth: { type: 'OAUTH', credentialName: 'cred-1' },
+            },
+          ],
+        },
+      ],
+    };
+
+    it('is read-only: never writes the project spec', async () => {
+      mockFindConfigRoot.mockReturnValue('/project/agentcore');
+      const spec = structuredClone(projectWithCredScopes);
+      mockReadProjectSpec.mockResolvedValue(spec);
+      mockReadAWSDeploymentTargets.mockResolvedValue([]);
+      mockConfigExists.mockReturnValue(false);
+
+      const result = await handleValidate({});
+
+      expect(result.success).toBe(true);
+      expect(mockWriteProjectSpec).not.toHaveBeenCalled();
+      // Original spec is untouched — no migration of cred.scopes onto the target.
+      expect((spec.agentCoreGateways[0]!.targets[0]!.outboundAuth as { scopes?: string[] }).scopes).toBeUndefined();
+    });
+
+    it('does NOT emit a deprecation note when scopes are on credential and not target', async () => {
+      mockFindConfigRoot.mockReturnValue('/project/agentcore');
+      mockReadProjectSpec.mockResolvedValue(structuredClone(projectWithCredScopes));
+      mockReadAWSDeploymentTargets.mockResolvedValue([]);
+      mockConfigExists.mockReturnValue(false);
+
+      const result = await handleValidate({});
+
+      expect(result.success).toBe(true);
+      assert(result.success);
+      expect(result.notes?.some(n => n.includes('[deprecation]')) ?? false).toBe(false);
+    });
+  });
+
+  describe('3LO callback-URL informational notes', () => {
+    const callback = 'https://bedrock-agentcore.us-west-2.amazonaws.com/identities/oauth2/callback/uuid-1';
+
+    const project3lo = {
+      name: 'Test',
+      version: 1,
+      managedBy: 'CDK' as const,
+      runtimes: [],
+      memories: [],
+      evaluators: [],
+      onlineEvalConfigs: [],
+      policyEngines: [],
+      configBundles: [],
+      abTests: [],
+      httpGateways: [],
+      credentials: [
+        {
+          authorizerType: 'OAuthCredentialProvider' as const,
+          name: 'google-cred',
+          discoveryUrl: 'https://accounts.google.com/.well-known/openid-configuration',
+          vendor: 'CustomOauth2',
+        },
+      ],
+      agentCoreGateways: [
+        {
+          name: 'gw',
+          targets: [
+            {
+              name: 'cal',
+              targetType: 'mcpServer',
+              endpoint: 'https://example.com/mcp',
+              outboundAuth: { type: 'OAUTH', credentialName: 'google-cred', grantType: 'AUTHORIZATION_CODE' },
+            },
+          ],
+        },
+      ],
+    };
+
+    it('surfaces callbackUrl from deployed state', async () => {
+      mockFindConfigRoot.mockReturnValue('/project/agentcore');
+      mockReadProjectSpec.mockResolvedValue(structuredClone(project3lo));
+      mockReadAWSDeploymentTargets.mockResolvedValue([]);
+      mockConfigExists.mockReturnValue(true);
+      mockReadDeployedState.mockResolvedValue({
+        targets: {
+          default: {
+            resources: {
+              credentials: {
+                'google-cred': {
+                  credentialProviderArn: 'arn:aws:bedrock-agentcore:us-west-2:1:cred/google-cred',
+                  callbackUrl: callback,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      const result = await handleValidate({});
+
+      expect(result.success).toBe(true);
+      assert(result.success);
+      expect(result.notes?.some(n => n.includes(callback))).toBe(true);
+      expect(result.notes?.some(n => n.includes('register this callback URL'))).toBe(true);
+    });
+
+    it('emits a "deploy first" note when 3LO target exists but state is empty', async () => {
+      mockFindConfigRoot.mockReturnValue('/project/agentcore');
+      mockReadProjectSpec.mockResolvedValue(structuredClone(project3lo));
+      mockReadAWSDeploymentTargets.mockResolvedValue([]);
+      mockConfigExists.mockReturnValue(false);
+
+      const result = await handleValidate({});
+
+      expect(result.success).toBe(true);
+      assert(result.success);
+      expect(result.notes?.some(n => n.includes('no deployment targets in state yet'))).toBe(true);
+    });
   });
 });

@@ -28,12 +28,35 @@ export function AddIdentityScreen({ onComplete, onExit, existingIdentityNames, i
   const isTypeStep = wizard.step === 'type';
   const isNameStep = wizard.step === 'name';
   const isApiKeyStep = wizard.step === 'apiKey';
+  const isOauthModeStep = wizard.step === 'oauthMode';
   const isDiscoveryUrlStep = wizard.step === 'discoveryUrl';
+  const isAuthorizationUrlStep = wizard.step === 'authorizationUrl';
+  const isTokenUrlStep = wizard.step === 'tokenUrl';
   const isClientIdStep = wizard.step === 'clientId';
   const isClientSecretStep = wizard.step === 'clientSecret';
   const isScopesStep = wizard.step === 'scopes';
   const isConfirmStep = wizard.step === 'confirm';
   const isOAuth = wizard.config.identityType === 'OAuthCredentialProvider';
+
+  const oauthModeItems: SelectableItem[] = [
+    {
+      id: 'discovery',
+      title: 'OIDC Discovery (recommended)',
+      description: 'Most vendors expose a /.well-known/openid-configuration endpoint.',
+    },
+    {
+      id: 'manual',
+      title: 'Manual endpoints (CustomOauth2 / 3LO without discovery)',
+      description: 'Specify authorization + token URLs directly. Required for some 3LO providers.',
+    },
+  ];
+
+  const oauthModeNav = useListNavigation({
+    items: oauthModeItems,
+    onSelect: item => wizard.setOauthMode(item.id as 'discovery' | 'manual'),
+    onExit: () => wizard.goBack(),
+    isActive: isOauthModeStep,
+  });
 
   const typeNav = useListNavigation({
     items: typeItems,
@@ -49,11 +72,15 @@ export function AddIdentityScreen({ onComplete, onExit, existingIdentityNames, i
     isActive: isConfirmStep,
   });
 
-  const helpText = isTypeStep
-    ? HELP_TEXT.NAVIGATE_SELECT
-    : isConfirmStep
-      ? HELP_TEXT.CONFIRM_CANCEL
-      : HELP_TEXT.TEXT_INPUT;
+  // isOauthModeStep is a WizardSelect — must land in NAVIGATE_SELECT,
+  // not in the TEXT_INPUT default arm. Without this branch, the user sees
+  // text-input hints while on a list-selection screen.
+  const helpText =
+    isTypeStep || isOauthModeStep
+      ? HELP_TEXT.NAVIGATE_SELECT
+      : isConfirmStep
+        ? HELP_TEXT.CONFIRM_CANCEL
+        : HELP_TEXT.TEXT_INPUT;
 
   const headerContent = <StepIndicator steps={wizard.steps} currentStep={wizard.step} labels={IDENTITY_STEP_LABELS} />;
 
@@ -96,6 +123,15 @@ export function AddIdentityScreen({ onComplete, onExit, existingIdentityNames, i
           />
         )}
 
+        {isOauthModeStep && (
+          <WizardSelect
+            title="OAuth endpoint configuration"
+            description="Most vendors support OIDC discovery; CustomOauth2 / non-discovery 3LO needs manual URLs."
+            items={oauthModeItems}
+            selectedIndex={oauthModeNav.selectedIndex}
+          />
+        )}
+
         {isDiscoveryUrlStep && (
           <TextInput
             key="discoveryUrl"
@@ -111,6 +147,44 @@ export function AddIdentityScreen({ onComplete, onExit, existingIdentityNames, i
               }
               if (!value.endsWith('/.well-known/openid-configuration')) {
                 return "URL must end with '/.well-known/openid-configuration'";
+              }
+              return true;
+            }}
+          />
+        )}
+
+        {isAuthorizationUrlStep && (
+          <TextInput
+            key="authorizationUrl"
+            prompt="Authorization endpoint URL"
+            placeholder="https://accounts.example.com/oauth2/authorize"
+            onSubmit={wizard.setAuthorizationUrl}
+            onCancel={() => wizard.goBack()}
+            customValidation={value => {
+              try {
+                const u = new URL(value);
+                if (u.protocol !== 'http:' && u.protocol !== 'https:') return 'Must be http(s)';
+              } catch {
+                return 'Must be a valid URL';
+              }
+              return true;
+            }}
+          />
+        )}
+
+        {isTokenUrlStep && (
+          <TextInput
+            key="tokenUrl"
+            prompt="Token endpoint URL"
+            placeholder="https://accounts.example.com/oauth2/token"
+            onSubmit={wizard.setTokenUrl}
+            onCancel={() => wizard.goBack()}
+            customValidation={value => {
+              try {
+                const u = new URL(value);
+                if (u.protocol !== 'http:' && u.protocol !== 'https:') return 'Must be http(s)';
+              } catch {
+                return 'Must be a valid URL';
               }
               return true;
             }}
@@ -158,7 +232,12 @@ export function AddIdentityScreen({ onComplete, onExit, existingIdentityNames, i
                 ? [
                     { label: 'Type', value: 'OAuth' },
                     { label: 'Name', value: wizard.config.name },
-                    { label: 'Discovery URL', value: wizard.config.discoveryUrl ?? '' },
+                    ...(wizard.config.oauthMode === 'manual'
+                      ? [
+                          { label: 'Authorization URL', value: wizard.config.authorizationUrl ?? '' },
+                          { label: 'Token URL', value: wizard.config.tokenUrl ?? '' },
+                        ]
+                      : [{ label: 'Discovery URL', value: wizard.config.discoveryUrl ?? '' }]),
                     {
                       label: 'Client ID',
                       value: wizard.config.clientId ? '****' + wizard.config.clientId.slice(-4) : '',

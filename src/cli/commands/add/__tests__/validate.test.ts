@@ -1473,6 +1473,47 @@ describe('validate', () => {
       expect(result.valid).toBe(false);
       expect(result.error).toContain('--api-key');
     });
+
+    it('rejects --discovery-url with non-http(s) scheme', () => {
+      const result = validateAddCredentialOptions({
+        name: 'my-oauth',
+        type: 'oauth',
+        discoveryUrl: 'javascript:alert(1)',
+        clientId: 'client123',
+        clientSecret: 'secret456',
+      });
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('--discovery-url');
+      expect(result.error).toMatch(/http/i);
+    });
+
+    it('rejects --authorization-url with non-http(s) scheme', () => {
+      const result = validateAddCredentialOptions({
+        name: 'my-oauth',
+        type: 'oauth',
+        authorizationUrl: 'file:///etc/passwd',
+        tokenUrl: 'https://idp.example.com/token',
+        clientId: 'client123',
+        clientSecret: 'secret456',
+      });
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('--authorization-url');
+      expect(result.error).toMatch(/http/i);
+    });
+
+    it('rejects --token-url with non-http(s) scheme', () => {
+      const result = validateAddCredentialOptions({
+        name: 'my-oauth',
+        type: 'oauth',
+        authorizationUrl: 'https://idp.example.com/authorize',
+        tokenUrl: 'data:text/plain,token',
+        clientId: 'client123',
+        clientSecret: 'secret456',
+      });
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('--token-url');
+      expect(result.error).toMatch(/http/i);
+    });
   });
 });
 

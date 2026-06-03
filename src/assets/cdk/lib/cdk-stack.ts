@@ -32,8 +32,11 @@ export interface AgentCoreStackProps extends StackProps {
   mcpSpec?: AgentCoreMcpSpec;
   /**
    * Credential provider ARNs from deployed state, keyed by credential name.
+   * `callbackUrl` is the AgentCore-managed IdP redirect URI returned from
+   * `CreateOauth2CredentialProvider` and surfaced for 3LO targets so the
+   * developer can register it with their identity provider.
    */
-  credentials?: Record<string, { credentialProviderArn: string; clientSecretArn?: string }>;
+  credentials?: Record<string, { credentialProviderArn: string; clientSecretArn?: string; callbackUrl?: string }>;
   /**
    * Harness role configurations.
    */

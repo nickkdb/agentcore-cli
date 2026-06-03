@@ -140,7 +140,15 @@ export const registerInvoke = (program: Command) => {
       (val: string, prev: string[]) => [...prev, val],
       [] as string[]
     )
-    .option('--bearer-token <token>', 'Bearer token for CUSTOM_JWT auth (bypasses SigV4) [non-interactive]');
+    .option('--bearer-token <token>', 'Bearer token for CUSTOM_JWT auth (bypasses SigV4) [non-interactive]')
+    .option(
+      '--no-browser-consent',
+      'Skip opening the system browser for 3LO consent; print the URL and accept a paste-back redirect URL instead. Useful on SSH / headless hosts. [non-interactive]'
+    )
+    .option(
+      '--force-reauth',
+      'Force a fresh 3LO consent flow, ignoring any cached server-side session (sets _meta.forceAuthentication on tools/call) [non-interactive]'
+    );
 
   if (isPreviewEnabled()) {
     invokeCmd
@@ -210,6 +218,9 @@ export const registerInvoke = (program: Command) => {
         systemPrompt?: string;
         allowedTools?: string;
         actorId?: string;
+        /** Commander parses `--no-browser-consent` as `browserConsent: false`. */
+        browserConsent?: boolean;
+        forceReauth?: boolean;
       }
     ) => {
       try {
@@ -253,7 +264,9 @@ export const registerInvoke = (program: Command) => {
           cliOptions.bearerToken ||
           cliOptions.harness ||
           cliOptions.harnessArn ||
-          cliOptions.verbose
+          cliOptions.verbose ||
+          cliOptions.browserConsent === false ||
+          cliOptions.forceReauth
         ) {
           const result = await withCommandRunTelemetry(
             'invoke',
@@ -308,6 +321,8 @@ export const registerInvoke = (program: Command) => {
                 systemPrompt: cliOptions.systemPrompt,
                 allowedTools: cliOptions.allowedTools,
                 actorId: cliOptions.actorId,
+                noBrowserConsent: cliOptions.browserConsent === false,
+                forceReauth: !!cliOptions.forceReauth,
               };
 
               return handleInvokeCLI(options, invokeContext);

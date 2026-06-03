@@ -177,4 +177,68 @@ describe('invoke command', () => {
       });
     });
   });
+
+  // -------------------------------------------------------------------------
+  // 3LO consent flags (tasks 2.12 + 2.13)
+  // -------------------------------------------------------------------------
+  describe('3LO consent flags', () => {
+    it('accepts --no-browser-consent without erroring on flag parsing', async () => {
+      // Should fail because runtime not deployed, NOT because of unknown flag.
+      const result = await runCLI(
+        ['invoke', 'hello', '--no-browser-consent', '--runtime', 'nonexistent', '--json'],
+        projectDir
+      );
+      expect(result.exitCode).toBe(1);
+      const json = JSON.parse(result.stdout);
+      expect(json.success).toBe(false);
+      expect(json.error.toLowerCase()).not.toMatch(/unknown option|--no-browser-consent/);
+    });
+
+    it('accepts --force-reauth without erroring on flag parsing', async () => {
+      const result = await runCLI(
+        ['invoke', 'hello', '--force-reauth', '--runtime', 'nonexistent', '--json'],
+        projectDir
+      );
+      expect(result.exitCode).toBe(1);
+      const json = JSON.parse(result.stdout);
+      expect(json.success).toBe(false);
+      expect(json.error.toLowerCase()).not.toMatch(/unknown option|--force-reauth/);
+    });
+
+    it('rejects --on-behalf-of (negative test for OQ #2 / Decision #8)', async () => {
+      // The plan explicitly excludes this flag; multi-tenant OBO is server-side
+      // (RFC 8693 token exchange) and must not appear on the CLI surface.
+      const result = await runCLI(
+        ['invoke', 'hello', '--on-behalf-of', 'someuser@example.com', '--runtime', 'nonexistent', '--json'],
+        projectDir
+      );
+      expect(result.exitCode).toBe(1);
+      const combined = `${result.stdout} ${result.stderr}`.toLowerCase();
+      expect(combined).toMatch(/unknown option|on-behalf-of/);
+    });
+
+    it('rejects --device-code (negative test for OQ #3)', async () => {
+      // RFC 8628 device-code is not used by AgentCore Identity; the flag must
+      // not exist.
+      const result = await runCLI(
+        ['invoke', 'hello', '--device-code', '--runtime', 'nonexistent', '--json'],
+        projectDir
+      );
+      expect(result.exitCode).toBe(1);
+      const combined = `${result.stdout} ${result.stderr}`.toLowerCase();
+      expect(combined).toMatch(/unknown option|device-code/);
+    });
+
+    it('--help does not list --on-behalf-of or --device-code', async () => {
+      const result = await runCLI(['invoke', '--help'], projectDir);
+      expect(result.stdout).not.toMatch(/--on-behalf-of/);
+      expect(result.stdout).not.toMatch(/--device-code/);
+    });
+
+    it('--help lists --no-browser-consent and --force-reauth', async () => {
+      const result = await runCLI(['invoke', '--help'], projectDir);
+      expect(result.stdout).toMatch(/--no-browser-consent/);
+      expect(result.stdout).toMatch(/--force-reauth/);
+    });
+  });
 });

@@ -81,6 +81,14 @@ export interface AddGatewayTargetOptions {
   oauthClientSecret?: string;
   oauthDiscoveryUrl?: string;
   oauthScopes?: string;
+  /** OAuth grant type for OAUTH outbound auth: `client-credentials` (2LO, default) or `authorization-code` (3LO). */
+  grantType?: string;
+  /** Comma-separated scopes (alias for oauthScopes; either is accepted on the CLI). */
+  scopes?: string;
+  /** 3LO default return URL the IdP redirects to after consent (only for `authorization-code`). */
+  defaultReturnUrl?: string;
+  /** 3LO custom OAuth parameters as comma-separated `key=value` pairs (only for `authorization-code`). */
+  customParams?: string;
   restApiId?: string;
   stage?: string;
   lambdaArn?: string;
@@ -163,6 +171,10 @@ export interface AddCredentialOptions {
   type?: 'api-key' | 'oauth';
   apiKey?: string;
   discoveryUrl?: string;
+  /** OAuth authorization endpoint (alternative to discoveryUrl when no OIDC discovery; backs 3LO targets). */
+  authorizationUrl?: string;
+  /** OAuth token endpoint (companion to authorizationUrl when no OIDC discovery). */
+  tokenUrl?: string;
   clientId?: string;
   clientSecret?: string;
   scopes?: string;

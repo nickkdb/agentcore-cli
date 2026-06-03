@@ -265,13 +265,14 @@ export class CdkToolkitWrapper {
           continue;
         }
 
-        // For other errors or final retry, throw immediately
-        throw lastError;
+        // For other errors or final retry, throw immediately. lastError was
+        // assigned at the top of this catch, so it is non-null here.
+        throw rewriteToolkitMessage(lastError);
       }
     }
 
     // Should not reach here, but throw last error if we do
-    throw lastError ?? new Error('Deploy failed after retries');
+    throw lastError ? rewriteToolkitMessage(lastError) : new Error('Deploy failed after retries');
   }
 
   /**
@@ -315,6 +316,35 @@ export class CdkToolkitWrapper {
       toolkit.bootstrap(BootstrapEnvironments.fromList(environments), options)
     );
   }
+}
+
+/**
+ * Translate well-known toolkit-lib error messages to actionable CLI guidance.
+ *
+ * The CDK toolkit-lib's error message for ROLLBACK_COMPLETE / ROLLBACK_FAILED
+ * suggests "may need to be manually deleted from the AWS console" — which is
+ * misleading for one specific failure class: a 3LO GatewayTarget that landed
+ * in `CREATE_PENDING_AUTH` because IdP credential validation failed during
+ * stabilization. The AgentCore service rejects `DeleteGatewayTarget` while
+ * the target is in that state, and CFN's rollback DELETE call is the same
+ * API surface — so the console can't delete the orphaned target either.
+ * The escape hatch is `cdk deploy --retain-resources <LogicalId>` to skip
+ * the stuck resource on rollback, plus a service-team ticket to clear the
+ * orphaned `CREATE_PENDING_AUTH` record.
+ */
+function rewriteToolkitMessage(err: Error): Error {
+  const msg = err.message ?? '';
+  if (!msg.includes('may need to be manually deleted from the AWS console')) return err;
+  const guidance =
+    '\n\nGuidance: if the failure references a 3LO GatewayTarget stuck in ' +
+    'CREATE_PENDING_AUTH, the AWS console cannot delete it either. Re-run ' +
+    'deploy with `--retain-resources <LogicalId>` to skip the stuck resource ' +
+    'on rollback, then file a service ticket to clean up the orphaned target. ' +
+    'For other ROLLBACK_FAILED states, run `aws cloudformation describe-stack-events` ' +
+    'to identify the failing resource before retrying.';
+  const wrapped = new Error(msg + guidance, { cause: err });
+  wrapped.name = err.name;
+  return wrapped;
 }
 
 /**

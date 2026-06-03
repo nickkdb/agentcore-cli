@@ -577,7 +577,26 @@ let mcpRequestId = 1;
 interface McpRpcResult {
   result: Record<string, unknown>;
   mcpSessionId?: string;
-  error?: { message?: string; code?: number };
+  error?: { message?: string; code?: number; data?: unknown };
+}
+
+/**
+ * Error thrown by `mcpCallTool` when the gateway returns a JSON-RPC error.
+ * Carries the full envelope (code + message + data) so callers — typically
+ * the consent-flow driver — can inspect `code === -32042` and extract the
+ * URL elicitation from `data.elicitations`. Throwing a plain `Error` (as
+ * the prior `mcpRpcCallStrict` did) flattened the envelope and made
+ * elicitation handling impossible at the call site.
+ */
+export class McpRpcError extends Error {
+  constructor(
+    public readonly code: number | undefined,
+    message: string,
+    public readonly data: unknown
+  ) {
+    super(message);
+    this.name = 'McpRpcError';
+  }
 }
 
 const TRANSIENT_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
@@ -832,22 +851,41 @@ export async function mcpInitSession(options: McpInvokeOptions): Promise<string 
 /**
  * Call an MCP tool via InvokeAgentRuntime.
  * Retries on cold-start initialization timeouts.
+ *
+ * @param meta Optional `_meta` object injected into `params._meta`. The 3LO
+ *   driver passes `{ "aws.bedrock-agentcore.gateway/credentialProviderConfiguration": ... }`
+ *   here on a `--force-reauth` first call to make the gateway demand a
+ *   fresh consent. Omit on retry-after-consent so the gateway uses the
+ *   freshly-minted token.
+ *
+ * @throws McpRpcError when the gateway returns a JSON-RPC error envelope.
+ *   Callers should catch this and inspect `error.code` (-32042 means a
+ *   URL elicitation is required — see operations/dev/mcp-meta.ts).
  */
 export async function mcpCallTool(
   options: McpInvokeOptions,
   toolName: string,
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  meta?: Record<string, unknown>
 ): Promise<string> {
   const maxRetries = 3;
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      const { result } = await mcpRpcCallStrict(options, {
+      const params: Record<string, unknown> = { name: toolName, arguments: args };
+      if (meta && Object.keys(meta).length > 0) {
+        params._meta = meta;
+      }
+      const { result, error } = await mcpRpcCall(options, {
         jsonrpc: '2.0',
         id: mcpRequestId++,
         method: 'tools/call',
-        params: { name: toolName, arguments: args },
+        params,
       });
+
+      if (error) {
+        throw new McpRpcError(error.code, error.message ?? `MCP error (code ${error.code})`, error.data);
+      }
 
       const content = (result as { content?: { type?: string; text?: string }[] }).content;
       if (content) {
@@ -862,6 +900,10 @@ export async function mcpCallTool(
 
       return JSON.stringify(result, null, 2);
     } catch (err) {
+      // McpRpcError is intentional — the caller wants the structured envelope
+      // so it can do consent-flow handling. Don't retry, don't swallow.
+      if (err instanceof McpRpcError) throw err;
+
       const msg = err instanceof Error ? err.message : String(err);
       const isColdStart = msg.includes('initialization time exceeded') || msg.includes('initialization');
 

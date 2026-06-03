@@ -331,8 +331,11 @@ export interface AgentCoreStackProps extends StackProps {
   mcpSpec?: AgentCoreMcpSpec;
   /**
    * Credential provider ARNs from deployed state, keyed by credential name.
+   * \`callbackUrl\` is the AgentCore-managed IdP redirect URI returned from
+   * \`CreateOauth2CredentialProvider\` and surfaced for 3LO targets so the
+   * developer can register it with their identity provider.
    */
-  credentials?: Record<string, { credentialProviderArn: string; clientSecretArn?: string }>;
+  credentials?: Record<string, { credentialProviderArn: string; clientSecretArn?: string; callbackUrl?: string }>;
   /**
    * Harness role configurations.
    */
@@ -419,7 +422,7 @@ exports[`Assets Directory Snapshots > CDK assets > cdk/cdk/package.json should m
     "typescript": "~5.9.3"
   },
   "dependencies": {
-    "@aws/agentcore-cdk": "^0.1.0-alpha.19",
+    "@aws/agentcore-cdk": "^0.1.0-alpha.29",
     "aws-cdk-lib": "^2.248.0",
     "constructs": "^10.0.0"
   }
