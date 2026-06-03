@@ -1,4 +1,5 @@
 import { ConfigIO, DOCKERFILE_NAME, getDockerfilePath, requireConfigRoot, resolveCodeLocation } from '../../../lib';
+import { ValidationError } from '../../../lib/errors/types';
 import type { AgentCoreProjectSpec, AwsDeploymentTarget } from '../../../schema';
 import { validateAwsCredentials } from '../../aws/account';
 import { LocalCdkProject } from '../../cdk/local-cdk-project';
@@ -109,7 +110,7 @@ export async function validateProject(): Promise<PreflightContext> {
       // No deployed state file — no existing stack
     }
     if (!hasExistingStack) {
-      throw new Error(
+      throw new ValidationError(
         'No resources defined in project. Add at least one resource (agent, memory, evaluator, or gateway) before deploying.'
       );
     }
@@ -144,7 +145,7 @@ function validateRuntimeNames(projectSpec: AgentCoreProjectSpec): void {
     if (agentName) {
       const combinedName = `${projectName}_${agentName}`;
       if (combinedName.length > MAX_RUNTIME_NAME_LENGTH) {
-        throw new Error(
+        throw new ValidationError(
           `Runtime name too long: "${combinedName}" (${combinedName.length} chars). ` +
             `AWS limits runtime names to ${MAX_RUNTIME_NAME_LENGTH} characters. ` +
             `Shorten the project name or agent name in agentcore.json.`
