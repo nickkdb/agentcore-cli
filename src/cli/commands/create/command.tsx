@@ -27,6 +27,7 @@ import {
 } from '../../telemetry/schemas/common-shapes.js';
 import { renderTUI } from '../../tui';
 import { requireTTY } from '../../tui/guards';
+import { resolveAndValidateFilesystemMounts } from '../shared/filesystem-utils';
 import { parseCommaSeparatedList } from '../shared/vpc-utils';
 import { type ProgressCallback, createProject, createProjectWithAgent, getDryRunInfo } from './action';
 import { createProjectWithHarness } from './harness-action';
@@ -156,6 +157,11 @@ async function handleCreateHarnessCLI(options: CreateOptions): Promise<void> {
           modelProvider: options.modelProvider,
           modelId: options.modelId,
           apiKeyArn: options.apiKeyArn,
+          networkMode: options.networkMode,
+          efsAccessPointArn: options.efsAccessPointArn,
+          efsMountPath: options.efsMountPath,
+          s3AccessPointArn: options.s3AccessPointArn,
+          s3MountPath: options.s3MountPath,
         },
         cwd
       );
@@ -183,6 +189,11 @@ async function handleCreateHarnessCLI(options: CreateOptions): Promise<void> {
 
       const containerOption = harnessPrimitive!.parseContainerFlag(options.container);
 
+      const { efsMounts: harnessEfsMounts, s3Mounts: harnessS3Mounts } = await resolveAndValidateFilesystemMounts(
+        options,
+        parseCommaSeparatedList
+      );
+
       return createProjectWithHarness({
         name: name!,
         projectName: projectName!,
@@ -203,6 +214,8 @@ async function handleCreateHarnessCLI(options: CreateOptions): Promise<void> {
         idleTimeout: options.idleTimeout ? Number(options.idleTimeout) : undefined,
         maxLifetime: options.maxLifetime ? Number(options.maxLifetime) : undefined,
         sessionStoragePath: options.sessionStorageMountPath,
+        efsAccessPoints: harnessEfsMounts,
+        s3AccessPoints: harnessS3Mounts,
         skipGit: options.skipGit,
         skipInstall: options.skipInstall,
         onProgress,
@@ -288,6 +301,12 @@ async function handleCreateCLI(options: CreateOptions): Promise<void> {
       // Commander.js --no-agent sets agent=false, not noAgent=true
       const skipAgent = options.agent === false;
 
+      // Build EFS/S3 mount pairs, resolve VPC, and run async filesystem validation (Levels 1–3)
+      const { efsMounts: efsPairsMounts, s3Mounts: s3PairsMounts } = await resolveAndValidateFilesystemMounts(
+        options,
+        parseCommaSeparatedList
+      );
+
       const result = skipAgent
         ? await createProject({
             name: projectName!,
@@ -317,6 +336,8 @@ async function handleCreateCLI(options: CreateOptions): Promise<void> {
             idleTimeout: options.idleTimeout ? Number(options.idleTimeout) : undefined,
             maxLifetime: options.maxLifetime ? Number(options.maxLifetime) : undefined,
             sessionStorageMountPath: options.sessionStorageMountPath,
+            efsAccessPoints: efsPairsMounts,
+            s3AccessPoints: s3PairsMounts,
             withConfigBundle: options.withConfigBundle,
             skipGit: options.skipGit,
             skipInstall: options.skipInstall,
@@ -384,6 +405,30 @@ export const registerCreate = (program: Command) => {
     .option(
       '--session-storage-mount-path <path>',
       'Absolute mount path for session filesystem storage under /mnt (e.g. /mnt/data) [non-interactive]'
+    )
+    .option(
+      '--efs-access-point-arn <arn>',
+      'EFS access point ARN (repeatable, paired with --efs-mount-path) [non-interactive]',
+      (val: string, prev: string[]) => [...prev, val],
+      [] as string[]
+    )
+    .option(
+      '--efs-mount-path <path>',
+      'EFS mount path (e.g. /mnt/tools, paired with --efs-access-point-arn) [non-interactive]',
+      (val: string, prev: string[]) => [...prev, val],
+      [] as string[]
+    )
+    .option(
+      '--s3-access-point-arn <arn>',
+      'S3 Files access point ARN (repeatable, paired with --s3-mount-path) [non-interactive]',
+      (val: string, prev: string[]) => [...prev, val],
+      [] as string[]
+    )
+    .option(
+      '--s3-mount-path <path>',
+      'S3 Files mount path (e.g. /mnt/datasets, paired with --s3-access-point-arn) [non-interactive]',
+      (val: string, prev: string[]) => [...prev, val],
+      [] as string[]
     )
     .option('--with-config-bundle', 'Create a config bundle wired into the agent template [preview] [non-interactive]')
     .option('--output-dir <dir>', 'Output directory (default: current directory) [non-interactive]')
