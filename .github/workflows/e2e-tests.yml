@@ -123,6 +123,7 @@ jobs:
           if [ -n "$HELPERS_CHANGED" ]; then
             GA_EXTRA=$(find e2e-tests -name '*.test.ts' \
               | grep -v '^e2e-tests/strands-bedrock\.test\.ts$' \
+              | grep -v '^e2e-tests/payment-strands-bedrock\.test\.ts$' \
               | grep -v '^e2e-tests/harness-' \
               | tr '\n' ' ')
             HARNESS_EXTRA=$(find e2e-tests -name 'harness-*.test.ts' \
@@ -131,6 +132,7 @@ jobs:
           else
             GA_EXTRA=$(git diff --name-only "$BASE_SHA"..HEAD -- 'e2e-tests/*.test.ts' \
               | grep -v '^e2e-tests/strands-bedrock\.test\.ts$' \
+              | grep -v '^e2e-tests/payment-strands-bedrock\.test\.ts$' \
               | grep -v '^e2e-tests/harness-' \
               | tr '\n' ' ')
             HARNESS_EXTRA=$(git diff --name-only "$BASE_SHA"..HEAD -- 'e2e-tests/harness-*.test.ts' \
@@ -153,7 +155,16 @@ jobs:
           E2E_S3_ACCESS_POINT_ARN: ${{ env.E2E_S3_ACCESS_POINT_ARN }}
           E2E_FILESYSTEM_SUBNET_ID: ${{ env.E2E_FILESYSTEM_SUBNET_ID }}
           E2E_FILESYSTEM_SECURITY_GROUP_ID: ${{ env.E2E_FILESYSTEM_SECURITY_GROUP_ID }}
-        run: npx vitest run --project e2e e2e-tests/strands-bedrock.test.ts ${{ steps.changed.outputs.ga_extra }}
+          # CoinbaseCDP testnet creds for payment-strands-bedrock.test.ts. Sourced from
+          # the same E2E secret (keys CDP_API_KEY_ID / CDP_API_KEY_SECRET / CDP_WALLET_SECRET),
+          # which parse-json-secrets surfaces as E2E_CDP_*; remapped here to the unprefixed
+          # names the test reads. Absent on forks -> test self-skips via its hasCdpCreds gate.
+          CDP_API_KEY_ID: ${{ env.E2E_CDP_API_KEY_ID }}
+          CDP_API_KEY_SECRET: ${{ env.E2E_CDP_API_KEY_SECRET }}
+          CDP_WALLET_SECRET: ${{ env.E2E_CDP_WALLET_SECRET }}
+        run:
+          npx vitest run --project e2e e2e-tests/strands-bedrock.test.ts e2e-tests/payment-strands-bedrock.test.ts ${{
+          steps.changed.outputs.ga_extra }}
 
       - name: Install preview CLI globally
         run: npm install -g "$PREVIEW_TARBALL"
