@@ -104,7 +104,16 @@ describe('PaymentManagerSchema', () => {
     });
   });
 
-  describe('autoPayment defaults', () => {
+  describe('autoPayment / defaultSpendLimit defaults', () => {
+    it('materializes documented defaults when omitted', () => {
+      const result = PaymentManagerSchema.safeParse(validBase);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.autoPayment).toBe(true);
+        expect(result.data.defaultSpendLimit).toBe('10.00');
+      }
+    });
+
     it('accepts explicit false', () => {
       const result = PaymentManagerSchema.safeParse({ ...validBase, autoPayment: false });
       expect(result.success).toBe(true);

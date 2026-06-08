@@ -49,6 +49,8 @@ function makePaymentManager(
     name,
     authorizerType: 'AWS_IAM' as const,
     pattern: 'interceptor' as const,
+    autoPayment: true,
+    defaultSpendLimit: '10.00',
     connectors: connectors.map(c => ({
       name: c.name,
       credentialName: c.credentialName,
@@ -89,9 +91,26 @@ describe('PaymentManagerPrimitive', () => {
       const manager = written.payments![0]!;
       expect(manager.name).toBe('myManager');
       expect(manager.authorizerType).toBe('AWS_IAM');
-      expect(manager.pattern).toBe('interceptor');
       expect(manager.connectors).toEqual([]);
       expect(manager.authorizerConfiguration).toBeUndefined();
+      // Documented defaults are materialized even when not passed.
+      expect(manager.autoPayment).toBe(true);
+      expect(manager.defaultSpendLimit).toBe('10.00');
+    });
+
+    it('preserves an explicit autoPayment=false (not overridden by the default)', async () => {
+      mockReadProjectSpec.mockResolvedValue(makeProject());
+      mockWriteProjectSpec.mockResolvedValue(undefined);
+
+      await primitive.add({
+        name: 'noAutoMgr',
+        authorizerType: 'AWS_IAM',
+        pattern: 'interceptor',
+        autoPayment: false,
+      });
+
+      const written = mockWriteProjectSpec.mock.calls[0]![0] as AgentCoreProjectSpec;
+      expect(written.payments![0]!.autoPayment).toBe(false);
     });
 
     it('happy path writes optional fields when provided', async () => {

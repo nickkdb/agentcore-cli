@@ -367,6 +367,8 @@ describe('wirePaymentCapability (via PaymentManagerPrimitive.add)', () => {
             name: ADD_OPTIONS.name,
             authorizerType: ADD_OPTIONS.authorizerType,
             pattern: ADD_OPTIONS.pattern,
+            autoPayment: true,
+            defaultSpendLimit: '10.00',
             connectors: [],
           },
         ],

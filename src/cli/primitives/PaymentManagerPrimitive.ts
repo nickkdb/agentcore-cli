@@ -1,6 +1,8 @@
 import { findConfigRoot, removeEnvVars, serializeResult, toError } from '../../lib';
 import type { AgentCoreProjectSpec, PaymentAuthorizerType, PaymentPattern } from '../../schema';
 import {
+  DEFAULT_AUTO_PAYMENT,
+  DEFAULT_SPEND_LIMIT,
   PaymentAuthorizerTypeSchema,
   PaymentManagerNameSchema,
   PaymentManagerSchema,
@@ -160,8 +162,8 @@ export class PaymentManagerPrimitive extends BasePrimitive<AddPaymentManagerOpti
         pattern: options.pattern,
         connectors: [],
         ...(options.description && { description: options.description }),
-        ...(options.autoPayment !== undefined && { autoPayment: options.autoPayment }),
-        ...(options.defaultSpendLimit && { defaultSpendLimit: options.defaultSpendLimit }),
+        autoPayment: options.autoPayment ?? DEFAULT_AUTO_PAYMENT,
+        defaultSpendLimit: options.defaultSpendLimit ?? DEFAULT_SPEND_LIMIT,
         ...(options.paymentToolAllowlist?.length && { paymentToolAllowlist: options.paymentToolAllowlist }),
         ...(options.networkPreferences?.length && { networkPreferences: options.networkPreferences }),
       });

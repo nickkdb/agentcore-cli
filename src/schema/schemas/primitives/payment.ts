@@ -7,6 +7,12 @@ import { z } from 'zod';
 export const PaymentProviderSchema = z.enum(['CoinbaseCDP', 'StripePrivy']);
 export type PaymentProvider = z.infer<typeof PaymentProviderSchema>;
 
+// Documented payment-manager defaults. Materialized on write (via the schema
+// `.default()` below and in PaymentManagerPrimitive.add()) so they appear in
+// agentcore.json instead of being silently re-defaulted downstream.
+export const DEFAULT_AUTO_PAYMENT = true;
+export const DEFAULT_SPEND_LIMIT = '10.00';
+
 // ============================================================================
 // Payment Pattern Schema
 // ============================================================================
@@ -77,8 +83,8 @@ export const PaymentManagerSchema = z
     pattern: PaymentPatternSchema.default('interceptor'),
     connectors: z.array(PaymentConnectorSchema).default([]),
     description: z.string().optional(),
-    autoPayment: z.boolean().optional(),
-    defaultSpendLimit: z.string().optional(),
+    autoPayment: z.boolean().default(DEFAULT_AUTO_PAYMENT),
+    defaultSpendLimit: z.string().default(DEFAULT_SPEND_LIMIT),
     paymentToolAllowlist: z.array(z.string()).optional(),
     networkPreferences: z.array(z.string()).optional(),
   })

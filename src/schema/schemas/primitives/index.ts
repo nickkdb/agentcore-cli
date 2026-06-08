@@ -109,6 +109,8 @@ export type {
   PaymentAuthorizerType,
 } from './payment';
 export {
+  DEFAULT_AUTO_PAYMENT,
+  DEFAULT_SPEND_LIMIT,
   PaymentManagerSchema,
   PaymentManagerNameSchema,
   PaymentConnectorSchema,

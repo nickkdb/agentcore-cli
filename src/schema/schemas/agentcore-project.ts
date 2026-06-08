@@ -30,6 +30,8 @@ import {
 } from './primitives/memory';
 import { OnlineEvalConfigSchema } from './primitives/online-eval-config';
 import {
+  DEFAULT_AUTO_PAYMENT,
+  DEFAULT_SPEND_LIMIT,
   PaymentAuthorizerTypeSchema,
   PaymentConnectorNameSchema,
   PaymentConnectorSchema,
@@ -103,6 +105,8 @@ export {
   HarnessModelProviderSchema,
 } from './primitives/harness';
 export {
+  DEFAULT_AUTO_PAYMENT,
+  DEFAULT_SPEND_LIMIT,
   PaymentManagerSchema,
   PaymentManagerNameSchema,
   PaymentConnectorSchema,
