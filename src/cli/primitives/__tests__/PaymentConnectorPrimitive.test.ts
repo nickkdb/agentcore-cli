@@ -62,7 +62,6 @@ function makeManager(
   return {
     name,
     authorizerType: 'AWS_IAM' as const,
-    pattern: 'interceptor' as const,
     autoPayment: true,
     defaultSpendLimit: '10.00',
     connectors,

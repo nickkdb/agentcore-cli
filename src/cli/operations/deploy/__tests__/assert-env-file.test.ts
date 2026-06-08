@@ -78,7 +78,6 @@ describe('assertEnvFileExists', () => {
         {
           name: 'PayMgr',
           authorizerType: 'AWS_IAM',
-          pattern: 'interceptor',
           connectors: [{ name: 'cdpconn', provider: 'CoinbaseCDP', credentialName: 'PayMgr-cdpconn-cdp' }],
         } as any,
       ],
@@ -96,7 +95,6 @@ describe('assertEnvFileExists', () => {
         {
           name: 'PayMgr',
           authorizerType: 'AWS_IAM',
-          pattern: 'interceptor',
           connectors: [
             { name: 'stripeconn', provider: 'StripePrivy', credentialName: 'PayMgr-stripeconn-stripe-privy' },
           ],
@@ -121,7 +119,6 @@ describe('assertEnvFileExists', () => {
         {
           name: 'PayMgr',
           authorizerType: 'AWS_IAM',
-          pattern: 'interceptor',
           connectors: [{ name: 'cdpconn', provider: 'CoinbaseCDP', credentialName: 'PayMgr-cdpconn-cdp' }],
         } as any,
       ],
@@ -144,7 +141,6 @@ describe('getAllCredentials', () => {
         {
           name: 'PayMgr',
           authorizerType: 'AWS_IAM',
-          pattern: 'interceptor',
           connectors: [{ name: 'cdpconn', provider: 'CoinbaseCDP', credentialName: 'PayMgr-cdpconn-cdp' }],
         } as any,
       ],

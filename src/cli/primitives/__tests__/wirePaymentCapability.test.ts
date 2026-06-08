@@ -112,7 +112,6 @@ const PARENT_INIT = `${AGENT_DIR}/capabilities/__init__.py`;
 const ADD_OPTIONS = {
   name: 'payments-mgr',
   authorizerType: 'AWS_IAM' as const,
-  pattern: 'interceptor' as const,
 };
 
 /** Call primitive.add() which internally calls wirePaymentCapability() for every runtime */
@@ -366,7 +365,6 @@ describe('wirePaymentCapability (via PaymentManagerPrimitive.add)', () => {
           {
             name: ADD_OPTIONS.name,
             authorizerType: ADD_OPTIONS.authorizerType,
-            pattern: ADD_OPTIONS.pattern,
             autoPayment: true,
             defaultSpendLimit: '10.00',
             connectors: [],

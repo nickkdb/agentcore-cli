@@ -48,7 +48,6 @@ function makePaymentManager(
   return {
     name,
     authorizerType: 'AWS_IAM' as const,
-    pattern: 'interceptor' as const,
     autoPayment: true,
     defaultSpendLimit: '10.00',
     connectors: connectors.map(c => ({
@@ -80,7 +79,6 @@ describe('PaymentManagerPrimitive', () => {
       const result = await primitive.add({
         name: 'myManager',
         authorizerType: 'AWS_IAM',
-        pattern: 'interceptor',
       });
 
       expect(result.success).toBe(true);
@@ -105,7 +103,6 @@ describe('PaymentManagerPrimitive', () => {
       await primitive.add({
         name: 'noAutoMgr',
         authorizerType: 'AWS_IAM',
-        pattern: 'interceptor',
         autoPayment: false,
       });
 
@@ -120,7 +117,6 @@ describe('PaymentManagerPrimitive', () => {
       await primitive.add({
         name: 'richManager',
         authorizerType: 'AWS_IAM',
-        pattern: 'tool-based',
         description: 'My payment manager',
         autoPayment: true,
         defaultSpendLimit: '50.00',
@@ -148,7 +144,6 @@ describe('PaymentManagerPrimitive', () => {
         allowedClients: ['client1', 'client2'],
         allowedAudience: ['aud1'],
         allowedScopes: ['scope1'],
-        pattern: 'interceptor',
       });
 
       expect(result.success).toBe(true);
@@ -170,7 +165,6 @@ describe('PaymentManagerPrimitive', () => {
       const result = await primitive.add({
         name: 'existingManager',
         authorizerType: 'AWS_IAM',
-        pattern: 'interceptor',
       });
 
       expect(result.success).toBe(false);
@@ -187,7 +181,6 @@ describe('PaymentManagerPrimitive', () => {
       const result = await primitive.add({
         name: 'jwtManager',
         authorizerType: 'CUSTOM_JWT',
-        pattern: 'interceptor',
         // no discoveryUrl
       });
 
@@ -205,7 +198,6 @@ describe('PaymentManagerPrimitive', () => {
       const result = await primitive.add({
         name: 'anyManager',
         authorizerType: 'AWS_IAM',
-        pattern: 'interceptor',
       });
 
       expect(result.success).toBe(false);
