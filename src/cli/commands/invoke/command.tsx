@@ -81,11 +81,20 @@ async function handleInvokeCLI(options: InvokeOptions, preloadedContext?: Invoke
   }
 }
 
+export function redactSensitiveText(value: string): string {
+  return value
+    .replace(/(bearer\s+)[a-z0-9\-._~+/]+=*/gi, '$1[REDACTED]')
+    .replace(/(client[_-]?secret["']?\s*[:=]\s*["']?)([^"',\s}]+)/gi, '$1[REDACTED]')
+    .replace(/((?:access[_-]?)?token["']?\s*[:=]\s*["']?)([^"',\s}]+)/gi, '$1[REDACTED]');
+}
+
 function printInvokeResult(result: InvokeResult, options: InvokeOptions): void {
   if (options.json) {
-    console.log(JSON.stringify(serializeResult(result)));
+    const serialized = serializeResult(result);
+    if (typeof serialized.response === 'string') serialized.response = redactSensitiveText(serialized.response);
+    if (typeof serialized.error === 'string') serialized.error = redactSensitiveText(serialized.error);
+    console.log(JSON.stringify(serialized));
   } else if (options.stream) {
-    // Streaming already wrote to stdout, just show session and log path
     if (result.sessionId) {
       console.error(`\nSession: ${result.sessionId}`);
       console.error(`To resume: agentcore invoke --session-id ${result.sessionId}`);
@@ -94,11 +103,10 @@ function printInvokeResult(result: InvokeResult, options: InvokeOptions): void {
       console.error(`Log: ${result.logFilePath}`);
     }
   } else {
-    // Non-streaming, non-json: print provider info and response or error
     if (result.success && result.response) {
-      console.log(result.response);
+      console.log(redactSensitiveText(result.response));
     } else if (!result.success && result.error) {
-      console.error(result.error.message);
+      console.error(redactSensitiveText(result.error.message));
     }
     if (result.sessionId) {
       console.error(`\nSession: ${result.sessionId}`);
@@ -346,10 +354,11 @@ export const registerInvoke = (program: Command) => {
           });
         }
       } catch (error) {
+        const msg = redactSensitiveText(getErrorMessage(error));
         if (cliOptions.json) {
-          console.log(JSON.stringify({ success: false, error: getErrorMessage(error) }));
+          console.log(JSON.stringify({ success: false, error: msg }));
         } else {
-          render(<Text color="red">Error: {getErrorMessage(error)}</Text>);
+          render(<Text color="red">Error: {msg}</Text>);
         }
         process.exit(1);
       }
