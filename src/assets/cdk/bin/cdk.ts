@@ -133,11 +133,19 @@ async function main() {
             autoPayment: p.autoPayment,
             paymentToolAllowlist: p.paymentToolAllowlist,
             networkPreferences: p.networkPreferences,
-            connectors: p.connectors.map(c => ({
-              name: c.name,
-              provider: c.provider,
-              credentialProviderArn: paymentCredentials?.[c.credentialName]?.credentialProviderArn ?? '',
-            })),
+            connectors: p.connectors.map(c => {
+              const credentialProviderArn = paymentCredentials?.[c.credentialName]?.credentialProviderArn;
+              if (!credentialProviderArn) {
+                // Fail fast with an actionable message rather than passing an empty
+                // ARN that fails opaquely server-side at CreatePaymentConnector.
+                throw new Error(
+                  `Payment connector "${c.name}" on manager "${p.name}" references credential ` +
+                    `"${c.credentialName}", but no deployed credential provider was found for it. ` +
+                    `Run \`agentcore deploy\` so the credential provider is created first.`
+                );
+              }
+              return { name: c.name, provider: c.provider, credentialProviderArn };
+            }),
           })
         )
       : undefined;
