@@ -334,7 +334,10 @@ export class PaymentManagerPrimitive extends BasePrimitive<AddPaymentManagerOpti
       .option('--allowed-scopes <scopes>', 'Comma-separated allowed scopes (for CUSTOM_JWT) [non-interactive]')
       .option('--pattern <pattern>', 'Payment pattern: interceptor or tool-based [non-interactive]')
       .option('--auto-payment [value]', 'Enable auto payment: true or false (default: true) [non-interactive]')
-      .option('--default-spend-limit <amount>', 'Default spend limit in USD (default: 10.00) [non-interactive]')
+      .option(
+        '--default-spend-limit <amount>',
+        'Spend cap (USD) for sessions created by `invoke --auto-session` ONLY; not a deployed-agent budget (default: 10.00) [non-interactive]'
+      )
       .option('--tool-allowlist <tools>', 'Comma-separated tool names eligible for payment [non-interactive]')
       .option(
         '--network-preferences <networks>',

@@ -288,6 +288,12 @@ export function AddPaymentManagerScreen({
                 }}
               />
             </Box>
+            <Box marginTop={1}>
+              <Text dimColor>
+                Used only for sessions created by `invoke --auto-session`. It is not a deployed-agent budget — sessions
+                your agent creates at runtime set their own limit.
+              </Text>
+            </Box>
           </Box>
         )}
 

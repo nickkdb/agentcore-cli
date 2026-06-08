@@ -57,8 +57,9 @@ For the full runtime flow, see
 
 ## Adding a Payment Manager
 
-A payment manager is the top-level resource that orchestrates payment operations. It defines authorization, spending
-patterns, and budget defaults.
+A payment manager is the top-level resource that orchestrates payment operations. It defines authorization and
+auto-payment behavior. (Spending budgets are enforced per payment session, not on the manager — see
+[Auto-Session Mode](#auto-session-mode).)
 
 ### CLI Command
 
@@ -78,21 +79,21 @@ agentcore add payment-manager \
   --description "Production payment manager"
 ```
 
-| Flag                               | Description                                                         |
-| ---------------------------------- | ------------------------------------------------------------------- |
-| `--name <name>`                    | Manager name (required in non-interactive mode)                     |
-| `--authorizer-type <type>`         | `AWS_IAM` (default) or `CUSTOM_JWT`                                 |
-| `--discovery-url <url>`            | OIDC discovery URL (required for CUSTOM_JWT)                        |
-| `--allowed-clients <clients>`      | Comma-separated client IDs (CUSTOM_JWT only)                        |
-| `--allowed-audience <audience>`    | Comma-separated allowed audiences (CUSTOM_JWT only)                 |
-| `--allowed-scopes <scopes>`        | Comma-separated allowed scopes (CUSTOM_JWT only)                    |
-| `--pattern <pattern>`              | `interceptor` (default) or `tool-based`                             |
-| `--auto-payment [value]`           | Enable automatic payment: `true` (default) or `false`               |
-| `--default-spend-limit <amount>`   | Default session spend limit in USD (default: `10.00`)               |
-| `--tool-allowlist <tools>`         | Comma-separated tool names eligible for payment                     |
-| `--network-preferences <networks>` | Comma-separated network IDs (e.g., `eip155:84532` for Base Sepolia) |
-| `--description <desc>`             | Human-readable description                                          |
-| `--json`                           | Output result as JSON                                               |
+| Flag                               | Description                                                                                               |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `--name <name>`                    | Manager name (required in non-interactive mode)                                                           |
+| `--authorizer-type <type>`         | `AWS_IAM` (default) or `CUSTOM_JWT`                                                                       |
+| `--discovery-url <url>`            | OIDC discovery URL (required for CUSTOM_JWT)                                                              |
+| `--allowed-clients <clients>`      | Comma-separated client IDs (CUSTOM_JWT only)                                                              |
+| `--allowed-audience <audience>`    | Comma-separated allowed audiences (CUSTOM_JWT only)                                                       |
+| `--allowed-scopes <scopes>`        | Comma-separated allowed scopes (CUSTOM_JWT only)                                                          |
+| `--pattern <pattern>`              | `interceptor` (default) or `tool-based`                                                                   |
+| `--auto-payment [value]`           | Enable automatic payment: `true` (default) or `false`                                                     |
+| `--default-spend-limit <amount>`   | Spend cap (USD) for `invoke --auto-session` sessions ONLY; not a deployed-agent budget (default: `10.00`) |
+| `--tool-allowlist <tools>`         | Comma-separated tool names eligible for payment                                                           |
+| `--network-preferences <networks>` | Comma-separated network IDs (e.g., `eip155:84532` for Base Sepolia)                                       |
+| `--description <desc>`             | Human-readable description                                                                                |
+| `--json`                           | Output result as JSON                                                                                     |
 
 Name constraints: must start with a letter, contain only alphanumeric characters and underscores, max 48 characters.
 
