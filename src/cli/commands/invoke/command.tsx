@@ -201,6 +201,98 @@ export const registerInvoke = (program: Command) => {
       .option('--actor-id <id>', 'Override memory actor ID (harness only) [non-interactive] [preview]');
   }
 
+  // Group the long flag list into labelled sections (mirrors `add ab-test`).
+  // Core flags (prompt/prompt-file/runtime/target/session-id/user-id) stay in the
+  // default "Options:" block; everything else is hidden there and re-listed under a
+  // section heading below. Preview/harness sections are only emitted when registered.
+  const hiddenFromDefaultHelp = new Set<string>([
+    // Payments
+    '--payment-user-id',
+    '--payment-instrument-id',
+    '--payment-session-id',
+    '--auto-session',
+    // Output
+    '--json',
+    '--stream',
+    // MCP & advanced
+    '--tool',
+    '--input',
+    '--exec',
+    '--timeout',
+    '--header',
+    '--bearer-token',
+    // Harness + model overrides (preview)
+    '--harness',
+    '--harness-arn',
+    '--region',
+    '--verbose',
+    '--model-id',
+    '--model-provider',
+    '--api-key-arn',
+    '--tools',
+    '--max-iterations',
+    '--max-tokens',
+    '--harness-timeout',
+    '--skills',
+    '--system-prompt',
+    '--allowed-tools',
+    '--actor-id',
+  ]);
+  for (const opt of invokeCmd.options) {
+    if (hiddenFromDefaultHelp.has(opt.long ?? '')) {
+      opt.hidden = true;
+    }
+  }
+
+  invokeCmd.addHelpText(
+    'after',
+    `
+Payments [non-interactive]
+  --payment-user-id <id>           End-user/wallet-owner identity (defaults to --user-id)
+  --payment-instrument-id <id>     Payment instrument (wallet) ID
+  --payment-session-id <id>        Payment session ID for budget tracking
+  --auto-session                   Auto-create/reuse a payment session for testing
+
+Output [non-interactive]
+  --json                           Output as JSON
+  --stream                         Stream response in real-time
+
+MCP & Advanced [non-interactive]
+  --tool <name>                    MCP tool name (use with "call-tool" prompt)
+  --input <json>                   MCP tool arguments as JSON (use with --tool)
+  --exec                           Execute a shell command in the runtime container
+  --timeout <seconds>              Timeout in seconds for --exec commands
+  -H, --header <header>            Custom header "Name: Value" (repeatable)
+  --bearer-token <token>           Bearer token for CUSTOM_JWT auth (bypasses SigV4)
+`
+  );
+
+  if (isPreviewEnabled()) {
+    invokeCmd.addHelpText(
+      'after',
+      `
+Harness [non-interactive] [preview]
+  --harness <name>                 Select specific harness to invoke
+  --harness-arn <arn>              Invoke a harness by ARN (no project required)
+  --region <region>                AWS region (required with --harness-arn)
+  --verbose                        Print verbose streaming JSON events
+
+Model & Runtime Overrides (harness only) [non-interactive] [preview]
+  --model-id <id>                  Override model
+  --model-provider <provider>      bedrock, open_ai, or gemini
+  --api-key-arn <arn>              API key ARN for open_ai/gemini
+  --tools <tools>                  Override tools (comma-separated)
+  --allowed-tools <tools>          Override allowed tools (comma-separated)
+  --skills <paths>                 Skills (comma-separated paths)
+  --system-prompt <text>           Override system prompt
+  --actor-id <id>                  Override memory actor ID
+  --max-iterations <n>             Override max iterations
+  --max-tokens <n>                 Override max tokens
+  --harness-timeout <seconds>      Override timeout seconds
+`
+    );
+  }
+
   invokeCmd.action(
     async (
       positionalPrompt: string | undefined,
