@@ -30,6 +30,8 @@ interface InvokeScreenProps {
   initialPaymentSessionId?: string;
   /** Payments end-user identity (wallet owner) forwarded as body user_id on every turn */
   initialPaymentUserId?: string;
+  /** When true, auto-create/reuse a payment session at TUI start, reused across turns */
+  initialAutoSession?: boolean;
 }
 
 type Mode = 'select-agent' | 'chat' | 'input' | 'token-input';
@@ -162,6 +164,7 @@ export function InvokeScreen({
   initialPaymentInstrumentId,
   initialPaymentSessionId,
   initialPaymentUserId,
+  initialAutoSession,
 }: InvokeScreenProps) {
   const preview = isPreviewEnabled();
   const {
@@ -195,6 +198,7 @@ export function InvokeScreen({
     initialPaymentInstrumentId,
     initialPaymentSessionId,
     initialPaymentUserId,
+    initialAutoSession,
   });
   const [mode, setMode] = useState<Mode>(initialHarnessName ? 'input' : 'select-agent');
   const [isExecInput, setIsExecInput] = useState(false);

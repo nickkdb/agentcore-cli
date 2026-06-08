@@ -281,13 +281,12 @@ export const registerInvoke = (program: Command) => {
           cliOptions.bearerToken ||
           cliOptions.harness ||
           cliOptions.harnessArn ||
-          cliOptions.verbose ||
-          // --auto-session is a CLI-only convenience (it mints a session via the
-          // control API); it forces non-interactive mode. The explicit payment
-          // params (--payment-instrument-id / --payment-session-id /
-          // --payment-user-id) are carried into interactive mode instead, so they
-          // do NOT force CLI mode on their own.
-          cliOptions.autoSession
+          cliOptions.verbose
+          // Payment params (--auto-session / --payment-instrument-id /
+          // --payment-session-id / --payment-user-id) do NOT force CLI mode on
+          // their own — with a prompt they run one-shot (resolved.prompt above),
+          // without a prompt they carry into the interactive TUI. --auto-session
+          // mints/reuses a session at TUI start; see useInvokeFlow.
         ) {
           const result = await withCommandRunTelemetry(
             'invoke',
@@ -359,6 +358,20 @@ export const registerInvoke = (program: Command) => {
           process.exit(result.exitCode ?? (result.success ? 0 : 1));
         } else {
           // No CLI options - interactive TUI mode (headers still passed if provided)
+
+          // Validate flag combinations BEFORE the TTY check: a conflicting
+          // --auto-session + --payment-session-id is wrong regardless of terminal,
+          // and the flag-conflict message is clearer than the TTY guard. Single
+          // source of truth: validateInvokeOptions.
+          const validation = validateInvokeOptions({
+            autoSession: cliOptions.autoSession,
+            paymentSessionId: cliOptions.paymentSessionId,
+          });
+          if (!validation.valid) {
+            console.error(validation.error);
+            process.exit(1);
+          }
+
           requireTTY();
 
           // Parse custom headers for TUI mode
@@ -376,6 +389,7 @@ export const registerInvoke = (program: Command) => {
               bearerToken: cliOptions.bearerToken,
               paymentInstrumentId: cliOptions.paymentInstrumentId,
               paymentSessionId: cliOptions.paymentSessionId,
+              autoSession: cliOptions.autoSession,
               // Default the payments wallet-owner identity to --user-id when
               // --payment-user-id is omitted (same fallback as the command path).
               paymentUserId: cliOptions.paymentUserId ?? cliOptions.userId,
