@@ -57,6 +57,13 @@ export interface InvokeOptions {
   paymentSessionId?: string;
   /** Auto-create/reuse a payment session for testing (runs with developer ManagementRole credentials) */
   autoSession?: boolean;
+  /**
+   * Payments end-user identity (wallet owner). Written into the invoke body as
+   * `user_id` so the agent scopes the payment instrument/session/budget to it.
+   * Falls back to `userId` when omitted. Distinct from `userId`, which is the
+   * runtime/Identity header and is not used for payment scoping.
+   */
+  paymentUserId?: string;
 }
 
 export type InvokeResult = Result & {

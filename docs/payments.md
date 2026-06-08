@@ -30,12 +30,14 @@ agentcore add payment-connector \
 # 4. Deploy (creates payment infrastructure on AWS)
 agentcore deploy -y
 
-# 5. Invoke with auto-session (creates a test payment session)
-agentcore invoke --auto-session --prompt "Use a paid tool"
+# 5. Create + fund an instrument out-of-band (SDK), then invoke with auto-session
+agentcore invoke --auto-session --payment-user-id alice --prompt "Use a paid tool"
 ```
 
 > **Note**: `--auto-session` requires a successful deploy first because it reads from deployed state to locate the
-> payment manager ARN and create a session.
+> payment manager ARN and create a session. The CLI does not create payment instruments — create and fund one with the
+> SDK (scoped to the same `--payment-user-id`) and grant WalletHub delegated signing before invoking. See
+> [Invoking with Payment Context](#invoking-with-payment-context).
 
 ## How It Works
 
@@ -232,32 +234,113 @@ After deploying, use `agentcore invoke` to test agents with payment capabilities
 
 ### Payment Flags
 
-| Flag                           | Description                                               |
-| ------------------------------ | --------------------------------------------------------- |
-| `--payment-instrument-id <id>` | Payment instrument ID (a funded wallet) for x402 payments |
-| `--payment-session-id <id>`    | Payment session ID for budget tracking                    |
-| `--auto-session`               | Auto-create or reuse a payment session for testing        |
+| Flag                           | Description                                                                                  |
+| ------------------------------ | -------------------------------------------------------------------------------------------- |
+| `--payment-instrument-id <id>` | Payment instrument ID (a funded wallet) for x402 payments                                    |
+| `--payment-session-id <id>`    | Payment session ID for budget tracking                                                       |
+| `--auto-session`               | Auto-create or reuse a payment session for testing                                           |
+| `--payment-user-id <id>`       | End-user identity (wallet owner) to scope the instrument, session, and budget to. See below. |
+
+### Payment identity: `--payment-user-id`
+
+Payment instruments and sessions are **scoped to an end user** (the wallet owner). `--payment-user-id` sets that
+identity; the agent uses it to look up the right wallet and budget when settling a payment. It is written into the
+invocation body as `user_id`.
+
+When `--payment-user-id` is omitted it falls back to `--user-id`. When neither is set, the agent scopes payments to
+`default-user` — fine for single-user local testing, but **production should pass `--payment-user-id` per end user** so
+that wallets and budgets are never shared across users. Invoking a payments-enabled project without an identity prints a
+warning to that effect.
+
+> **Two different "user id"s.** `--payment-user-id` (the wallet owner, sent in the invocation body) is distinct from
+> `--user-id` (the AgentCore Runtime/Identity header used for OAuth token scoping). They are independent: under
+> CUSTOM_JWT auth the payment user is derived from the JWT `sub` claim and `--payment-user-id` is ignored. Set
+> `--payment-user-id` for SigV4 (IAM) agents that pay on behalf of a specific end user.
+
+The instrument created out-of-band (below) and the `--payment-user-id` passed at invoke time **must be the same user** —
+otherwise the agent looks up the wallet under the wrong identity and the payment fails with `Instrument not found`.
 
 ### Auto-Session Mode
 
 `--auto-session` creates a temporary payment session with the default spend limit, or reuses an existing one from the
-current testing context. This is the simplest way to test payment flows without manually creating instruments and
-sessions via the AWS API.
+current testing context. This is the simplest way to test payment flows without manually creating a session via the AWS
+API. The session is scoped to the resolved payment identity (`--payment-user-id`, else `--user-id`, else
+`default-user`), so it aligns with the instrument and the body `user_id`.
 
 ```bash
-agentcore invoke --auto-session --prompt "Search for paid research papers"
+agentcore invoke --auto-session --payment-user-id alice --prompt "Search for paid research papers"
 ```
 
 ### Explicit Payment Context
 
-For production testing with specific instruments and sessions:
+For testing with a specific instrument and session:
 
 ```bash
 agentcore invoke \
+  --payment-user-id alice \
   --payment-instrument-id payment-instrument-abc123 \
   --payment-session-id payment-session-xyz789 \
   --prompt "Process a payment for the weather API"
 ```
+
+### Interactive mode
+
+Passing payment flags **without** a prompt launches the interactive chat with the payment context held for the whole
+session — every turn pays as that identity, against that instrument and session:
+
+```bash
+agentcore invoke --payment-user-id alice --payment-instrument-id payment-instrument-abc123
+```
+
+The interactive header shows `Payments: active (wallet owner: <id>)` while a payment context is in effect.
+(`--auto-session` is a non-interactive convenience and always runs in command mode.)
+
+### Creating an instrument (out-of-band)
+
+The CLI does not create payment instruments; create them with the AgentCore SDK or your application backend, scoped to
+the end user you will invoke as:
+
+```python
+from bedrock_agentcore.payments.manager import PaymentManager
+
+manager = PaymentManager(payment_manager_arn=MANAGER_ARN, region_name="us-east-1")
+instrument = manager.create_payment_instrument(
+    payment_connector_id=CONNECTOR_ID,
+    payment_instrument_type="EMBEDDED_CRYPTO_WALLET",
+    payment_instrument_details={
+        "embeddedCryptoWallet": {
+            "network": "ETHEREUM",
+            "linkedAccounts": [{"email": {"emailAddress": "alice@example.com"}}],
+        }
+    },
+    user_id="alice",  # MUST match the --payment-user-id you invoke with
+)
+# instrument["paymentInstrumentId"]                                        -> pass as --payment-instrument-id
+# instrument["paymentInstrumentDetails"]["embeddedCryptoWallet"]["walletAddress"]  -> fund this address
+# instrument["paymentInstrumentDetails"]["embeddedCryptoWallet"]["redirectUrl"]    -> WalletHub consent (below)
+```
+
+Fund the returned `walletAddress` with testnet USDC ([Circle faucet](https://faucet.circle.com/), Base Sepolia) before
+invoking.
+
+### Grant delegated signing (one-time, per end-user wallet)
+
+Before `ProcessPayment` can settle, the **end user who owns the wallet must grant Coinbase delegated signing** for it.
+This is a one-time step per wallet, completed in the Coinbase **WalletHub** consent page:
+
+1. Send the end user the `redirectUrl` from the `create_payment_instrument` response.
+2. The end user opens it and **signs in using the exact email passed in `linkedAccounts`** — _not_ the developer's
+   Coinbase account. Coinbase verifies the identity with a one-time code (OTP) sent to that email.
+3. The end user clicks **Grant** to authorize delegated signing for the wallet.
+
+Until this grant is completed, `ProcessPayment` fails with:
+`Delegated signing grant is not active for the end user wallet. Please redirect end user to the WalletHub to grant the permissions.`
+
+> **Common pitfall:** opening the WalletHub link while logged into your own (developer) Coinbase account shows **"no
+> accounts found"** — the wallet is bound to the `linkedAccounts` email identity, not your CDP/developer account. Always
+> authenticate as the linked end-user email (a fresh/incognito browser session avoids being carried in on a different
+> Coinbase login). For local testing, use a `linkedAccounts` email you control (a plus-addressed alias such as
+> `you+testuser@example.com` works — the OTP arrives in your real inbox), so you can complete the grant yourself.
 
 For details on creating instruments and sessions, see
 [Create a payment instrument](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/payments-create-instrument.html).
@@ -304,15 +387,18 @@ agentcore validate
 
 ## Troubleshooting
 
-| Error                                 | Cause                                    | Fix                                                            |
-| ------------------------------------- | ---------------------------------------- | -------------------------------------------------------------- |
-| `.env.local not found`                | No secrets file in project               | Create `agentcore/.env.local` with credential vars             |
-| `Missing credentials for connector`   | Env vars not set for a connector         | Add the required `AGENTCORE_CREDENTIAL_*` vars to `.env.local` |
-| `ServiceQuotaExceededException`       | Account limit on payment managers        | Request a quota increase via AWS Support                       |
-| `No connectors for payment manager`   | Manager has zero connectors              | Add at least one connector before deploying                    |
-| `PaymentCredentialProvider not found` | Orphaned reference after manual deletion | Re-run `agentcore deploy` to recreate                          |
-| `Request timeout`                     | Network or service availability          | Retry deploy; check internet connectivity                      |
-| `Invalid authorizer type`             | Typo in `--authorizer-type` flag         | Use `AWS_IAM` or `CUSTOM_JWT` (case-sensitive)                 |
+| Error                                   | Cause                                                                   | Fix                                                                                       |
+| --------------------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `.env.local not found`                  | No secrets file in project                                              | Create `agentcore/.env.local` with credential vars                                        |
+| `Missing credentials for connector`     | Env vars not set for a connector                                        | Add the required `AGENTCORE_CREDENTIAL_*` vars to `.env.local`                            |
+| `ServiceQuotaExceededException`         | Account limit on payment managers                                       | Request a quota increase via AWS Support                                                  |
+| `No connectors for payment manager`     | Manager has zero connectors                                             | Add at least one connector before deploying                                               |
+| `PaymentCredentialProvider not found`   | Orphaned reference after manual deletion                                | Re-run `agentcore deploy` to recreate                                                     |
+| `Request timeout`                       | Network or service availability                                         | Retry deploy; check internet connectivity                                                 |
+| `Invalid authorizer type`               | Typo in `--authorizer-type` flag                                        | Use `AWS_IAM` or `CUSTOM_JWT` (case-sensitive)                                            |
+| `Instrument not found` at invoke        | `--payment-user-id` differs from the instrument's owner                 | Invoke with the same user the instrument was created under                                |
+| `Delegated signing grant is not active` | End user hasn't granted WalletHub consent for the wallet                | Open the instrument's `redirectUrl`, sign in as the linked email, click Grant (see above) |
+| WalletHub shows `no accounts found`     | Opened the consent link as the developer, not the wallet's linked email | Sign in as the `linkedAccounts` email (incognito); OTP goes to that inbox                 |
 
 For additional troubleshooting, see
 [Troubleshooting AgentCore payments](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/payments-troubleshooting.html).

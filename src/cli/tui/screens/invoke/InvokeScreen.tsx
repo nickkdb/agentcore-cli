@@ -24,6 +24,12 @@ interface InvokeScreenProps {
   isResume?: boolean;
   /** Pre-select a harness by name, skipping the agent selection screen (preview) */
   initialHarnessName?: string;
+  /** Payment instrument ID (wallet) forwarded on every turn when invoking with payments */
+  initialPaymentInstrumentId?: string;
+  /** Payment session ID (budget) forwarded on every turn when invoking with payments */
+  initialPaymentSessionId?: string;
+  /** Payments end-user identity (wallet owner) forwarded as body user_id on every turn */
+  initialPaymentUserId?: string;
 }
 
 type Mode = 'select-agent' | 'chat' | 'input' | 'token-input';
@@ -153,6 +159,9 @@ export function InvokeScreen({
   onExec,
   isResume,
   initialHarnessName,
+  initialPaymentInstrumentId,
+  initialPaymentSessionId,
+  initialPaymentUserId,
 }: InvokeScreenProps) {
   const preview = isPreviewEnabled();
   const {
@@ -167,6 +176,8 @@ export function InvokeScreen({
     bearerToken,
     tokenFetchState,
     mcpToolsFetched,
+    paymentsActive,
+    paymentUserId,
     selectAgent,
     setBearerToken,
     fetchBearerToken,
@@ -181,6 +192,9 @@ export function InvokeScreen({
     initialBearerToken,
     isResume,
     initialHarnessName,
+    initialPaymentInstrumentId,
+    initialPaymentSessionId,
+    initialPaymentUserId,
   });
   const [mode, setMode] = useState<Mode>(initialHarnessName ? 'input' : 'select-agent');
   const [isExecInput, setIsExecInput] = useState(false);
@@ -505,6 +519,13 @@ export function InvokeScreen({
         <Box>
           <Text>User: </Text>
           <Text color="white">{userId}</Text>
+        </Box>
+      )}
+      {mode !== 'select-agent' && paymentsActive && (
+        <Box>
+          <Text>Payments: </Text>
+          <Text color="green">active</Text>
+          <Text color="gray"> (wallet owner: {paymentUserId ?? 'default-user'})</Text>
         </Box>
       )}
       {mode !== 'select-agent' && isCustomJwt && (

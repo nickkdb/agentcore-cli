@@ -76,6 +76,14 @@ export interface InvokeAgentRuntimeOptions {
   paymentInstrumentId?: string;
   /** Payment session ID for budget tracking */
   paymentSessionId?: string;
+  /**
+   * Payments end-user identity, written into the invoke body as `user_id`.
+   * The agent scopes the payment instrument/session/budget to this value
+   * (the wallet owner). Distinct from `userId`, which is the runtime/Identity
+   * header (X-Amzn-Bedrock-AgentCore-Runtime-User-Id) used for OAuth token
+   * scoping and is NOT visible to the agent's payment plugin.
+   */
+  paymentUserId?: string;
 }
 
 export interface InvokeAgentRuntimeResult {
@@ -159,8 +167,15 @@ export function extractResult(text: string): string {
  * Build the JSON payload body for an invoke request.
  * Includes payment context fields only when provided.
  */
-function buildInvokePayload(options: InvokeAgentRuntimeOptions): string {
+export function buildInvokePayload(options: InvokeAgentRuntimeOptions): string {
   const body: Record<string, string> = { prompt: options.payload };
+  // The agent reads `payload.user_id` to scope the payment wallet/budget
+  // (main.py: payload.get("user_id") or context.user_id or "default-user").
+  // Only set it when resolved; when omitted the agent applies its own
+  // "default-user" fallback, so we never bake that magic value into the wire.
+  if (options.paymentUserId) {
+    body.user_id = options.paymentUserId;
+  }
   if (options.paymentInstrumentId) {
     body.payment_instrument_id = options.paymentInstrumentId;
   }

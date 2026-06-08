@@ -160,7 +160,11 @@ export const registerInvoke = (program: Command) => {
     .option('--bearer-token <token>', 'Bearer token for CUSTOM_JWT auth (bypasses SigV4) [non-interactive]')
     .option('--payment-instrument-id <id>', 'Payment instrument ID for x402 payments [non-interactive]')
     .option('--payment-session-id <id>', 'Payment session ID for budget tracking [non-interactive]')
-    .option('--auto-session', 'Auto-create/reuse a payment session for testing [non-interactive]');
+    .option('--auto-session', 'Auto-create/reuse a payment session for testing [non-interactive]')
+    .option(
+      '--payment-user-id <id>',
+      'End-user identity (wallet owner) for payments; scopes the instrument/session/budget. Defaults to --user-id when omitted.'
+    );
 
   if (isPreviewEnabled()) {
     invokeCmd
@@ -233,6 +237,7 @@ export const registerInvoke = (program: Command) => {
         paymentInstrumentId?: string;
         paymentSessionId?: string;
         autoSession?: boolean;
+        paymentUserId?: string;
       }
     ) => {
       try {
@@ -277,8 +282,11 @@ export const registerInvoke = (program: Command) => {
           cliOptions.harness ||
           cliOptions.harnessArn ||
           cliOptions.verbose ||
-          cliOptions.paymentInstrumentId ||
-          cliOptions.paymentSessionId ||
+          // --auto-session is a CLI-only convenience (it mints a session via the
+          // control API); it forces non-interactive mode. The explicit payment
+          // params (--payment-instrument-id / --payment-session-id /
+          // --payment-user-id) are carried into interactive mode instead, so they
+          // do NOT force CLI mode on their own.
           cliOptions.autoSession
         ) {
           const result = await withCommandRunTelemetry(
@@ -337,6 +345,7 @@ export const registerInvoke = (program: Command) => {
                 paymentInstrumentId: cliOptions.paymentInstrumentId,
                 paymentSessionId: cliOptions.paymentSessionId,
                 autoSession: cliOptions.autoSession,
+                paymentUserId: cliOptions.paymentUserId,
               };
 
               return handleInvokeCLI(options, invokeContext);
@@ -365,6 +374,11 @@ export const registerInvoke = (program: Command) => {
               userId: cliOptions.userId,
               headers,
               bearerToken: cliOptions.bearerToken,
+              paymentInstrumentId: cliOptions.paymentInstrumentId,
+              paymentSessionId: cliOptions.paymentSessionId,
+              // Default the payments wallet-owner identity to --user-id when
+              // --payment-user-id is omitted (same fallback as the command path).
+              paymentUserId: cliOptions.paymentUserId ?? cliOptions.userId,
             },
             enterAltScreen: false,
             actionOnBack: 'exit',

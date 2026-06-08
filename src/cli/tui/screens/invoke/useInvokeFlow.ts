@@ -76,6 +76,12 @@ export interface InvokeFlowOptions {
   isResume?: boolean;
   /** Pre-select a harness by name, skipping the agent selection screen (preview) */
   initialHarnessName?: string;
+  /** Payment instrument ID (wallet) forwarded on every invocation when payments are used */
+  initialPaymentInstrumentId?: string;
+  /** Payment session ID (budget) forwarded on every invocation when payments are used */
+  initialPaymentSessionId?: string;
+  /** Payments end-user identity (wallet owner) forwarded as the body user_id on every invocation */
+  initialPaymentUserId?: string;
 }
 
 export type TokenFetchState = 'idle' | 'fetching' | 'fetched' | 'error';
@@ -95,6 +101,10 @@ export interface InvokeFlowState {
   tokenExpiresIn: number | undefined;
   mcpTools: McpToolDef[];
   mcpToolsFetched: boolean;
+  /** True when a payment instrument/session/user identity is in effect for this session */
+  paymentsActive: boolean;
+  /** The payments end-user identity in effect (wallet owner), if any */
+  paymentUserId?: string;
   selectAgent: (index: number) => void;
   setUserId: (id: string) => void;
   setBearerToken: (token: string) => void;
@@ -106,7 +116,20 @@ export interface InvokeFlowState {
 }
 
 export function useInvokeFlow(options: InvokeFlowOptions = {}): InvokeFlowState {
-  const { initialSessionId, initialUserId, headers, initialBearerToken, isResume, initialHarnessName } = options;
+  const {
+    initialSessionId,
+    initialUserId,
+    headers,
+    initialBearerToken,
+    isResume,
+    initialHarnessName,
+    initialPaymentInstrumentId,
+    initialPaymentSessionId,
+    initialPaymentUserId,
+  } = options;
+  // Payment context is established once at session start and reused on every turn.
+  const paymentsActive =
+    Boolean(initialPaymentInstrumentId) || Boolean(initialPaymentSessionId) || Boolean(initialPaymentUserId);
   const [phase, setPhase] = useState<'loading' | 'ready' | 'invoking' | 'error'>('loading');
   const [config, setConfig] = useState<InvokeConfig | null>(null);
   const [selectedAgent, setSelectedAgent] = useState(0);
@@ -729,6 +752,9 @@ export function useInvokeFlow(options: InvokeFlowOptions = {}): InvokeFlowState 
               headers,
               bearerToken: bearerToken || undefined,
               baggage: agent.baggage,
+              paymentInstrumentId: initialPaymentInstrumentId,
+              paymentSessionId: initialPaymentSessionId,
+              paymentUserId: initialPaymentUserId,
             });
 
         if (result.sessionId) {
@@ -778,6 +804,9 @@ export function useInvokeFlow(options: InvokeFlowOptions = {}): InvokeFlowState 
       fetchMcpTools,
       getMcpInvokeOptions,
       streamHarnessInvoke,
+      initialPaymentInstrumentId,
+      initialPaymentSessionId,
+      initialPaymentUserId,
     ]
   );
 
@@ -910,6 +939,8 @@ export function useInvokeFlow(options: InvokeFlowOptions = {}): InvokeFlowState 
     tokenExpiresIn,
     mcpTools,
     mcpToolsFetched,
+    paymentsActive,
+    paymentUserId: initialPaymentUserId,
     selectAgent: setSelectedAgent,
     setUserId,
     setBearerToken,
