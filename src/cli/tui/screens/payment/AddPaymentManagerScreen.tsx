@@ -1,4 +1,4 @@
-import type { PaymentAuthorizerType, PaymentPattern } from '../../../../schema';
+import type { PaymentAuthorizerType } from '../../../../schema';
 import { PaymentManagerNameSchema } from '../../../../schema';
 import { Panel, Screen, StepIndicator, TextInput, WizardSelect } from '../../components';
 import type { SelectableItem } from '../../components';
@@ -11,7 +11,6 @@ import {
   AUTO_PAYMENT_ITEM_ID,
   MANAGER_STEP_LABELS,
   NETWORK_PREFS_ITEM_ID,
-  PAYMENT_PATTERN_OPTIONS,
   TOOL_ALLOWLIST_ITEM_ID,
 } from './types';
 import { useAddPaymentManagerWizard } from './useAddPaymentWizard';
@@ -35,11 +34,6 @@ export function AddPaymentManagerScreen({
 
   const authTypeItems: SelectableItem[] = useMemo(
     () => AUTH_TYPE_OPTIONS.map(opt => ({ id: opt.id, title: opt.title, description: opt.description })),
-    []
-  );
-
-  const patternItems: SelectableItem[] = useMemo(
-    () => PAYMENT_PATTERN_OPTIONS.map(opt => ({ id: opt.id, title: opt.title, description: opt.description })),
     []
   );
 
@@ -74,7 +68,6 @@ export function AddPaymentManagerScreen({
   const isAllowedAudienceStep = wizard.step === 'allowed-audience';
   const isAllowedScopesStep = wizard.step === 'allowed-scopes';
   const isManagerNameStep = wizard.step === 'manager-name';
-  const isPatternStep = wizard.step === 'pattern-select';
   const isAdvancedConfigStep = wizard.step === 'advanced-config';
 
   const authTypeNav = useListNavigation({
@@ -82,15 +75,6 @@ export function AddPaymentManagerScreen({
     onSelect: item => wizard.setAuthorizerType(item.id as PaymentAuthorizerType),
     onExit: () => onExit(),
     isActive: isAuthTypeStep,
-  });
-
-  const patternNav = useListNavigation({
-    items: patternItems,
-    onSelect: item => {
-      wizard.setPattern(item.id as PaymentPattern);
-    },
-    onExit: () => wizard.goBack(),
-    isActive: isPatternStep,
   });
 
   const [autoPaymentEnabled, setAutoPaymentEnabled] = useState(true);
@@ -140,7 +124,7 @@ export function AddPaymentManagerScreen({
     ? advancedSubStep === 0
       ? 'Space toggle · Enter confirm · Esc back'
       : HELP_TEXT.TEXT_INPUT
-    : isAuthTypeStep || isPatternStep
+    : isAuthTypeStep
       ? HELP_TEXT.NAVIGATE_SELECT
       : HELP_TEXT.TEXT_INPUT;
 
@@ -223,15 +207,6 @@ export function AddPaymentManagerScreen({
             onCancel={goBackOrExit}
             schema={PaymentManagerNameSchema}
             customValidation={value => !existingManagerNames.includes(value) || 'Payment manager name already exists'}
-          />
-        )}
-
-        {isPatternStep && (
-          <WizardSelect
-            title="Select payment pattern"
-            description="How the agent handles x402 payment responses"
-            items={patternItems}
-            selectedIndex={patternNav.selectedIndex}
           />
         )}
 

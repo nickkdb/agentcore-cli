@@ -1,4 +1,4 @@
-import type { PaymentAuthorizerType, PaymentPattern, PaymentProvider } from '../../../../schema';
+import type { PaymentAuthorizerType, PaymentProvider } from '../../../../schema';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Payment Manager Flow Types
@@ -11,7 +11,6 @@ export type AddPaymentManagerStep =
   | 'allowed-audience'
   | 'allowed-scopes'
   | 'manager-name'
-  | 'pattern-select'
   | 'advanced-config'
   | 'confirm';
 
@@ -22,7 +21,6 @@ export interface AddPaymentManagerConfig {
   allowedAudience: string;
   allowedScopes: string;
   managerName: string;
-  pattern: PaymentPattern;
   autoPayment: boolean;
   defaultSpendLimit: string;
   paymentToolAllowlist?: string;
@@ -39,7 +37,6 @@ export const MANAGER_STEP_LABELS: Record<AddPaymentManagerStep, string> = {
   'allowed-audience': 'Audience',
   'allowed-scopes': 'Scopes',
   'manager-name': 'Name',
-  'pattern-select': 'Pattern',
   'advanced-config': 'Advanced',
   confirm: 'Confirm',
 };
@@ -112,11 +109,6 @@ export const AUTH_TYPE_OPTIONS = [
 export const PAYMENT_PROVIDER_OPTIONS = [
   { id: 'CoinbaseCDP' as const, title: 'Coinbase CDP', description: 'Coinbase Developer Platform wallet credentials' },
   { id: 'StripePrivy' as const, title: 'Stripe + Privy', description: 'Stripe payments via Privy embedded wallets' },
-] as const;
-
-export const PAYMENT_PATTERN_OPTIONS = [
-  { id: 'interceptor' as const, title: 'Interceptor', description: 'Automatically handle x402 payment responses' },
-  { id: 'tool-based' as const, title: 'Tool-based', description: 'Expose payment as an agent tool' },
 ] as const;
 
 /** Item ID for the auto payment toggle in the advanced config pane. */

@@ -60,8 +60,6 @@ describe.sequential('e2e: payments — validation, config, and remove lifecycle'
         'payment-manager',
         '--name',
         'cfgMgr',
-        '--pattern',
-        'interceptor',
         '--auto-payment',
         'false',
         '--default-spend-limit',
@@ -213,10 +211,7 @@ describe.sequential('e2e: payments — validation, config, and remove lifecycle'
   // ── Validation: duplicate names ───────────────────────────────────────────
 
   it.skipIf(!canRun)('rejects duplicate manager name', async () => {
-    const result = await runAgentCoreCLI(
-      ['add', 'payment-manager', '--name', 'cfgMgr', '--pattern', 'interceptor', '--json'],
-      projectPath
-    );
+    const result = await runAgentCoreCLI(['add', 'payment-manager', '--name', 'cfgMgr', '--json'], projectPath);
     expect(result.exitCode).toBe(1);
     const json = parseJsonOutput(result.stdout) as { success: boolean; error: string };
     expect(json.error).toContain('already exists');

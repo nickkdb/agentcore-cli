@@ -76,7 +76,7 @@ describe('PaymentConnectorNameSchema', () => {
 });
 
 describe('PaymentManagerSchema', () => {
-  const validBase = { name: 'testManager', pattern: 'interceptor' as const, connectors: [] };
+  const validBase = { name: 'testManager', connectors: [] };
 
   describe('CUSTOM_JWT requires authorizerConfiguration', () => {
     it('fails when authorizerConfiguration is missing', () => {

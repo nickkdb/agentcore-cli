@@ -246,7 +246,6 @@ export function AddPaymentFlow({ isInteractive = true, onExit, onBack, onDev, on
     const managerFields = [
       { label: 'Auth Type', value: flow.managerConfig.authorizerType },
       { label: 'Manager Name', value: flow.managerConfig.managerName },
-      { label: 'Pattern', value: flow.managerConfig.pattern },
       { label: 'Auto Payment', value: flow.managerConfig.autoPayment ? 'Enabled' : 'Disabled' },
       { label: 'Default Spend Limit', value: `$${flow.managerConfig.defaultSpendLimit}` },
       ...(flow.managerConfig.paymentToolAllowlist
@@ -340,7 +339,6 @@ export function AddPaymentFlow({ isInteractive = true, onExit, onBack, onDev, on
         allowedClients: mgrConfig.authorizerType === 'CUSTOM_JWT' ? parseList(mgrConfig.allowedClients) : undefined,
         allowedAudience: mgrConfig.authorizerType === 'CUSTOM_JWT' ? parseList(mgrConfig.allowedAudience) : undefined,
         allowedScopes: mgrConfig.authorizerType === 'CUSTOM_JWT' ? parseList(mgrConfig.allowedScopes) : undefined,
-        pattern: mgrConfig.pattern,
         autoPayment: mgrConfig.autoPayment,
         defaultSpendLimit: mgrConfig.defaultSpendLimit,
         paymentToolAllowlist: mgrConfig.paymentToolAllowlist ? parseList(mgrConfig.paymentToolAllowlist) : undefined,

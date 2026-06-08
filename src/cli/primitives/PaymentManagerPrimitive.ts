@@ -1,12 +1,11 @@
 import { findConfigRoot, removeEnvVars, serializeResult, toError } from '../../lib';
-import type { AgentCoreProjectSpec, PaymentAuthorizerType, PaymentPattern } from '../../schema';
+import type { AgentCoreProjectSpec, PaymentAuthorizerType } from '../../schema';
 import {
   DEFAULT_AUTO_PAYMENT,
   DEFAULT_SPEND_LIMIT,
   PaymentAuthorizerTypeSchema,
   PaymentManagerNameSchema,
   PaymentManagerSchema,
-  PaymentPatternSchema,
 } from '../../schema';
 import type { RemoveResult } from '../commands/remove/types';
 import { getErrorMessage } from '../errors';
@@ -110,7 +109,6 @@ export interface AddPaymentManagerOptions {
   allowedClients?: string[];
   allowedAudience?: string[];
   allowedScopes?: string[];
-  pattern: PaymentPattern;
   description?: string;
   autoPayment?: boolean;
   defaultSpendLimit?: string;
@@ -159,7 +157,6 @@ export class PaymentManagerPrimitive extends BasePrimitive<AddPaymentManagerOpti
         name: options.name,
         authorizerType: options.authorizerType,
         ...(authorizerConfiguration && { authorizerConfiguration }),
-        pattern: options.pattern,
         connectors: [],
         ...(options.description && { description: options.description }),
         autoPayment: options.autoPayment ?? DEFAULT_AUTO_PAYMENT,
@@ -332,7 +329,6 @@ export class PaymentManagerPrimitive extends BasePrimitive<AddPaymentManagerOpti
       .option('--allowed-clients <clients>', 'Comma-separated allowed client IDs (for CUSTOM_JWT) [non-interactive]')
       .option('--allowed-audience <audience>', 'Comma-separated allowed audiences (for CUSTOM_JWT) [non-interactive]')
       .option('--allowed-scopes <scopes>', 'Comma-separated allowed scopes (for CUSTOM_JWT) [non-interactive]')
-      .option('--pattern <pattern>', 'Payment pattern: interceptor or tool-based [non-interactive]')
       .option('--auto-payment [value]', 'Enable auto payment: true or false (default: true) [non-interactive]')
       .option(
         '--default-spend-limit <amount>',
@@ -353,7 +349,6 @@ export class PaymentManagerPrimitive extends BasePrimitive<AddPaymentManagerOpti
           allowedClients?: string;
           allowedAudience?: string;
           allowedScopes?: string;
-          pattern?: string;
           autoPayment?: string | boolean;
           defaultSpendLimit?: string;
           toolAllowlist?: string;
@@ -367,7 +362,7 @@ export class PaymentManagerPrimitive extends BasePrimitive<AddPaymentManagerOpti
               process.exit(1);
             }
 
-            if (cliOptions.name !== undefined || cliOptions.authorizerType || cliOptions.pattern || cliOptions.json) {
+            if (cliOptions.name !== undefined || cliOptions.authorizerType || cliOptions.json) {
               if (!cliOptions.name) {
                 const error = '--name is required';
                 if (cliOptions.json) {
@@ -394,19 +389,6 @@ export class PaymentManagerPrimitive extends BasePrimitive<AddPaymentManagerOpti
                 authorizerType = PaymentAuthorizerTypeSchema.parse(cliOptions.authorizerType ?? 'AWS_IAM');
               } catch {
                 const error = `Invalid authorizer type "${cliOptions.authorizerType}". Valid: AWS_IAM, CUSTOM_JWT`;
-                if (cliOptions.json) {
-                  console.log(JSON.stringify({ success: false, error }));
-                } else {
-                  console.error(error);
-                }
-                process.exit(1);
-              }
-
-              let pattern: PaymentPattern;
-              try {
-                pattern = PaymentPatternSchema.parse(cliOptions.pattern ?? 'interceptor');
-              } catch {
-                const error = `Invalid pattern "${cliOptions.pattern}". Valid: interceptor, tool-based`;
                 if (cliOptions.json) {
                   console.log(JSON.stringify({ success: false, error }));
                 } else {
@@ -443,7 +425,6 @@ export class PaymentManagerPrimitive extends BasePrimitive<AddPaymentManagerOpti
                 allowedClients: parseList(cliOptions.allowedClients),
                 allowedAudience: parseList(cliOptions.allowedAudience),
                 allowedScopes: parseList(cliOptions.allowedScopes),
-                pattern,
                 autoPayment:
                   cliOptions.autoPayment !== undefined
                     ? (() => {

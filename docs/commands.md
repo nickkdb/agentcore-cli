@@ -478,7 +478,7 @@ agentcore add gateway-target \
 Add a payment manager to the project. See [Payments](payments.md) for full usage guide.
 
 ```bash
-# Minimal (defaults: AWS_IAM, interceptor, auto-payment enabled)
+# Minimal (defaults: AWS_IAM, auto-payment enabled)
 agentcore add payment-manager --name MyManager
 
 # With CUSTOM_JWT authorization
@@ -505,7 +505,6 @@ agentcore add payment-manager \
 | `--allowed-clients <clients>`      | Comma-separated client IDs (CUSTOM_JWT only)                                                              |
 | `--allowed-audience <audience>`    | Comma-separated allowed audiences (CUSTOM_JWT only)                                                       |
 | `--allowed-scopes <scopes>`        | Comma-separated allowed scopes (CUSTOM_JWT only)                                                          |
-| `--pattern <pattern>`              | `interceptor` (default) or `tool-based`                                                                   |
 | `--auto-payment [value]`           | Enable automatic payment: `true` (default) or `false`                                                     |
 | `--default-spend-limit <amount>`   | Spend cap (USD) for `invoke --auto-session` sessions ONLY; not a deployed-agent budget (default: `10.00`) |
 | `--tool-allowlist <tools>`         | Comma-separated tool names eligible for payment                                                           |

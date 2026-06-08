@@ -1,4 +1,4 @@
-import type { PaymentAuthorizerType, PaymentPattern, PaymentProvider } from '../../../../schema';
+import type { PaymentAuthorizerType, PaymentProvider } from '../../../../schema';
 import type {
   AddPaymentConnectorConfig,
   AddPaymentConnectorStep,
@@ -11,7 +11,7 @@ import { useCallback, useMemo, useState } from 'react';
 // Payment Manager Wizard
 // ─────────────────────────────────────────────────────────────────────────────
 
-const BASE_MANAGER_STEPS: AddPaymentManagerStep[] = ['auth-type', 'manager-name', 'pattern-select', 'advanced-config'];
+const BASE_MANAGER_STEPS: AddPaymentManagerStep[] = ['auth-type', 'manager-name', 'advanced-config'];
 const JWT_MANAGER_STEPS: AddPaymentManagerStep[] = [
   'auth-type',
   'discovery-url',
@@ -19,7 +19,6 @@ const JWT_MANAGER_STEPS: AddPaymentManagerStep[] = [
   'allowed-audience',
   'allowed-scopes',
   'manager-name',
-  'pattern-select',
   'advanced-config',
 ];
 
@@ -31,7 +30,6 @@ function getDefaultManagerConfig(): AddPaymentManagerConfig {
     allowedAudience: '',
     allowedScopes: '',
     managerName: '',
-    pattern: 'interceptor',
     autoPayment: true,
     defaultSpendLimit: '10.00',
   };
@@ -112,14 +110,6 @@ export function useAddPaymentManagerWizard() {
     [advanceFrom]
   );
 
-  const setPattern = useCallback(
-    (pattern: PaymentPattern) => {
-      setConfig(c => ({ ...c, pattern }));
-      advanceFrom('pattern-select');
-    },
-    [advanceFrom]
-  );
-
   const setAdvancedConfig = useCallback(
     (advanced: { autoPayment: boolean; defaultSpendLimit: string }) => {
       setConfig(c => ({ ...c, autoPayment: advanced.autoPayment, defaultSpendLimit: advanced.defaultSpendLimit }));
@@ -157,7 +147,6 @@ export function useAddPaymentManagerWizard() {
     setAllowedAudience,
     setAllowedScopes,
     setManagerName,
-    setPattern,
     setAdvancedConfig,
     setDefaultSpendLimit,
     setPaymentToolAllowlist,

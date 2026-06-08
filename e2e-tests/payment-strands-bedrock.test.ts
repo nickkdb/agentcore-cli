@@ -60,10 +60,7 @@ describe.sequential('e2e: payments — create → add payment → deploy → sta
     projectPath = createJson.projectPath;
 
     // Add payment manager
-    const mgrResult = await runAgentCoreCLI(
-      ['add', 'payment-manager', '--name', managerName, '--pattern', 'interceptor', '--json'],
-      projectPath
-    );
+    const mgrResult = await runAgentCoreCLI(['add', 'payment-manager', '--name', managerName, '--json'], projectPath);
     expect(mgrResult.exitCode, `Add manager failed: ${mgrResult.stderr}`).toBe(0);
 
     // Add payment connector with CDP credentials
@@ -109,7 +106,7 @@ describe.sequential('e2e: payments — create → add payment → deploy → sta
     const manager = config.payments?.find((p: Record<string, unknown>) => p.name === managerName);
     expect(manager).toBeTruthy();
     expect(manager.authorizerType).toBe('AWS_IAM');
-    expect(manager.pattern).toBe('interceptor');
+    expect(manager.autoPayment).toBe(true);
 
     // Connector nested inside manager
     const connector = manager.connectors?.find((c: Record<string, unknown>) => c.name === connectorName);

@@ -14,13 +14,6 @@ export const DEFAULT_AUTO_PAYMENT = true;
 export const DEFAULT_SPEND_LIMIT = '10.00';
 
 // ============================================================================
-// Payment Pattern Schema
-// ============================================================================
-
-export const PaymentPatternSchema = z.enum(['interceptor', 'tool-based']);
-export type PaymentPattern = z.infer<typeof PaymentPatternSchema>;
-
-// ============================================================================
 // Payment Manager Name Schema
 // ============================================================================
 
@@ -80,7 +73,6 @@ export const PaymentManagerSchema = z
         }),
       })
       .optional(),
-    pattern: PaymentPatternSchema.default('interceptor'),
     connectors: z.array(PaymentConnectorSchema).default([]),
     description: z.string().optional(),
     autoPayment: z.boolean().default(DEFAULT_AUTO_PAYMENT),

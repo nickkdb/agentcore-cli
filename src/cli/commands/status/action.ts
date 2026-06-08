@@ -315,7 +315,8 @@ export function computeResourceStatuses(
     localItems: project.payments ?? [],
     deployedRecord: resources?.payments ?? {},
     getIdentifier: deployed => deployed.managerArn,
-    getLocalDetail: item => `${item.authorizerType} — ${item.pattern} (${item.connectors.length} connector(s))`,
+    getLocalDetail: item =>
+      `${item.authorizerType} — auto-pay ${item.autoPayment ? 'on' : 'off'} (${item.connectors.length} connector(s))`,
   });
 
   return [

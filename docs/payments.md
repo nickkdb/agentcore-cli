@@ -16,7 +16,7 @@ agentcore create --name MyProject --defaults
 cd MyProject
 
 # 2. Add a payment manager
-agentcore add payment-manager --name MyManager --pattern interceptor
+agentcore add payment-manager --name MyManager
 
 # 3. Add a payment connector with CoinbaseCDP credentials
 agentcore add payment-connector \
@@ -48,12 +48,11 @@ payment requirements (amount, recipient, network). The AgentCore payments plugin
 For the full runtime flow, see
 [How AgentCore payments works](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/payments-how-it-works.html).
 
-### Payment Patterns
+### Payment Handling
 
-| Pattern     | Behavior                                                     |
-| ----------- | ------------------------------------------------------------ |
-| interceptor | Automatically handles 402 responses (transparent to agent)   |
-| tool-based  | Exposes payment as an agent tool (agent decides when to pay) |
+Payments are handled by an **interceptor**: the payments plugin transparently catches a tool's `402 Payment Required`,
+settles the x402 payment, and retries — no explicit agent decision. (Payment settlement is never exposed as an agent
+tool.)
 
 ## Adding a Payment Manager
 
@@ -64,14 +63,13 @@ auto-payment behavior. (Spending budgets are enforced per payment session, not o
 ### CLI Command
 
 ```bash
-# Minimal (defaults: AWS_IAM auth, interceptor pattern, auto-payment enabled)
+# Minimal (defaults: AWS_IAM auth, auto-payment enabled)
 agentcore add payment-manager --name MyManager
 
 # With all advanced options
 agentcore add payment-manager \
   --name MyManager \
   --authorizer-type AWS_IAM \
-  --pattern interceptor \
   --auto-payment true \
   --default-spend-limit 25.00 \
   --tool-allowlist "web_search,fetch_url" \
@@ -87,7 +85,6 @@ agentcore add payment-manager \
 | `--allowed-clients <clients>`      | Comma-separated client IDs (CUSTOM_JWT only)                                                              |
 | `--allowed-audience <audience>`    | Comma-separated allowed audiences (CUSTOM_JWT only)                                                       |
 | `--allowed-scopes <scopes>`        | Comma-separated allowed scopes (CUSTOM_JWT only)                                                          |
-| `--pattern <pattern>`              | `interceptor` (default) or `tool-based`                                                                   |
 | `--auto-payment [value]`           | Enable automatic payment: `true` (default) or `false`                                                     |
 | `--default-spend-limit <amount>`   | Spend cap (USD) for `invoke --auto-session` sessions ONLY; not a deployed-agent budget (default: `10.00`) |
 | `--tool-allowlist <tools>`         | Comma-separated tool names eligible for payment                                                           |
@@ -371,7 +368,7 @@ The complete path from a fresh project to a settled on-chain payment. Steps 1–
 ```bash
 # 1. Create a project and add the payment manager + connector
 agentcore create --name MyProject --defaults && cd MyProject
-agentcore add payment-manager --name MyManager --pattern interceptor
+agentcore add payment-manager --name MyManager
 agentcore add payment-connector --manager MyManager --name MyCDPConnector --provider CoinbaseCDP \
   --api-key-id "$CDP_API_KEY_ID" --api-key-secret "$CDP_API_KEY_SECRET" --wallet-secret "$CDP_WALLET_SECRET"
 

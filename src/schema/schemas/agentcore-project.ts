@@ -37,7 +37,6 @@ import {
   PaymentConnectorSchema,
   PaymentManagerNameSchema,
   PaymentManagerSchema,
-  PaymentPatternSchema,
   PaymentProviderSchema,
 } from './primitives/payment';
 import { PolicyEngineSchema } from './primitives/policy';
@@ -112,16 +111,9 @@ export {
   PaymentConnectorSchema,
   PaymentConnectorNameSchema,
   PaymentProviderSchema,
-  PaymentPatternSchema,
   PaymentAuthorizerTypeSchema,
 };
-export type {
-  PaymentManager,
-  PaymentConnector,
-  PaymentProvider,
-  PaymentPattern,
-  PaymentAuthorizerType,
-} from './primitives/payment';
+export type { PaymentManager, PaymentConnector, PaymentProvider, PaymentAuthorizerType } from './primitives/payment';
 
 // ============================================================================
 // ManagedBy Schema

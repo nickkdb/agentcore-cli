@@ -24,10 +24,7 @@ describe('integration: add and remove payment managers and connectors', () => {
     const managerName = `IntegMgr${Date.now().toString().slice(-6)}`;
 
     it('adds an AWS_IAM payment manager', async () => {
-      const result = await runCLI(
-        ['add', 'payment-manager', '--name', managerName, '--pattern', 'interceptor', '--json'],
-        project.projectPath
-      );
+      const result = await runCLI(['add', 'payment-manager', '--name', managerName, '--json'], project.projectPath);
 
       expect(result.exitCode, `stdout: ${result.stdout}, stderr: ${result.stderr}`).toBe(0);
       const json = JSON.parse(result.stdout);
@@ -38,7 +35,7 @@ describe('integration: add and remove payment managers and connectors', () => {
       const manager = config.payments?.find((p: Record<string, unknown>) => p.name === managerName);
       expect(manager, `Payment manager "${managerName}" should be in config`).toBeTruthy();
       expect(manager!.authorizerType).toBe('AWS_IAM');
-      expect(manager!.pattern).toBe('interceptor');
+      expect(manager!.autoPayment).toBe(true);
       expect(manager!.connectors).toEqual([]);
     });
 
@@ -95,8 +92,6 @@ describe('integration: add and remove payment managers and connectors', () => {
           'https://cognito-idp.us-east-1.amazonaws.com/us-east-1_test/.well-known/openid-configuration',
           '--allowed-clients',
           'client-1,client-2',
-          '--pattern',
-          'interceptor',
           '--json',
         ],
         project.projectPath
@@ -142,7 +137,7 @@ describe('integration: add and remove payment managers and connectors', () => {
     const connectorName2 = `IntegConn2${Date.now().toString().slice(-6)}`;
 
     beforeAll(async () => {
-      await runCLI(['add', 'payment-manager', '--name', managerName, '--pattern', 'interceptor'], project.projectPath);
+      await runCLI(['add', 'payment-manager', '--name', managerName], project.projectPath);
     });
 
     it('adds a payment connector to the manager', async () => {
@@ -315,7 +310,7 @@ describe('integration: add and remove payment managers and connectors', () => {
     const connectorName = `IntegSpConn${Date.now().toString().slice(-6)}`;
 
     beforeAll(async () => {
-      await runCLI(['add', 'payment-manager', '--name', managerName, '--pattern', 'interceptor'], project.projectPath);
+      await runCLI(['add', 'payment-manager', '--name', managerName], project.projectPath);
     });
 
     it('adds a StripePrivy connector to the manager', async () => {
@@ -450,14 +445,6 @@ describe('integration: add and remove payment managers and connectors', () => {
     it('rejects invalid authorizer type', async () => {
       const result = await runCLI(
         ['add', 'payment-manager', '--name', 'x', '--authorizer-type', 'INVALID', '--json'],
-        project.projectPath
-      );
-      expect(result.exitCode).toBe(1);
-    });
-
-    it('rejects invalid pattern', async () => {
-      const result = await runCLI(
-        ['add', 'payment-manager', '--name', 'x', '--pattern', 'invalid', '--json'],
         project.projectPath
       );
       expect(result.exitCode).toBe(1);

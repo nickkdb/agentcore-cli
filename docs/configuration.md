@@ -495,7 +495,6 @@ wallet credentials. See [Payments](payments.md) for the full usage guide.
     {
       "name": "MyManager",
       "authorizerType": "AWS_IAM",
-      "pattern": "interceptor",
       "autoPayment": true,
       "defaultSpendLimit": "10.00",
       "paymentToolAllowlist": ["web_search", "fetch_url"],
@@ -520,7 +519,6 @@ wallet credentials. See [Payments](payments.md) for the full usage guide.
 | `name`                    | Yes      | Manager name (alphanumeric + underscore, max 48, starts with letter)                                     |
 | `authorizerType`          | No       | `"AWS_IAM"` (default) or `"CUSTOM_JWT"`                                                                  |
 | `authorizerConfiguration` | Cond.    | Required when `authorizerType` is `"CUSTOM_JWT"` (see below)                                             |
-| `pattern`                 | No       | `"interceptor"` (default) or `"tool-based"`                                                              |
 | `connectors`              | Yes      | Array of payment connector objects                                                                       |
 | `autoPayment`             | No       | Enable automatic payment (default: `true`)                                                               |
 | `defaultSpendLimit`       | No       | Spend cap (USD) for `invoke --auto-session` sessions only; not a deployed-agent budget (e.g., `"10.00"`) |

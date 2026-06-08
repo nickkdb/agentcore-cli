@@ -427,6 +427,8 @@ describe('AgentCoreProjectSpecSchema', () => {
         {
           name: 'paymgr',
           authorizerType: 'AWS_IAM',
+          // `pattern` is a removed field; an older agentcore.json may still carry it.
+          // Zod strips unknown keys (the schema is not .strict()), so old configs keep parsing.
           pattern: 'interceptor',
           connectors: [],
         },
@@ -436,6 +438,8 @@ describe('AgentCoreProjectSpecSchema', () => {
     if (result.success) {
       expect(result.data.payments).toHaveLength(1);
       expect(result.data.payments![0]!.name).toBe('paymgr');
+      // Back-compat: the legacy `pattern` key is dropped, not surfaced.
+      expect('pattern' in result.data.payments![0]!).toBe(false);
     }
   });
 
