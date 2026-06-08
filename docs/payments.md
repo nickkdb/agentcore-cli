@@ -326,24 +326,103 @@ invoking.
 ### Grant delegated signing (one-time, per end-user wallet)
 
 Before `ProcessPayment` can settle, the **end user who owns the wallet must grant Coinbase delegated signing** for it.
-This is a one-time step per wallet, completed in the Coinbase **WalletHub** consent page:
+There are two layers, and **both** are required:
+
+**1. Project-level toggle (developer, once per CDP project).** In the Coinbase CDP dashboard, enable **Non-custodial
+Wallets → Security → Delegated Signing** ("enable users to give your app permission to transact on their behalf"). This
+authorizes your app to _request_ delegation at all. It's normally already enabled on the CDP project behind your
+connector credentials; if you bring your own CDP credentials, turn it on or the per-wallet grant below will fail.
+
+**2. Per-wallet grant (end user, once per wallet).** Completed in the Coinbase **WalletHub** consent page that AgentCore
+returns as the instrument's `redirectUrl`:
 
 1. Send the end user the `redirectUrl` from the `create_payment_instrument` response.
-2. The end user opens it and **signs in using the exact email passed in `linkedAccounts`** — _not_ the developer's
-   Coinbase account. Coinbase verifies the identity with a one-time code (OTP) sent to that email.
-3. The end user clicks **Grant** to authorize delegated signing for the wallet.
+2. The end user opens it and **signs in as the exact email passed in `linkedAccounts`** — _not_ the developer's
+   Coinbase/CDP account. Coinbase verifies the identity (typically with a one-time code emailed to that address, valid
+   ~10 minutes).
+3. The end user clicks **Grant**. WalletHub shows the granted permission and an expiry date (delegation is time-bound;
+   it persists until it expires or is revoked).
 
-Until this grant is completed, `ProcessPayment` fails with:
+Under the hood, WalletHub performs Coinbase CDP's `createDelegation` for the wallet — AgentCore hosts it as a redirect
+page so you don't have to build the consent frontend. There is **no API to grant delegated signing**; the end-user
+WalletHub consent is the only activation path (by Coinbase design), and the only way to detect it is to attempt a
+payment.
+
+Until the grant is active, `ProcessPayment` fails with:
 `Delegated signing grant is not active for the end user wallet. Please redirect end user to the WalletHub to grant the permissions.`
 
-> **Common pitfall:** opening the WalletHub link while logged into your own (developer) Coinbase account shows **"no
-> accounts found"** — the wallet is bound to the `linkedAccounts` email identity, not your CDP/developer account. Always
-> authenticate as the linked end-user email (a fresh/incognito browser session avoids being carried in on a different
-> Coinbase login). For local testing, use a `linkedAccounts` email you control (a plus-addressed alias such as
-> `you+testuser@example.com` works — the OTP arrives in your real inbox), so you can complete the grant yourself.
+> **Common pitfall — "no accounts found":** opening the WalletHub link while signed into your own (developer) Coinbase
+> account shows **"no accounts found"**, because the wallet is bound to the `linkedAccounts` email identity, not your
+> developer account. Always authenticate as the linked end-user email. Open the link in a **fresh/incognito browser
+> window** so an existing Coinbase session isn't silently used. For local testing, use a `linkedAccounts` email you
+> control — a plus-addressed alias such as `you+testuser@example.com` works because the OTP is delivered to your real
+> inbox, letting you complete the end-user grant yourself.
 
-For details on creating instruments and sessions, see
+For details on the underlying primitive, see
+[CDP delegated signing](https://docs.cdp.coinbase.com/wallets/using-wallets/delegated-signing) and
 [Create a payment instrument](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/payments-create-instrument.html).
+
+### End-to-end: get a transaction through
+
+The complete path from a fresh project to a settled on-chain payment. Steps 1–2 and 6 are CLI; steps 3–5 are out-of-band
+(SDK + Coinbase) because instrument creation, funding, and the wallet grant are end-user actions.
+
+```bash
+# 1. Create a project and add the payment manager + connector
+agentcore create --name MyProject --defaults && cd MyProject
+agentcore add payment-manager --name MyManager --pattern interceptor
+agentcore add payment-connector --manager MyManager --name MyCDPConnector --provider CoinbaseCDP \
+  --api-key-id "$CDP_API_KEY_ID" --api-key-secret "$CDP_API_KEY_SECRET" --wallet-secret "$CDP_WALLET_SECRET"
+
+# 2. Deploy (creates the payment manager, connector, credential provider, and IAM roles)
+agentcore deploy -y
+```
+
+```python
+# 3. Create a payment instrument for the end user you'll invoke as (SDK / app backend).
+#    Use the manager ARN + connector id from `agentcore status --type payment`.
+from bedrock_agentcore.payments.manager import PaymentManager
+manager = PaymentManager(payment_manager_arn=MANAGER_ARN, region_name="us-east-1")
+inst = manager.create_payment_instrument(
+    payment_connector_id=CONNECTOR_ID,
+    payment_instrument_type="EMBEDDED_CRYPTO_WALLET",
+    payment_instrument_details={"embeddedCryptoWallet": {
+        "network": "ETHEREUM",
+        "linkedAccounts": [{"email": {"emailAddress": "alice@example.com"}}],
+    }},
+    user_id="alice",
+)
+print(inst["paymentInstrumentId"])                                                  # -> --payment-instrument-id
+print(inst["paymentInstrumentDetails"]["embeddedCryptoWallet"]["walletAddress"])    # -> fund this
+print(inst["paymentInstrumentDetails"]["embeddedCryptoWallet"]["redirectUrl"])      # -> WalletHub grant
+```
+
+```text
+# 4. Fund the walletAddress with Base Sepolia testnet USDC: https://faucet.circle.com/
+# 5. Grant delegated signing: open the redirectUrl (incognito), sign in as alice@example.com, click Grant.
+#    (See "Grant delegated signing" above. Until this is done, payments fail with
+#     "Delegated signing grant is not active".)
+```
+
+```bash
+# 6. Invoke — the agent makes the paid request, the plugin settles the 402, and retries:
+agentcore invoke --payment-user-id alice --payment-instrument-id <id> --auto-session \
+  --prompt "Fetch <a paid x402 URL> and return the result"
+#   On success the agent returns the paid content; the wallet's USDC balance drops by the charge.
+```
+
+Interactive equivalent (payment context held across the whole chat session; needs an explicit `--payment-session-id`
+since `--auto-session` is command-only):
+
+```bash
+agentcore invoke --payment-user-id alice \
+  --payment-instrument-id <id> --payment-session-id <id>   # no prompt -> interactive chat
+```
+
+> **Transient settlement failures.** x402 settlement is an on-chain operation; an individual attempt can fail with
+> `invalid_exact_evm_transaction_failed` / "Settlement failed" (e.g. two payments fired from the same wallet
+> back-to-back collide on transaction timing). This is not a configuration error — **retry the request** and it
+> typically settles. The funds are not debited on a failed attempt.
 
 ## Status and Removal
 
@@ -387,18 +466,19 @@ agentcore validate
 
 ## Troubleshooting
 
-| Error                                   | Cause                                                                   | Fix                                                                                       |
-| --------------------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `.env.local not found`                  | No secrets file in project                                              | Create `agentcore/.env.local` with credential vars                                        |
-| `Missing credentials for connector`     | Env vars not set for a connector                                        | Add the required `AGENTCORE_CREDENTIAL_*` vars to `.env.local`                            |
-| `ServiceQuotaExceededException`         | Account limit on payment managers                                       | Request a quota increase via AWS Support                                                  |
-| `No connectors for payment manager`     | Manager has zero connectors                                             | Add at least one connector before deploying                                               |
-| `PaymentCredentialProvider not found`   | Orphaned reference after manual deletion                                | Re-run `agentcore deploy` to recreate                                                     |
-| `Request timeout`                       | Network or service availability                                         | Retry deploy; check internet connectivity                                                 |
-| `Invalid authorizer type`               | Typo in `--authorizer-type` flag                                        | Use `AWS_IAM` or `CUSTOM_JWT` (case-sensitive)                                            |
-| `Instrument not found` at invoke        | `--payment-user-id` differs from the instrument's owner                 | Invoke with the same user the instrument was created under                                |
-| `Delegated signing grant is not active` | End user hasn't granted WalletHub consent for the wallet                | Open the instrument's `redirectUrl`, sign in as the linked email, click Grant (see above) |
-| WalletHub shows `no accounts found`     | Opened the consent link as the developer, not the wallet's linked email | Sign in as the `linkedAccounts` email (incognito); OTP goes to that inbox                 |
+| Error                                                        | Cause                                                                   | Fix                                                                                       |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `.env.local not found`                                       | No secrets file in project                                              | Create `agentcore/.env.local` with credential vars                                        |
+| `Missing credentials for connector`                          | Env vars not set for a connector                                        | Add the required `AGENTCORE_CREDENTIAL_*` vars to `.env.local`                            |
+| `ServiceQuotaExceededException`                              | Account limit on payment managers                                       | Request a quota increase via AWS Support                                                  |
+| `No connectors for payment manager`                          | Manager has zero connectors                                             | Add at least one connector before deploying                                               |
+| `PaymentCredentialProvider not found`                        | Orphaned reference after manual deletion                                | Re-run `agentcore deploy` to recreate                                                     |
+| `Request timeout`                                            | Network or service availability                                         | Retry deploy; check internet connectivity                                                 |
+| `Invalid authorizer type`                                    | Typo in `--authorizer-type` flag                                        | Use `AWS_IAM` or `CUSTOM_JWT` (case-sensitive)                                            |
+| `Instrument not found` at invoke                             | `--payment-user-id` differs from the instrument's owner                 | Invoke with the same user the instrument was created under                                |
+| `Delegated signing grant is not active`                      | End user hasn't granted WalletHub consent for the wallet                | Open the instrument's `redirectUrl`, sign in as the linked email, click Grant (see above) |
+| WalletHub shows `no accounts found`                          | Opened the consent link as the developer, not the wallet's linked email | Sign in as the `linkedAccounts` email (incognito); OTP goes to that inbox                 |
+| `invalid_exact_evm_transaction_failed` / `Settlement failed` | Transient on-chain failure (e.g. back-to-back payments from one wallet) | Retry the request; funds are not debited on a failed attempt                              |
 
 For additional troubleshooting, see
 [Troubleshooting AgentCore payments](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/payments-troubleshooting.html).
