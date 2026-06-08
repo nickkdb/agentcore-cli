@@ -41,7 +41,8 @@ type FlowState =
   | { name: 'config-bundle-wizard' }
   | { name: 'ab-test-wizard' }
   | { name: 'runtime-endpoint-wizard' }
-  | { name: 'payment-wizard' }
+  | { name: 'payment-manager-wizard' }
+  | { name: 'payment-connector-wizard' }
   | {
       name: 'agent-create-success';
       agentName: string;
@@ -201,8 +202,10 @@ function getInitialFlowState(resource?: AddResourceType): FlowState {
       return { name: 'config-bundle-wizard' };
     case 'ab-test':
       return { name: 'ab-test-wizard' };
-    case 'payment':
-      return { name: 'payment-wizard' };
+    case 'payment-manager':
+      return { name: 'payment-manager-wizard' };
+    case 'payment-connector':
+      return { name: 'payment-connector-wizard' };
     default:
       return { name: 'select' };
   }
@@ -265,8 +268,11 @@ export function AddFlow(props: AddFlowProps) {
       case 'runtime-endpoint':
         setFlow({ name: 'runtime-endpoint-wizard' });
         break;
-      case 'payment':
-        setFlow({ name: 'payment-wizard' });
+      case 'payment-manager':
+        setFlow({ name: 'payment-manager-wizard' });
+        break;
+      case 'payment-connector':
+        setFlow({ name: 'payment-connector-wizard' });
         break;
     }
   }, []);
@@ -571,11 +577,26 @@ export function AddFlow(props: AddFlowProps) {
     );
   }
 
-  // Payment wizard
-  if (flow.name === 'payment-wizard') {
+  // Payment manager wizard
+  if (flow.name === 'payment-manager-wizard') {
     return (
       <AddPaymentFlow
         isInteractive={props.isInteractive}
+        initialAction="manager"
+        onExit={props.onExit}
+        onBack={() => setFlow({ name: 'select' })}
+        onDev={props.onDev}
+        onDeploy={props.onDeploy}
+      />
+    );
+  }
+
+  // Payment connector wizard
+  if (flow.name === 'payment-connector-wizard') {
+    return (
+      <AddPaymentFlow
+        isInteractive={props.isInteractive}
+        initialAction="connector"
         onExit={props.onExit}
         onBack={() => setFlow({ name: 'select' })}
         onDev={props.onDev}

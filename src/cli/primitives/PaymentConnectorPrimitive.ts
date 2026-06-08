@@ -500,6 +500,7 @@ export class PaymentConnectorPrimitive extends BasePrimitive<AddPaymentConnector
               const { clear, unmount } = render(
                 React.createElement(AddFlow, {
                   isInteractive: false,
+                  initialResource: 'payment-connector',
                   onExit: () => {
                     clear();
                     unmount();

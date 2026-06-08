@@ -472,6 +472,7 @@ export class PaymentManagerPrimitive extends BasePrimitive<AddPaymentManagerOpti
               const { clear, unmount } = render(
                 React.createElement(AddFlow, {
                   isInteractive: false,
+                  initialResource: 'payment-manager',
                   onExit: () => {
                     clear();
                     unmount();

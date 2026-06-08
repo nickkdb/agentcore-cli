@@ -26,9 +26,23 @@ interface AddPaymentFlowProps {
   onBack: () => void;
   onDev?: () => void;
   onDeploy?: () => void;
+  /**
+   * Which payment sub-resource to jump straight into, skipping the
+   * manager/connector picker. When set, Esc from the wizard returns to the
+   * caller (onBack) rather than the (skipped) picker. Defaults to 'select'
+   * (show the picker) for any caller that doesn't specify one.
+   */
+  initialAction?: 'manager' | 'connector' | 'select';
 }
 
-export function AddPaymentFlow({ isInteractive = true, onExit, onBack, onDev, onDeploy }: AddPaymentFlowProps) {
+export function AddPaymentFlow({
+  isInteractive = true,
+  onExit,
+  onBack,
+  onDev,
+  onDeploy,
+  initialAction = 'select',
+}: AddPaymentFlowProps) {
   const [flow, setFlow] = useState<FlowState>({ name: 'loading' });
   const [managerNames, setManagerNames] = useState<string[]>([]);
   const { createPayment, reset: resetCreate } = useCreatePayment();
@@ -53,24 +67,40 @@ export function AddPaymentFlow({ isInteractive = true, onExit, onBack, onDev, on
     if (flow.name !== 'confirm') confirmHandlerRef.current = null;
   }, [flow]);
 
-  // Load existing managers from disk on mount — always show selection screen
+  // Load existing managers from disk on mount, then route based on initialAction.
+  // - 'manager'    -> jump straight into the manager wizard
+  // - 'connector'  -> jump into the connector flow (0/1/many-manager handling, mirrors handleSelectAction)
+  // - 'select'     -> show the manager/connector picker (default; legacy behavior)
+  // We branch on the freshly-loaded `names`, not the managerNames state (not yet committed this tick).
   useEffect(() => {
     let cancelled = false;
+    const route = (names: string[]) => {
+      if (cancelled) return;
+      setManagerNames(names);
+      if (initialAction === 'manager') {
+        setFlow({ name: 'manager-wizard' });
+      } else if (initialAction === 'connector') {
+        if (names.length === 0) {
+          setFlow({ name: 'error', message: 'No payment managers exist. Create a manager first.' });
+        } else if (names.length === 1) {
+          setConnectorManagerName(names[0]);
+          void refreshConnectorNames(names[0]);
+          setFlow({ name: 'connector-wizard', preSelectedManager: names[0] });
+        } else {
+          setFlow({ name: 'connector-wizard' });
+        }
+      } else {
+        setFlow({ name: 'select' });
+      }
+    };
     void paymentManagerPrimitive
       .getExistingManagers()
-      .then(names => {
-        if (cancelled) return;
-        setManagerNames(names);
-        setFlow({ name: 'select' });
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setManagerNames([]);
-        setFlow({ name: 'select' });
-      });
+      .then(route)
+      .catch(() => route([]));
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount; initialAction is stable per render of this flow
   }, []);
 
   // In non-interactive mode, exit after success
@@ -189,7 +219,10 @@ export function AddPaymentFlow({ isInteractive = true, onExit, onBack, onDev, on
         existingManagerNames={managerNames}
         onComplete={handleManagerComplete}
         onExit={() => {
-          if (managerNames.length === 0) {
+          // When launched directly into the manager wizard (no picker shown), Esc
+          // returns to the caller. Otherwise fall back to the picker (or onBack if
+          // there were no managers to pick from).
+          if (initialAction === 'manager' || managerNames.length === 0) {
             onBack();
           } else {
             setFlow({ name: 'select' });
@@ -427,7 +460,13 @@ export function AddPaymentFlow({ isInteractive = true, onExit, onBack, onDev, on
         }}
         onExit={() => {
           resetConnector();
-          setFlow({ name: 'select' });
+          // When launched directly into the connector wizard (no picker shown),
+          // Esc returns to the caller rather than the skipped picker.
+          if (initialAction === 'connector') {
+            onBack();
+          } else {
+            setFlow({ name: 'select' });
+          }
         }}
       />
     );
@@ -457,7 +496,12 @@ export function AddPaymentFlow({ isInteractive = true, onExit, onBack, onDev, on
       onBack={() => {
         resetCreate();
         resetConnector();
-        if (managerNames.length === 0) {
+        // When launched directly into a single sub-resource (no picker shown),
+        // back from an error returns to the caller rather than dropping the user
+        // on the skipped picker or an unrequested manager wizard.
+        if (initialAction !== 'select') {
+          onBack();
+        } else if (managerNames.length === 0) {
           setFlow({ name: 'manager-wizard' });
         } else {
           setFlow({ name: 'select' });
