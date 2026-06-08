@@ -60,6 +60,8 @@ export {
   type OnlineEvalEnableResult,
 } from './post-deploy-online-evals';
 
+export { ensureDefaultDeploymentTarget } from './ensure-target';
+
 // Post-deploy config bundles
 export {
   setupConfigBundles,
