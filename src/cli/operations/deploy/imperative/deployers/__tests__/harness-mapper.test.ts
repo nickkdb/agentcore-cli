@@ -87,6 +87,95 @@ describe('mapHarnessSpecToCreateOptions', () => {
       });
     });
 
+    it('maps bedrock with apiFormat responses', async () => {
+      const opts = baseOptions({
+        harnessSpec: {
+          name: 'h',
+          model: { provider: 'bedrock', modelId: 'openai.gpt-oss-120b', apiFormat: 'responses' },
+          tools: [],
+          skills: [],
+        } as any,
+      });
+      const result = await mapHarnessSpecToCreateOptions(opts);
+      expect(result.model).toEqual({
+        bedrockModelConfig: { modelId: 'openai.gpt-oss-120b', apiFormat: 'responses' },
+      });
+    });
+
+    it('maps bedrock with apiFormat chat_completions', async () => {
+      const opts = baseOptions({
+        harnessSpec: {
+          name: 'h',
+          model: { provider: 'bedrock', modelId: 'openai.gpt-oss-120b', apiFormat: 'chat_completions' },
+          tools: [],
+          skills: [],
+        } as any,
+      });
+      const result = await mapHarnessSpecToCreateOptions(opts);
+      expect(result.model).toEqual({
+        bedrockModelConfig: { modelId: 'openai.gpt-oss-120b', apiFormat: 'chat_completions' },
+      });
+    });
+
+    it('omits apiFormat when converse_stream (default)', async () => {
+      const opts = baseOptions({
+        harnessSpec: {
+          name: 'h',
+          model: { provider: 'bedrock', modelId: 'claude', apiFormat: 'converse_stream' },
+          tools: [],
+          skills: [],
+        } as any,
+      });
+      const result = await mapHarnessSpecToCreateOptions(opts);
+      expect(result.model).toEqual({
+        bedrockModelConfig: { modelId: 'claude' },
+      });
+    });
+
+    it('maps open_ai with apiFormat chat_completions', async () => {
+      const opts = baseOptions({
+        harnessSpec: {
+          name: 'h',
+          model: {
+            provider: 'open_ai',
+            modelId: 'gpt-5',
+            apiKeyArn: 'arn:aws:secretsmanager:us-east-1:123:secret:key',
+            apiFormat: 'chat_completions',
+          },
+          tools: [],
+          skills: [],
+        } as any,
+      });
+      const result = await mapHarnessSpecToCreateOptions(opts);
+      expect(result.model).toEqual({
+        openAiModelConfig: {
+          modelId: 'gpt-5',
+          apiKeyArn: 'arn:aws:secretsmanager:us-east-1:123:secret:key',
+          apiFormat: 'chat_completions',
+        },
+      });
+    });
+
+    it('omits apiFormat for open_ai when responses (default)', async () => {
+      const opts = baseOptions({
+        harnessSpec: {
+          name: 'h',
+          model: {
+            provider: 'open_ai',
+            modelId: 'gpt-5',
+            apiKeyArn: 'arn:aws:secretsmanager:us-east-1:123:secret:key',
+            apiFormat: 'responses',
+          },
+          tools: [],
+          skills: [],
+        } as any,
+      });
+      const result = await mapHarnessSpecToCreateOptions(opts);
+      expect(result.model).toEqual({
+        openAiModelConfig: { modelId: 'gpt-5', apiKeyArn: 'arn:aws:secretsmanager:us-east-1:123:secret:key' },
+      });
+    });
+
     it('includes optional model params when set', async () => {
       const opts = baseOptions({
         harnessSpec: {

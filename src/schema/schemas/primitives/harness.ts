@@ -30,11 +30,21 @@ export const HarnessNameSchema = z
 export const HarnessModelProviderSchema = z.enum(['bedrock', 'open_ai', 'gemini']);
 export type HarnessModelProvider = z.infer<typeof HarnessModelProviderSchema>;
 
+export const BedrockApiFormatSchema = z.enum(['converse_stream', 'responses', 'chat_completions']);
+export type BedrockApiFormat = z.infer<typeof BedrockApiFormatSchema>;
+
+export const OpenAiApiFormatSchema = z.enum(['responses', 'chat_completions']);
+export type OpenAiApiFormat = z.infer<typeof OpenAiApiFormatSchema>;
+
+export const HarnessApiFormatSchema = z.enum(['converse_stream', 'responses', 'chat_completions']);
+export type HarnessApiFormat = z.infer<typeof HarnessApiFormatSchema>;
+
 export const HarnessModelSchema = z
   .object({
     provider: HarnessModelProviderSchema,
     modelId: z.string().min(1, 'Model ID is required'),
     apiKeyArn: z.string().optional(),
+    apiFormat: HarnessApiFormatSchema.optional(),
     temperature: z.number().min(0).max(2).optional(),
     topP: z.number().min(0).max(1).optional(),
     topK: z.number().min(0).max(1).optional(),
@@ -48,9 +58,47 @@ export const HarnessModelSchema = z
         path: ['topK'],
       });
     }
+    if (model.apiFormat !== undefined) {
+      if (model.provider !== 'bedrock' && model.provider !== 'open_ai') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: '--api-format is only supported for bedrock and open_ai providers',
+          path: ['apiFormat'],
+        });
+      } else if (model.provider === 'open_ai' && model.apiFormat === 'converse_stream') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Invalid API format for open_ai: ${model.apiFormat}. Use ${OpenAiApiFormatSchema.options.join(', ')}`,
+          path: ['apiFormat'],
+        });
+      }
+    }
   });
 
 export type HarnessModel = z.infer<typeof HarnessModelSchema>;
+
+export function validateApiFormat(
+  apiFormat: string,
+  provider: string
+): { valid: true } | { valid: false; error: string } {
+  const allFormats = HarnessApiFormatSchema.options as readonly string[];
+  if (!allFormats.includes(apiFormat)) {
+    return { valid: false, error: `Invalid API format: ${apiFormat}. Use ${allFormats.join(', ')}` };
+  }
+  if (provider !== 'bedrock' && provider !== 'open_ai') {
+    return { valid: false, error: '--api-format is only supported for bedrock and open_ai providers' };
+  }
+  const result = HarnessModelSchema.safeParse({ provider, modelId: 'placeholder', apiFormat });
+  if (result.success) return { valid: true };
+  const apiFormatIssue = result.error.issues.find(i => i.path.includes('apiFormat'));
+  if (apiFormatIssue) {
+    return {
+      valid: false,
+      error: `Invalid API format for ${provider}: ${apiFormat}. Use ${(provider === 'open_ai' ? OpenAiApiFormatSchema : BedrockApiFormatSchema).options.join(', ')}`,
+    };
+  }
+  return { valid: true };
+}
 
 // ============================================================================
 // Tool Configuration

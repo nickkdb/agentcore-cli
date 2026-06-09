@@ -1,5 +1,5 @@
 import type { HarnessModelProvider, RuntimeAuthorizerType } from '../../../../schema';
-import { MAX_EFS_MOUNTS, MAX_S3_MOUNTS, NetworkModeSchema } from '../../../../schema';
+import { HarnessApiFormatSchema, MAX_EFS_MOUNTS, MAX_S3_MOUNTS, NetworkModeSchema } from '../../../../schema';
 import { HarnessNameSchema, HarnessTruncationStrategySchema } from '../../../../schema/schemas/primitives/harness';
 import { ARN_VALIDATION_MESSAGE, isValidArn } from '../../../commands/shared/arn-utils';
 import {
@@ -28,12 +28,14 @@ import type { AddHarnessConfig, AdvancedSetting, ContainerMode } from './types';
 import {
   ADVANCED_SETTING_OPTIONS,
   AUTHORIZER_TYPE_OPTIONS,
+  BEDROCK_API_FORMAT_OPTIONS,
   CONTAINER_MODE_OPTIONS,
   GATEWAY_OUTBOUND_AUTH_OPTIONS,
   HARNESS_STEP_LABELS,
   MEMORY_OPTIONS,
   MODEL_PROVIDER_OPTIONS,
   NETWORK_MODE_OPTIONS,
+  OPENAI_API_FORMAT_OPTIONS,
   TOOL_SELECT_OPTIONS,
   TRUNCATION_STRATEGY_OPTIONS,
 } from './types';
@@ -58,6 +60,16 @@ export function AddHarnessScreen({ existingHarnessNames, onComplete, onExit }: A
   const modelProviderItems: SelectableItem[] = useMemo(
     () => MODEL_PROVIDER_OPTIONS.map(opt => ({ id: opt.id, title: opt.title, description: opt.description })),
     []
+  );
+
+  const apiFormatItems: SelectableItem[] = useMemo(
+    () =>
+      (wizard.config.modelProvider === 'open_ai' ? OPENAI_API_FORMAT_OPTIONS : BEDROCK_API_FORMAT_OPTIONS).map(opt => ({
+        id: opt.id,
+        title: opt.title,
+        description: opt.description,
+      })),
+    [wizard.config.modelProvider]
   );
 
   const containerModeItems: SelectableItem[] = useMemo(
@@ -102,6 +114,7 @@ export function AddHarnessScreen({ existingHarnessNames, onComplete, onExit }: A
 
   const isNameStep = wizard.step === 'name';
   const isModelProviderStep = wizard.step === 'model-provider';
+  const isApiFormatStep = wizard.step === 'api-format';
   const isApiKeyArnStep = wizard.step === 'api-key-arn';
   const isContainerStep = wizard.step === 'container';
   const isContainerUriStep = wizard.step === 'container-uri';
@@ -140,6 +153,13 @@ export function AddHarnessScreen({ existingHarnessNames, onComplete, onExit }: A
     onSelect: item => wizard.setModelProvider(item.id as HarnessModelProvider),
     onExit: () => wizard.goBack(),
     isActive: isModelProviderStep,
+  });
+
+  const apiFormatNav = useListNavigation({
+    items: apiFormatItems,
+    onSelect: item => wizard.setApiFormat(HarnessApiFormatSchema.parse(item.id)),
+    onExit: () => wizard.goBack(),
+    isActive: isApiFormatStep,
   });
 
   const containerModeNav = useListNavigation({
@@ -220,6 +240,7 @@ export function AddHarnessScreen({ existingHarnessNames, onComplete, onExit }: A
     : isAdvancedStep || isToolsSelectStep
       ? 'Space toggle · Enter confirm · Esc back'
       : isModelProviderStep ||
+          isApiFormatStep ||
           isMemoryStep ||
           isContainerStep ||
           isNetworkModeStep ||
@@ -239,6 +260,10 @@ export function AddHarnessScreen({ existingHarnessNames, onComplete, onExit }: A
       { label: 'Model Provider', value: wizard.config.modelProvider },
       { label: 'Model ID', value: wizard.config.modelId },
     ];
+
+    if (wizard.config.apiFormat) {
+      fields.push({ label: 'API Format', value: wizard.config.apiFormat });
+    }
 
     if (wizard.config.apiKeyArn) {
       fields.push({ label: 'API Key ARN', value: wizard.config.apiKeyArn });
@@ -415,6 +440,15 @@ export function AddHarnessScreen({ existingHarnessNames, onComplete, onExit }: A
             description="Choose where to run your models"
             items={modelProviderItems}
             selectedIndex={modelProviderNav.selectedIndex}
+          />
+        )}
+
+        {isApiFormatStep && (
+          <WizardSelect
+            title="Select API format"
+            description="Choose the API format for model invocation (Responses and ChatCompletions use Bedrock Mantle)"
+            items={apiFormatItems}
+            selectedIndex={apiFormatNav.selectedIndex}
           />
         )}
 

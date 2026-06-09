@@ -1,4 +1,4 @@
-import { MAX_EFS_MOUNTS, MAX_S3_MOUNTS } from '../../../schema';
+import { MAX_EFS_MOUNTS, MAX_S3_MOUNTS, validateApiFormat } from '../../../schema';
 import { HarnessNameSchema, ProjectNameSchema } from '../../../schema';
 import {
   validateAccessPointMounts,
@@ -13,6 +13,7 @@ export interface CreateHarnessCliOptions {
   projectName?: string;
   modelProvider?: string;
   modelId?: string;
+  apiFormat?: string;
   apiKeyArn?: string;
   container?: string;
   noMemory?: boolean;
@@ -100,6 +101,13 @@ export function validateCreateHarnessOptions(options: CreateHarnessCliOptions, c
 
   if (options.modelProvider !== 'bedrock' && !options.apiKeyArn) {
     return { valid: false, error: `--api-key-arn is required for ${options.modelProvider} provider` };
+  }
+
+  if (options.apiFormat) {
+    const formatResult = validateApiFormat(options.apiFormat, options.modelProvider ?? 'bedrock');
+    if (!formatResult.valid) {
+      return { valid: false, error: formatResult.error };
+    }
   }
 
   // Validate EFS access point ARN/path pairs
