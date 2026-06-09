@@ -151,7 +151,7 @@
     "lint-staged": "^16.2.7",
     "node-pty": "^1.1.0",
     "prettier": "^3.7.4",
-    "secretlint": "^12.2.0",
+    "secretlint": "^13.0.2",
     "strip-ansi": "^7.2.0",
     "tsx": "^4.21.0",
     "typescript": "^5",
